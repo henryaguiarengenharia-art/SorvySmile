@@ -1,0 +1,7 @@
+{
+  "name": "Sorvy Smile Dispatch",
+  "description": "Sorvy Smile: AI-powered dental screening and instant clinic matching.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
