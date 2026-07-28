@@ -2,6 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .input {
+    @apply w-full rounded-xl border-2 border-slate-100 bg-slate-50 p-4 text-sm font-bold text-slate-900 outline-none transition focus:border-blue-500;
+  }
+}
+
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
     display: none;
