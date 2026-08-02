@@ -4,7 +4,7 @@ interface PendingSubscriptionInput {
   name: string;
   email: string;
   whatsapp: string;
-  plan: PlanTier | "network";
+  plan: PlanTier | "elite";
   termsVersion: string;
 }
 
@@ -19,6 +19,10 @@ export function pendingSubscriptionFields(
     requestedPlan: plan,
     requestedPrice: PLANS[plan].price,
     monthlyLeadLimit: PLANS[plan].monthlyLeadLimit,
+    ownerType: plan === "network" ? "clinic" as const : "dentist" as const,
+    seatsTotal: PLANS[plan].includedSeats,
+    seatsUsed: 1,
+    extraSeatPrice: PLANS[plan].extraSeatPrice,
     status: "pending" as const,
     isActive: false,
     paymentProvider: "infinitepay_link" as const,

@@ -29,7 +29,6 @@ import {
 } from "../services/sorvyApi";
 
 type Stage =
-  | "consent"
   | "capture"
   | "validation"
   | "analyzing"
@@ -82,7 +81,7 @@ export const PatientJourney = ({
   profile: PublicProfessionalProfile;
   onExit: () => void;
 }) => {
-  const [stage, setStage] = useState<Stage>("consent");
+  const [stage, setStage] = useState<Stage>("capture");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [image, setImage] = useState<ImagePayload | null>(null);
   const [validation, setValidation] = useState<PhotoValidation | null>(null);
@@ -92,32 +91,13 @@ export const PatientJourney = ({
   const [lead, setLead] = useState({ name: "", whatsapp: "" });
   const [contactConsent, setContactConsent] = useState(false);
   const [privacyConsent, setPrivacyConsent] = useState(false);
-
-  const begin = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const id = await startTriage(profile.slug, {
-        photoConsent: true,
-        adultAndOwnershipConfirmed: true,
-      });
-      setSessionId(id);
-      setStage("capture");
-    } catch (beginError) {
-      setError(
-        beginError instanceof Error
-          ? beginError.message
-          : "Não foi possível iniciar a triagem.",
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [adultConfirmed, setAdultConfirmed] = useState(false);
+  const [photoConsent, setPhotoConsent] = useState(false);
 
   const selectPhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || !sessionId) return;
+    if (!file) return;
     if (!ACCEPTED_TYPES.has(file.type)) {
       setError("Use uma foto JPG, PNG ou WebP.");
       return;
@@ -141,35 +121,36 @@ export const PatientJourney = ({
       setValidation(null);
       setError(null);
       setStage("validation");
-      setBusy(true);
-      try {
-        const result = await validatePhoto(
-          sessionId,
-          payload.base64,
-          payload.mimeType,
-        );
-        setValidation(result);
-      } catch (validationError) {
-        setError(
-          validationError instanceof Error
-            ? validationError.message
-            : "Não foi possível validar a foto.",
-        );
-      } finally {
-        setBusy(false);
-      }
     };
     reader.readAsDataURL(file);
   };
 
-  const analyze = async () => {
-    if (!sessionId || !image || validation?.isAdequate !== true) return;
-    setStage("analyzing");
+  const usePhoto = async () => {
+    if (!image) return;
+    if (!adultConfirmed || !photoConsent) {
+      setError("Confirme as duas autorizações para utilizar esta foto.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
+      const activeSessionId = sessionId ?? await startTriage(profile.slug, {
+        photoConsent: true,
+        adultAndOwnershipConfirmed: true,
+      });
+      setSessionId(activeSessionId);
+
+      const photoValidation = await validatePhoto(
+        activeSessionId,
+        image.base64,
+        image.mimeType,
+      );
+      setValidation(photoValidation);
+      if (!photoValidation.isAdequate) return;
+
+      setStage("analyzing");
       const result = await analyzePhoto(
-        sessionId,
+        activeSessionId,
         image.base64,
         image.mimeType,
       );
@@ -178,11 +159,11 @@ export const PatientJourney = ({
       setImage(null);
       setValidation(null);
       setStage("preview");
-    } catch (analysisError) {
+    } catch (processingError) {
       setError(
-        analysisError instanceof Error
-          ? analysisError.message
-          : "Não foi possível concluir a análise.",
+        processingError instanceof Error
+          ? processingError.message
+          : "Não foi possível processar a foto.",
       );
       setStage("validation");
     } finally {
@@ -263,11 +244,8 @@ export const PatientJourney = ({
         </div>
       )}
 
-      {stage === "consent" && (
-        <ConsentStep busy={busy} onAccept={begin} onBack={onExit} />
-      )}
       {stage === "capture" && (
-        <CaptureStep onPhoto={selectPhoto} onBack={() => setStage("consent")} />
+        <CaptureStep onPhoto={selectPhoto} onBack={onExit} />
       )}
       {stage === "validation" && image && (
         <ValidationStep
@@ -275,7 +253,11 @@ export const PatientJourney = ({
           validation={validation}
           busy={busy}
           onPhoto={selectPhoto}
-          onAnalyze={analyze}
+          adultConfirmed={adultConfirmed}
+          photoConsent={photoConsent}
+          onAdultConfirmed={setAdultConfirmed}
+          onPhotoConsent={setPhotoConsent}
+          onUsePhoto={usePhoto}
         />
       )}
       {stage === "analyzing" && <AnalyzingStep />}
@@ -310,115 +292,6 @@ export const PatientJourney = ({
         />
       )}
     </div>
-  );
-};
-
-const ConsentStep = ({
-  busy,
-  onAccept,
-  onBack,
-}: {
-  busy: boolean;
-  onAccept: () => void;
-  onBack: () => void;
-}) => {
-  const [photoAccepted, setPhotoAccepted] = useState(false);
-  const [adultConfirmed, setAdultConfirmed] = useState(false);
-  return (
-    <main className="mx-auto max-w-2xl px-6 py-12">
-      <button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-black text-slate-500">
-        <ChevronLeft className="h-4 w-4" /> Voltar
-      </button>
-      <section className="rounded-[2.5rem] border border-slate-100 bg-white p-8 shadow-xl md:p-10">
-        <div className="flex items-center gap-4">
-          <span className="rounded-2xl bg-blue-50 p-4 text-blue-600">
-            <ShieldCheck className="h-7 w-7" />
-          </span>
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
-              Consentimento da triagem
-            </p>
-            <h1 className="text-3xl font-black">Antes da foto</h1>
-          </div>
-        </div>
-        <div className="mt-7 space-y-5 text-sm font-medium leading-relaxed text-slate-600">
-          <p>
-            Esta experiência usa inteligência artificial para produzir uma
-            leitura <strong>visual, aproximada e informativa</strong>. Ela não
-            diagnostica doenças, não determina urgência e não substitui consulta
-            com cirurgião-dentista.
-          </p>
-          <div className="rounded-2xl bg-slate-50 p-5">
-            <p className="font-black text-slate-900">Como a foto é usada</p>
-            <p className="mt-2">
-              A imagem é enviada temporariamente à API paga do Google Gemini para
-              gerar o resultado. A Sorvy não grava a foto no banco de dados, no
-              painel do profissional ou no histórico do lead. O provedor pode
-              manter registros transitórios de segurança e processá-los fora do
-              Brasil.
-            </p>
-          </div>
-          <p>
-            O resultado e seus dados de contato só serão compartilhados com o
-            profissional depois do preview e de uma autorização separada.
-          </p>
-          <p className="text-xs text-slate-400">
-            Versão do consentimento: {CONSENT_VERSION}. Para dor, trauma,
-            sangramento ou outra situação urgente, procure atendimento
-            odontológico presencial.
-          </p>
-        </div>
-        <div className="mt-7 space-y-3">
-          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <input
-              type="checkbox"
-              checked={adultConfirmed}
-              onChange={(event) => setAdultConfirmed(event.target.checked)}
-              className="mt-0.5 h-5 w-5"
-            />
-            <span className="text-sm font-bold text-slate-700">
-              Confirmo que tenho 18 anos ou mais e que a foto é minha.
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4">
-            <input
-              type="checkbox"
-              checked={photoAccepted}
-              onChange={(event) => setPhotoAccepted(event.target.checked)}
-              className="mt-0.5 h-5 w-5"
-            />
-            <span className="text-sm font-bold text-slate-700">
-              Entendi a finalidade informativa e autorizo especificamente o
-              processamento temporário da foto para esta triagem.
-            </span>
-          </label>
-        </div>
-        <p className="mt-4 text-center text-xs font-medium text-slate-400">
-          Consulte a{" "}
-          <a
-            href="/privacidade"
-            target="_blank"
-            rel="noreferrer"
-            className="font-black text-blue-600 underline"
-          >
-            Política de Privacidade
-          </a>
-          .
-        </p>
-        <button
-          disabled={!photoAccepted || !adultConfirmed || busy}
-          onClick={onAccept}
-          className="mt-6 flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 py-5 text-sm font-black uppercase tracking-widest text-white disabled:opacity-30"
-        >
-          {busy ? (
-            <LoaderCircle className="h-5 w-5 animate-spin" />
-          ) : (
-            <ArrowRight className="h-5 w-5" />
-          )}
-          Concordo e continuar
-        </button>
-      </section>
-    </main>
   );
 };
 
@@ -481,15 +354,32 @@ const ValidationStep = ({
   validation,
   busy,
   onPhoto,
-  onAnalyze,
+  adultConfirmed,
+  photoConsent,
+  onAdultConfirmed,
+  onPhotoConsent,
+  onUsePhoto,
 }: {
   image: string;
   validation: PhotoValidation | null;
   busy: boolean;
   onPhoto: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  onAnalyze: () => void;
+  adultConfirmed: boolean;
+  photoConsent: boolean;
+  onAdultConfirmed: (value: boolean) => void;
+  onPhotoConsent: (value: boolean) => void;
+  onUsePhoto: () => void;
 }) => (
   <main className="mx-auto max-w-xl px-6 py-12">
+    <div className="mb-6 text-center">
+      <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
+        Confirme sua foto
+      </p>
+      <h1 className="mt-2 text-3xl font-black">Deseja utilizar esta foto?</h1>
+      <p className="mt-2 text-sm font-medium text-slate-500">
+        Ela será processada temporariamente e não ficará salva no painel.
+      </p>
+    </div>
     <div className="relative overflow-hidden rounded-[3rem] border-8 border-white bg-slate-900 shadow-2xl">
       <img src={image} alt="Prévia da foto selecionada" className="aspect-square w-full object-cover" />
       {busy && (
@@ -524,6 +414,54 @@ const ValidationStep = ({
         </div>
       </div>
     )}
+    <section className="mt-6 space-y-3 rounded-[2rem] border border-slate-100 bg-white p-5 shadow-sm">
+      <div className="flex items-start gap-3">
+        <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600" />
+        <div>
+          <p className="text-sm font-black text-slate-900">Triagem informativa e consentida</p>
+          <p className="mt-1 text-xs font-medium leading-relaxed text-slate-500">
+            A leitura é visual e aproximada. Não diagnostica, não define urgência
+            e não substitui consulta com cirurgião-dentista.
+          </p>
+        </div>
+      </div>
+      <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-slate-50 p-4">
+        <input
+          type="checkbox"
+          checked={adultConfirmed}
+          onChange={(event) => onAdultConfirmed(event.target.checked)}
+          className="mt-0.5 h-5 w-5"
+        />
+        <span className="text-xs font-bold leading-relaxed text-slate-600">
+          Confirmo que tenho 18 anos ou mais e que a foto é minha.
+        </span>
+      </label>
+      <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+        <input
+          type="checkbox"
+          checked={photoConsent}
+          onChange={(event) => onPhotoConsent(event.target.checked)}
+          className="mt-0.5 h-5 w-5"
+        />
+        <span className="text-xs font-bold leading-relaxed text-slate-600">
+          Autorizo o processamento temporário desta foto para gerar minha triagem.
+          Li a{" "}
+          <a
+            href="/privacidade"
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-600 underline"
+          >
+            Política de Privacidade
+          </a>
+          .
+        </span>
+      </label>
+      <p className="text-center text-[10px] font-bold text-slate-400">
+        Consentimento {CONSENT_VERSION} · seus dados só serão enviados ao dono
+        deste link após uma autorização separada.
+      </p>
+    </section>
     <div className="mt-6 grid grid-cols-2 gap-4">
       <label className="relative flex cursor-pointer items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white py-5 text-xs font-black uppercase tracking-widest">
         <RefreshCw className="h-4 w-4" /> Repetir
@@ -536,11 +474,12 @@ const ValidationStep = ({
         />
       </label>
       <button
-        disabled={busy || validation?.isAdequate !== true}
-        onClick={onAnalyze}
-        className="rounded-2xl bg-blue-600 py-5 text-xs font-black uppercase tracking-widest text-white disabled:opacity-30"
+        disabled={busy || !adultConfirmed || !photoConsent}
+        onClick={onUsePhoto}
+        className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-3 py-5 text-xs font-black uppercase tracking-widest text-white disabled:opacity-30"
       >
-        Analisar foto
+        {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+        Utilizar esta foto
       </button>
     </div>
   </main>
@@ -622,7 +561,8 @@ const PreviewStep = ({
           onClick={onContinue}
           className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-7 py-4 text-xs font-black uppercase tracking-widest"
         >
-          Continuar <ArrowRight className="h-4 w-4" />
+          {fullReport ? "Ver meu relatório completo" : "Salvar meu resultado"}
+          <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </main>
@@ -771,6 +711,7 @@ const ReportStep = ({
   onExit: () => void;
 }) => {
   const status = statusCopy(scores.status);
+  const [contactRequested, setContactRequested] = useState(false);
   const metrics: Array<readonly [string, number]> = [
     ["Harmonia visual", scores.harmonyIndex],
     ["Brilho aparente", scores.brightnessIndex],
@@ -866,12 +807,28 @@ const ReportStep = ({
             A avaliação presencial é indispensável para decisões clínicas.
           </div>
           {profile.whatsapp ? (
-            <button
-              onClick={onContact}
-              className="flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-600 py-5 text-xs font-black uppercase tracking-widest text-white hover:bg-emerald-700"
-            >
-              Conversar com {profile.name} <ExternalLink className="h-5 w-5" />
-            </button>
+            <div className="space-y-3">
+              <button
+                onClick={onContact}
+                className="flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-600 py-5 text-xs font-black uppercase tracking-widest text-white hover:bg-emerald-700"
+              >
+                Agendar consulta agora <ExternalLink className="h-5 w-5" />
+              </button>
+              <button
+                onClick={() => setContactRequested(true)}
+                className="w-full rounded-2xl border-2 border-slate-200 bg-white py-4 text-xs font-black uppercase tracking-widest text-slate-600 hover:border-blue-200 hover:text-blue-600"
+              >
+                {contactRequested
+                  ? "Pedido enviado — aguarde o contato"
+                  : `Prefiro que ${profile.name} entre em contato`}
+              </button>
+              {contactRequested && (
+                <p className="text-center text-xs font-medium text-slate-500">
+                  Seu nome, WhatsApp e resumo já estão disponíveis no painel do
+                  profissional responsável por este link.
+                </p>
+              )}
+            </div>
           ) : (
             <p className="rounded-2xl bg-slate-50 p-5 text-center text-sm font-bold text-slate-600">
               Seus dados foram encaminhados. O profissional poderá entrar em

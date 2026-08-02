@@ -19,8 +19,8 @@
 | `publicProfiles` | somente perfil ativo por slug | nenhuma |
 | `users` | próprio usuário ou HQ | nenhuma |
 | `accounts` | mesma conta ou HQ | nenhuma |
-| `professionals` | mesma conta ou HQ | campos seguros e Function |
-| `leads` | mesma conta ou HQ | somente campos de CRM; criação via Function |
+| `professionals` | HQ; clínica da conta; dentista lê o próprio perfil | campos seguros e Functions de equipe |
+| `leads` | HQ; clínica da conta; dentista lê somente os atribuídos | CRM; criação e atribuição via Function |
 | `triageSessions` | nenhuma | nenhuma |
 | `usage` | mesma conta ou HQ | nenhuma |
 | `usageReservations` | nenhuma | nenhuma |
@@ -76,10 +76,10 @@ restrita para ativar, pausar ou marcar inadimplência.
 ## Pendências para produção
 
 - revisão jurídica dos textos e identificação formal do controlador;
-- renomear no checkout da InfinitePay o antigo produto Network para Elite;
+- confirmar nome Network no checkout da InfinitePay sem alterar o link atual;
 - projeto Firebase Blaze e região;
 - API paga do Gemini e Secret Manager;
 - App Check com reCAPTCHA Enterprise;
 - criação do usuário HQ;
-- credenciais e WhatsApp do cliente piloto Elite;
+- credenciais e WhatsApp do cliente piloto Network;
 - teste das regras no emulador com Java 21+.

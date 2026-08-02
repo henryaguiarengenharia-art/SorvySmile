@@ -28,6 +28,8 @@ if (
   );
 }
 const plan = normalizePlan(requestedPlan);
+const accessRole = plan === "network" ? "clinic" : "professional";
+const ownerType = plan === "network" ? "clinic" : "dentist";
 
 const auth = getAuth();
 const db = getFirestore();
@@ -58,7 +60,7 @@ batch.set(
   {
     uid: user.uid,
     email,
-    role: "professional",
+    role: accessRole,
     accountId,
     professionalId,
     slug,
@@ -83,6 +85,10 @@ batch.set(
     status: "active",
     isActive: true,
     monthlyLeadLimit: PLANS[plan].monthlyLeadLimit,
+    ownerType,
+    seatsTotal: PLANS[plan].includedSeats,
+    seatsUsed: 1,
+    extraSeatPrice: PLANS[plan].extraSeatPrice,
     paymentProvider: "legacy_migration",
     paymentStatus: "confirmed",
     paymentConfirmedAtMs: now,
@@ -127,6 +133,7 @@ batch.set(
     name,
     whatsapp,
     plan,
+    ownerType,
     active: true,
     createdAtMs: now,
     updatedAtMs: now,
@@ -135,7 +142,7 @@ batch.set(
 );
 await batch.commit();
 await auth.setCustomUserClaims(user.uid, {
-  role: "professional",
+  role: accessRole,
   accountId,
   professionalId,
   accountStatus: "active",

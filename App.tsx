@@ -4,14 +4,12 @@ import {
   Check,
   CheckCircle2,
   CreditCard,
-  LayoutDashboard,
   LoaderCircle,
   LockKeyhole,
   LogOut,
   ShieldCheck,
   Smile,
   Sparkles,
-  Users,
 } from "lucide-react";
 import { PatientJourney } from "./components/PatientJourney";
 import {
@@ -21,7 +19,9 @@ import {
   WorkspaceUser,
 } from "./types";
 import {
+  assignLead,
   changeAccountStatus,
+  createTeamMember,
   deleteLeadRecord,
   getPublicProfile,
   loginWorkspace,
@@ -30,6 +30,7 @@ import {
   registerPendingSubscription,
   restoreWorkspaceSession,
   saveProfessionalProfile,
+  setTeamMemberStatus,
   subscribeWorkspace,
   updateLeadCrm,
   WorkspaceData,
@@ -49,6 +50,11 @@ const DentistPortalView = React.lazy(() =>
 const HQDashboardView = React.lazy(() =>
   import("./components/HQDashboardView").then((module) => ({
     default: module.HQDashboardView,
+  })),
+);
+const ClinicDashboardView = React.lazy(() =>
+  import("./components/ClinicDashboardView").then((module) => ({
+    default: module.ClinicDashboardView,
   })),
 );
 
@@ -85,6 +91,12 @@ interface PendingRegistration {
   email: string;
   whatsapp: string;
   plan: PlanTier;
+}
+
+function dashboardViewFor(user: WorkspaceUser): AppView {
+  if (user.role === "hq") return "hq-dashboard";
+  if (user.role === "clinic") return "admin-dashboard";
+  return "dentist-portal";
 }
 
 const App: React.FC = () => {
@@ -163,7 +175,7 @@ const App: React.FC = () => {
         setPageError,
       );
       if (!cancelled) {
-        setView(user.role === "hq" ? "hq-dashboard" : "dentist-portal");
+        setView(dashboardViewFor(user));
       }
     });
     return () => {
@@ -190,7 +202,7 @@ const App: React.FC = () => {
       setWorkspace,
       setPageError,
     );
-    setView(user.role === "hq" ? "hq-dashboard" : "dentist-portal");
+    setView(dashboardViewFor(user));
   };
 
   const handleLogout = async () => {
@@ -221,6 +233,7 @@ const App: React.FC = () => {
   const showPublicNav = ![
     "patient",
     "dentist-portal",
+    "admin-dashboard",
     "hq-dashboard",
   ].includes(view);
 
@@ -364,6 +377,39 @@ const App: React.FC = () => {
         </DashboardShell>
       )}
 
+      {view === "admin-dashboard" && workspace && currentAccount && (
+        <DashboardShell
+          title={currentAccount.accountName || "Administração da clínica"}
+          onLogout={handleLogout}
+        >
+          <React.Suspense fallback={<DashboardLoading />}>
+            <ClinicDashboardView
+              leadRecords={workspace.leads}
+              professionals={workspace.professionals}
+              account={currentAccount}
+              currentUsage={currentUsage}
+              currentProfessionalId={workspaceUser?.professionalId}
+              managerProfessional={currentProfessional}
+              onAssignLead={assignLead}
+              onCreateProfessional={createTeamMember}
+              onToggleProfessional={setTeamMemberStatus}
+              onUpdateClinicProfile={(patch) =>
+                saveProfessionalProfile(patch).catch((error: Error) => {
+                  setPageError(error.message);
+                  throw error;
+                })
+              }
+              onUpdateLead={(id, patch) =>
+                updateLeadCrm(id, patch).catch((error: Error) => {
+                  setPageError(error.message);
+                  throw error;
+                })
+              }
+            />
+          </React.Suspense>
+        </DashboardShell>
+      )}
+
       {view === "hq-dashboard" && workspace && (
         <DashboardShell title="Administração Sorvy" onLogout={handleLogout}>
           <React.Suspense fallback={<DashboardLoading />}>
@@ -423,15 +469,15 @@ const LandingView = ({
   <main>
     <section className="mx-auto max-w-6xl px-6 py-20 text-center">
       <div className="mx-auto mb-7 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-700">
-        <Sparkles className="h-4 w-4" /> Triagem estética informativa
+        <Sparkles className="h-4 w-4" /> Triagem informativa com IA · gratuita
       </div>
       <h1 className="mx-auto max-w-4xl text-5xl font-black leading-[0.95] tracking-tighter md:text-8xl">
-        Transforme curiosidade em uma{" "}
-        <span className="text-blue-600">conversa profissional.</span>
+        Conheça melhor o seu{" "}
+        <span className="text-blue-600">Sorriso</span> em poucos segundos.
       </h1>
       <p className="mx-auto mt-7 max-w-2xl text-lg font-medium leading-relaxed text-slate-500">
-        Uma experiência visual rápida para conhecer melhor o sorriso e facilitar
-        o próximo passo com o cirurgião-dentista.
+        Tire uma foto guiada, receba uma leitura inicial de aspectos visuais
+        aparentes e chegue à próxima conversa com mais clareza.
       </p>
       {profile && (
         <p className="mt-4 text-sm font-bold text-slate-400">
@@ -439,8 +485,8 @@ const LandingView = ({
         </p>
       )}
       <button
-        disabled={loading}
-        onClick={profile ? onStart : onPlans}
+        disabled={loading || !profile}
+        onClick={onStart}
         className="mx-auto mt-9 flex items-center gap-3 rounded-3xl bg-slate-900 px-10 py-6 text-base font-black text-white shadow-2xl transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
       >
         {loading ? (
@@ -448,8 +494,13 @@ const LandingView = ({
         ) : (
           <Smile className="h-5 w-5" />
         )}
-        {profile ? "Iniciar triagem gratuita" : "Conhecer planos"}
+        Iniciar Minha Triagem <ArrowRight className="h-5 w-5" />
       </button>
+      {!loading && !profile && (
+        <p className="mx-auto mt-3 max-w-md text-xs font-bold text-amber-700">
+          A triagem é liberada pelo link individual do dentista ou da clínica.
+        </p>
+      )}
       <div className="mt-8 flex flex-wrap justify-center gap-5 text-xs font-bold text-slate-400">
         <span className="flex items-center gap-2">
           <ShieldCheck className="h-4 w-4 text-emerald-500" />
@@ -467,37 +518,50 @@ const LandingView = ({
     </section>
 
     <section className="border-y border-slate-100 bg-white px-6 py-16">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-5xl">
         <p className="text-center text-[10px] font-black uppercase tracking-widest text-blue-600">
-          Como a Sorvy Smile ajuda meu negócio?
+          Como funciona
         </p>
-        <div className="mt-9 grid gap-5 md:grid-cols-3">
+        <h2 className="mt-3 text-center text-4xl font-black tracking-tight">
+          Simples, rápido e informativo.
+        </h2>
+        <div className="mt-9 grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
             {
-              icon: <Sparkles className="h-6 w-6" />,
-              title: "O paciente recebe",
-              text: "Uma triagem visual informativa, simples e personalizada, antes da conversa.",
+              number: "01",
+              icon: "📸",
+              title: "Foto guiada",
+              text: "Use o guia para posicionar o sorriso com boa luz.",
             },
             {
-              icon: <Users className="h-6 w-6" />,
-              title: "Você recebe",
-              text: "Nome, WhatsApp, consentimento e contexto da triagem no mesmo painel.",
+              number: "02",
+              icon: "✨",
+              title: "Leitura inicial",
+              text: "A IA observa aspectos visuais aparentes da foto.",
             },
             {
-              icon: <LayoutDashboard className="h-6 w-6" />,
-              title: "No dia a dia",
-              text: "CRM, histórico, templates e acompanhamento do primeiro contato ao agendamento.",
+              number: "03",
+              icon: "📊",
+              title: "Preview parcial",
+              text: "Veja os primeiros indicadores antes de informar seus dados.",
+            },
+            {
+              number: "04",
+              icon: "📋",
+              title: "Relatório completo",
+              text: "Autorize o envio e escolha como falar com o profissional.",
             },
           ].map((item) => (
             <article
               key={item.title}
-              className="rounded-[2rem] border border-slate-100 bg-slate-50 p-7"
+              className="rounded-[2rem] border border-slate-100 bg-slate-50 p-6 text-center"
             >
-              <div className="mb-5 inline-flex rounded-2xl bg-blue-600 p-3 text-white">
-                {item.icon}
-              </div>
-              <h2 className="text-xl font-black">{item.title}</h2>
-              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
+              <div className="text-3xl">{item.icon}</div>
+              <p className="mt-4 text-[9px] font-black uppercase tracking-widest text-blue-600">
+                {item.number}
+              </p>
+              <h3 className="mt-1 text-sm font-black">{item.title}</h3>
+              <p className="mt-2 text-[11px] font-medium leading-relaxed text-slate-500">
                 {item.text}
               </p>
             </article>
@@ -507,8 +571,11 @@ const LandingView = ({
           onClick={onPlans}
           className="mx-auto mt-9 flex items-center gap-2 rounded-2xl bg-blue-600 px-8 py-4 text-sm font-black text-white hover:bg-blue-700"
         >
-          Ver planos e preços <ArrowRight className="h-4 w-4" />
+          Sou profissional · conhecer os planos <ArrowRight className="h-4 w-4" />
         </button>
+        <p className="mt-5 text-center text-xs font-medium text-slate-400">
+          Triagem informativa. Não substitui consulta com cirurgião-dentista.
+        </p>
       </div>
     </section>
   </main>
@@ -528,8 +595,8 @@ const PricingView = ({
         Um plano para cada fase.
       </h1>
       <p className="mx-auto mt-4 max-w-xl font-medium text-slate-500">
-        Sem marketplace, distribuição de rede ou cobrança por assento. Você
-        escolhe o nível de captação e automação.
+        Escolha entre uma operação individual simples, um funil profissional
+        completo ou a gestão de uma clínica com equipe.
       </p>
     </div>
     <div className="mt-12 grid gap-6 lg:grid-cols-3">
@@ -582,10 +649,14 @@ const PricingView = ({
         );
       })}
     </div>
-    <p className="mt-8 text-center text-xs font-medium text-slate-400">
-      O assistente automatizado do Elite será liberado por etapas após validação
-      do fluxo principal.
-    </p>
+    <div className="mx-auto mt-8 max-w-2xl rounded-2xl border border-slate-100 bg-white p-5 text-center">
+      <p className="text-xs font-black uppercase tracking-widest text-slate-700">
+        Precisa de mais volume?
+      </p>
+      <p className="mt-2 text-xs font-medium text-slate-500">
+        Adicionais disponíveis: +50 leads por R$ 99 ou +150 leads por R$ 249.
+      </p>
+    </div>
   </main>
 );
 
@@ -856,8 +927,7 @@ const LegalView = ({
   onBack: () => void;
 }) => {
   const privacyEmail = String(
-    import.meta.env.VITE_PRIVACY_CONTACT_EMAIL
-      ?? "henry.aguiar.engenharia@gmail.com",
+    import.meta.env.VITE_PRIVACY_CONTACT_EMAIL ?? "",
   ).trim();
   const isPrivacy = type === "privacy";
 
@@ -918,13 +988,20 @@ const LegalView = ({
             <LegalSection title="7. Contato e segurança">
               Aplicamos isolamento por conta, autenticação, App Check, limites
               no servidor e acesso restrito. Nenhuma transmissão é isenta de
-              risco. Solicitações de privacidade podem ser enviadas para{" "}
-              <a
-                className="font-black text-blue-600 underline"
-                href={`mailto:${privacyEmail}`}
-              >
-                {privacyEmail}
-              </a>
+              risco. Solicitações de privacidade podem ser enviadas
+              {privacyEmail ? (
+                <>
+                  {" para "}
+                  <a
+                    className="font-black text-blue-600 underline"
+                    href={`mailto:${privacyEmail}`}
+                  >
+                    {privacyEmail}
+                  </a>
+                </>
+              ) : (
+                " pelo canal de atendimento identificado no site"
+              )}
               .
             </LegalSection>
           </div>
@@ -937,10 +1014,11 @@ const LegalView = ({
               quantidade de pacientes, faturamento ou resultado comercial.
             </LegalSection>
             <LegalSection title="2. Planos e limites">
-              Lite, Pro e Elite possuem preços e limites mensais
-              exibidos na contratação. O Elite inclui recursos de automação
-              liberados por etapas; funcionalidades ainda em validação são
-              identificadas no produto e não devem ser tratadas como ativas.
+              Lite, Pro e Network possuem preços e limites mensais exibidos na
+              contratação. O Network inclui gestão de equipe, atribuição de
+              leads e indicadores por profissional. Funcionalidades ainda em
+              validação são identificadas no produto e não devem ser tratadas
+              como ativas.
             </LegalSection>
             <LegalSection title="3. Pagamento e ativação">
               A solicitação cria uma conta pendente. O pagamento ocorre no link

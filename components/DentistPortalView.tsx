@@ -475,15 +475,15 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                 <Sparkles className="mt-1 h-7 w-7 shrink-0 text-blue-400" />
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-widest text-blue-400">
-                    Elite
+                    Network
                   </p>
                   <h2 className="mt-2 text-xl font-black">
-                    Assistente especializado em validação
+                    Gestão avançada da operação
                   </h2>
                   <p className="mt-2 text-sm font-medium leading-relaxed text-white/60">
-                    O assistente será liberado por etapas depois da validação do
-                    fluxo principal. Nenhuma automação conversará com pacientes
-                    sem regras e mensagens aprovadas.
+                    Indicadores por profissional, atribuição de leads e recursos
+                    de equipe ficam disponíveis no painel da clínica. O portal
+                    do dentista continua dedicado à execução individual.
                   </p>
                 </div>
               </div>

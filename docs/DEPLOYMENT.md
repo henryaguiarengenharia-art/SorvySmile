@@ -20,12 +20,10 @@ Copie `.env.example` para `.env.local` e preencha:
 
 - configuração pública do Firebase;
 - chave pública do App Check;
-- links atuais da InfinitePay para Lite, Pro e Elite;
-- renomeie no checkout da InfinitePay o antigo produto Network para Elite antes
-  do corte;
+- links atuais da InfinitePay para Lite, Pro e Network;
+- confirme que o checkout de R$ 497 está identificado como Network antes do corte;
 - WhatsApp comercial;
-- email público de privacidade
-  (`henry.aguiar.engenharia@gmail.com`);
+- email público de privacidade;
 - slug padrão opcional. Deixe vazio para manter a raiz como página comercial;
   o cliente piloto continuará em `/p/clinica-saude-integrada-bh`.
 
@@ -81,7 +79,7 @@ npm --prefix functions run seed:hq
 ```
 
 Depois execute `npm --prefix functions run seed:pilot` com email, senha
-temporária, WhatsApp, nome, slug e o plano `elite` do único cliente. Digite os
+temporária, WhatsApp, nome, slug e o plano `network` do cliente piloto. Digite os
 valores no Shell; não os salve no histórico do repositório nem envie no chat.
 O cliente deve trocar a senha temporária pelo fluxo “Esqueci minha senha”.
 
@@ -94,6 +92,8 @@ O cliente deve trocar a senha temporária pelo fluxo “Esqueci minha senha”.
 - captura com duas autorizações;
 - cota por plano;
 - WhatsApp e atualização do funil;
+- fila da clínica, atribuição e isolamento por dentista;
+- criação, pausa e reativação de acesso da equipe;
 - exclusão de lead;
 - cadastro de assinante;
 - link de pagamento e mensagem do comprovante;

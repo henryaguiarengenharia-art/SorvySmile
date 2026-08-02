@@ -18,6 +18,16 @@ service cloud.firestore {
       return signedIn() && currentUser().data.accountId == accountId;
     }
 
+    function isClinicManager() {
+      return signedIn() && currentUser().data.role == 'clinic';
+    }
+
+    function isAssignedProfessional(professionalId) {
+      return signedIn()
+        && currentUser().data.role == 'professional'
+        && currentUser().data.professionalId == professionalId;
+    }
+
     match /publicProfiles/{slug} {
       allow get: if resource.data.active == true || isHq();
       allow list: if false;
@@ -35,9 +45,12 @@ service cloud.firestore {
     }
 
     match /professionals/{professionalId} {
-      allow read: if isHq() || belongsTo(resource.data.accountId);
+      allow read: if isHq()
+        || (isClinicManager() && belongsTo(resource.data.accountId))
+        || isAssignedProfessional(professionalId);
       allow create, delete: if false;
-      allow update: if belongsTo(resource.data.accountId)
+      allow update: if isAssignedProfessional(professionalId)
+        && belongsTo(resource.data.accountId)
         && request.resource.data.accountId == resource.data.accountId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'whatsapp',
@@ -52,9 +65,21 @@ service cloud.firestore {
     }
 
     match /leads/{leadId} {
-      allow read: if isHq() || belongsTo(resource.data.accountId);
+      allow read: if isHq()
+        || (isClinicManager() && belongsTo(resource.data.accountId))
+        || (
+          belongsTo(resource.data.accountId)
+          && isAssignedProfessional(resource.data.professionalId)
+        );
       allow create, delete: if false;
-      allow update: if (isHq() || belongsTo(resource.data.accountId))
+      allow update: if (
+          isHq()
+          || (isClinicManager() && belongsTo(resource.data.accountId))
+          || (
+            belongsTo(resource.data.accountId)
+            && isAssignedProfessional(resource.data.professionalId)
+          )
+        )
         && request.resource.data.accountId == resource.data.accountId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status',

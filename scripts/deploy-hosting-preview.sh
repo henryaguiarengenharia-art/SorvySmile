@@ -13,13 +13,8 @@ export VITE_FIREBASE_STORAGE_BUCKET="sorvysmile.firebasestorage.app"
 export VITE_FIREBASE_MESSAGING_SENDER_ID="1047671293768"
 export VITE_FIREBASE_APP_ID="1:1047671293768:web:2e2df8c47b99544a0bd57d"
 export VITE_FIREBASE_APPCHECK_SITE_KEY=""
-export VITE_DEFAULT_PROFESSIONAL_SLUG=""
+export VITE_DEFAULT_PROFESSIONAL_SLUG="clinica-saude-integrada-bh"
 export VITE_USE_FIREBASE_EMULATORS="false"
-export VITE_PAYMENT_URL_LITE="https://invoice.infinitepay.io/plans/henry-augusto-pinheiro/7f6uzHxoqT"
-export VITE_PAYMENT_URL_PRO="https://invoice.infinitepay.io/plans/henry-augusto-pinheiro/dakCr5umz"
-export VITE_PAYMENT_URL_ELITE="https://invoice.infinitepay.io/plans/henry-augusto-pinheiro/7f70xygLaj"
-export VITE_SALES_WHATSAPP="5531994284436"
-export VITE_PRIVACY_CONTACT_EMAIL="henry.aguiar.engenharia@gmail.com"
 
 if [[ ! -f package.json || ! -f firebase.json ]]; then
   printf 'Execute este script na raiz do repositório SorvySmile.\n' >&2

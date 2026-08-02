@@ -9,41 +9,41 @@ Replit como rollback até a homologação.
 > sem configurar o projeto Firebase, a API paga do Gemini, App Check e o único
 > cliente piloto. Os três links e valores da InfinitePay foram verificados.
 
-## Produto simplificado
+## Produto preservado
 
-O antigo Network foi retirado do fluxo comercial. Cada cliente possui:
+A migração mantém a experiência original do Sorvy Smile sobre a arquitetura
+Firebase. A raiz continua orientada ao paciente e o CTA principal abre a jornada
+de triagem quando o link possui um responsável ativo.
 
-- uma conta e um acesso profissional;
-- um link canônico `/p/{slug}`;
-- um destino único para os leads;
-- um painel de captação, contato e acompanhamento;
-- cotas progressivas de triagens validadas no servidor.
-
-Não há marketplace, escolha de dentista pelo paciente, distribuição de leads,
-equipe por assento ou administração de rede.
-
-A raiz do site é comercial. Somente um link profissional explícito direciona a
-triagem e o lead a um cliente.
+- link canônico `/p/{slug}` e compatibilidade com `?p=`, `?d=` e `?c=`;
+- foto guiada, consentimento na confirmação da foto e processamento temporário;
+- preview antes da captura de nome e WhatsApp;
+- relatório informativo e CTAs de agendamento ou pedido de contato;
+- destino sempre definido pelo dono do link, sem marketplace público;
+- portal individual do dentista e painel consolidado da clínica no Network.
 
 | Plano | Mensalidade | Triagens/mês | Principal evolução |
 |---|---:|---:|---|
 | Lite | R$ 149 | 15 | preview, bio link e captação |
 | Pro | R$ 297 | 60 | relatório completo, CRM e agendamento |
-| Elite | R$ 497 | 150 | assistente e automação liberados por etapas |
+| Network | R$ 497 | 150 | equipe, atribuição e KPIs por dentista |
 
-Os preços e limites foram confirmados para esta migração. O valor legado
-`network` é aceito apenas para migração de dados e normalizado para `elite`.
+O Network inclui 2 acessos; acesso adicional custa R$ 79. Add-ons de volume:
++50 leads por R$ 99 e +150 leads por R$ 249. O valor `elite` é tratado apenas
+como alias legado e normalizado para `network`.
 
 ## Fluxos
 
 Paciente:
 
-1. abre o link do profissional;
-2. confirma maioridade, titularidade da foto e consentimento específico;
-3. valida a foto e recebe um preview antes de informar contato;
+1. abre o link da clínica ou do profissional;
+2. tira a foto e confirma maioridade, titularidade e consentimento ao clicar em
+   “Utilizar esta foto”;
+3. recebe um preview antes de informar contato;
 4. fornece somente nome e WhatsApp;
 5. autoriza separadamente o compartilhamento e o contato;
-6. recebe o relatório permitido pelo plano e segue ao WhatsApp do profissional.
+6. recebe o relatório permitido pelo plano e escolhe agendar pelo WhatsApp ou
+   pedir que o responsável pelo link entre em contato.
 
 Assinante:
 
@@ -106,7 +106,7 @@ PILOT_PASSWORD="senha-temporaria-forte" \
 PILOT_WHATSAPP="55DDDNUMERO" \
 PILOT_NAME="Clínica Saúde Integrada BH" \
 PILOT_SLUG="clinica-saude-integrada-bh" \
-PILOT_PLAN="elite" \
+PILOT_PLAN="network" \
 npm --prefix functions run seed:pilot
 ```
 

@@ -2,21 +2,17 @@
 
 ## Decisão de produto
 
-O plano Network anterior combinava assinatura, equipe, distribuição de leads e
-marketplace. Com um cliente ativo, isso aumentava telas, permissões e estados
-sem gerar valor proporcional.
-
-O novo desenho segue a estrutura validada do SorvyNutri: uma conta, um link,
-um painel e um destino inequívoco para cada triagem. “Network” sobrevive apenas
-como valor legado convertido para Elite durante a leitura de dados antigos.
+A infraestrutura muda para Firebase, mas o produto não é reinterpretado. A
+jornada do paciente, o portal individual e o painel de clínica/equipe são
+preservados. O Network continua como terceiro plano. Marketplace público,
+ranking e escolha aleatória de profissional permanecem fora do produto.
 
 ## Jornada do paciente
 
 | Etapa | Dados | Resultado |
 |---|---|---|
 | Landing | nenhum | proposta e responsável pelo link |
-| Consentimento | versão, data, maioridade e titularidade | autorização específica para a foto |
-| Foto | imagem temporária | validação de enquadramento |
+| Foto + consentimento | imagem temporária, versão, maioridade e titularidade | confirmação “Utilizar esta foto” |
 | Preview | nenhum contato | harmonia e brilho aparentes |
 | Captura | nome + WhatsApp | autorizações separadas de compartilhamento e contato |
 | Relatório | dados já autorizados | leitura visual permitida pelo plano |
@@ -24,8 +20,8 @@ como valor legado convertido para Elite durante a leitura de dados antigos.
 
 O profissional é resolvido pelo slug no início. O sistema mantém os formatos
 legados `?d=slug`, `?c=slug` e `?p=slug`; o endereço canônico é `/p/slug`.
-Sem slug, a página principal permanece comercial e não encaminha o lead para
-um cliente por padrão.
+Sem responsável ativo, a página mantém o CTA de triagem visível, mas não cria um
+lead sem destino. Em homologação, o slug piloto pode ser definido por ambiente.
 
 ## Jornada do profissional
 
@@ -36,14 +32,14 @@ um cliente por padrão.
 5. edita cidade, UF, bio e mensagens permitidas pelo plano;
 6. exclui um lead quando solicitado pelo titular.
 
-O Lite recebe funil simples. Pro e Elite recebem CRM completo,
+O Lite recebe funil simples. Pro e Network recebem CRM completo,
 templates, alertas e agendamento. O Post do Dia permanece como apoio prático do
 modelo validado no Nutri.
 
 ## Jornada comercial
 
 1. entender o benefício para o negócio;
-2. comparar Lite, Pro e Elite;
+2. comparar Lite, Pro e Network;
 3. criar conta com aceite versionado;
 4. abrir o link de pagamento do plano;
 5. enviar o comprovante com a referência gerada;
@@ -57,7 +53,7 @@ volume que justifique essa complexidade.
 
 ## Planos confirmados
 
-| Recurso | Lite | Pro | Elite |
+| Recurso | Lite | Pro | Network |
 |---|---:|---:|---:|
 | Mensalidade confirmada | R$ 149 | R$ 297 | R$ 497 |
 | Triagens mensais | 15 | 60 | 150 |
@@ -65,20 +61,21 @@ volume que justifique essa complexidade.
 | Preview visual | sim | sim | sim |
 | Relatório completo | não | sim | sim |
 | CRM, templates e agendamento | não | sim | sim |
-| Assistente especializado | não | não | por etapas |
+| Gestão e atribuição de equipe | não | não | sim |
+| KPIs por dentista (7/30/90 dias) | não | não | sim |
+| Acessos incluídos | 1 | 1 | 2 |
+| Acesso adicional | — | — | R$ 79 |
 
-O assistente do Elite aparece como “em validação” até ter fluxo, limites,
-mensagens e supervisão homologados. Nenhuma tela deve prometer uma automação
-que ainda não funciona.
+Add-ons confirmados: +50 leads por R$ 99 e +150 leads por R$ 249. Registros com
+o valor legado `elite` são normalizados para `network`.
 
 ## Fora do escopo da primeira produção
 
 - marketplace público;
 - escolha ou ranking de profissionais;
-- distribuição e redistribuição de leads;
-- clínicas com múltiplos assentos;
+- distribuição automática ou aleatória de leads;
 - gamificação competitiva;
 - atendimento autônomo por IA;
 - ativação automática por webhook.
 
-Esses itens só devem voltar como módulos separados, guiados por demanda real.
+O painel Network permite atribuição manual e auditável dentro da própria clínica.

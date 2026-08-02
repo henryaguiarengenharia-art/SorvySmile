@@ -13,18 +13,20 @@ import {
 import {
   captureLeadSchema,
   checkoutSchema,
+  leadAssignmentSchema,
   slugify,
   startTriageSchema,
+  teamMemberSchema,
 } from "./validation.js";
 
 describe("planos", () => {
-  it("migra o plano Network legado para Elite", () => {
-    expect(normalizePlan("network")).toBe("elite");
+  it("migra o valor Elite legado para Network", () => {
+    expect(normalizePlan("elite")).toBe("network");
   });
 
   it("mantém limites progressivos", () => {
     expect(PLANS.lite.monthlyLeadLimit).toBeLessThan(PLANS.pro.monthlyLeadLimit);
-    expect(PLANS.pro.monthlyLeadLimit).toBeLessThan(PLANS.elite.monthlyLeadLimit);
+    expect(PLANS.pro.monthlyLeadLimit).toBeLessThan(PLANS.network.monthlyLeadLimit);
   });
 
   it("usa quinze triagens no Lite", () => {
@@ -34,13 +36,18 @@ describe("planos", () => {
   it("limita validações de foto a três tentativas por triagem contratada", () => {
     expect(photoValidationLimit("lite")).toBe(45);
     expect(photoValidationLimit("pro")).toBe(180);
-    expect(photoValidationLimit("elite")).toBe(450);
+    expect(photoValidationLimit("network")).toBe(450);
   });
 
   it("mantém os preços atuais do Smile", () => {
     expect(PLANS.lite.price).toBe(149);
     expect(PLANS.pro.price).toBe(297);
-    expect(PLANS.elite.price).toBe(497);
+    expect(PLANS.network.price).toBe(497);
+  });
+
+  it("mantém dois acessos incluídos e o valor do acesso adicional no Network", () => {
+    expect(PLANS.network.includedSeats).toBe(2);
+    expect(PLANS.network.extraSeatPrice).toBe(79);
   });
 
   it("gera a chave mensal em UTC", () => {
@@ -53,6 +60,30 @@ describe("slug", () => {
     expect(slugify("Clínica Saúde Integrada BH")).toBe(
       "clinica-saude-integrada-bh",
     );
+  });
+});
+
+describe("gestão Network", () => {
+  it("valida um novo acesso profissional com senha temporária forte", () => {
+    expect(
+      teamMemberSchema.parse({
+        name: "Dentista Exemplo",
+        email: "dentista@example.com",
+        whatsapp: "31999999999",
+        specialty: "Ortodontia",
+        teamTag: "Especialista",
+        temporaryPassword: "Sorvy!temporaria123",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("permite devolver um lead à fila sem responsável", () => {
+    expect(
+      leadAssignmentSchema.parse({
+        leadId: "lead_exemplo",
+        professionalId: null,
+      }).professionalId,
+    ).toBeNull();
   });
 });
 
