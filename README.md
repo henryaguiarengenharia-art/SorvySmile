@@ -5,9 +5,10 @@ odontologia. Esta branch migra o protótipo do Replit para uma arquitetura
 Firebase, reaproveitando a organização validada no SorvyNutri e preservando o
 Replit como rollback até a homologação.
 
-> Estado: código de migração pronto para preview. Ainda não publicar em produção
-> sem configurar o projeto Firebase, a API paga do Gemini, App Check e o único
-> cliente piloto. Os três links e valores da InfinitePay foram verificados.
+> Estado: recuperação do produto pronta para homologação isolada no projeto
+> `sorvysmile-homologacao`. A automação desta branch recusa explicitamente o
+> projeto de produção `sorvysmile`. Functions, Gemini, App Check, InfinitePay e
+> dados reais permanecem fora da primeira publicação.
 
 ## Produto preservado
 
@@ -86,6 +87,21 @@ npm run test:rules
 Somente a configuração pública do aplicativo Firebase e os links públicos de
 pagamento entram no Vite. `GEMINI_API_KEY` deve existir apenas no Secret
 Manager.
+
+## Homologação sem Replit
+
+No Google Cloud Shell aberto com a conta que possui
+`sorvysmile-homologacao`, execute:
+
+```bash
+npm run setup:hml
+```
+
+A automação valida o código e as regras, habilita Auth, cria o Firestore em São
+Paulo quando necessário, registra o app Web, gera a configuração pública local,
+aplica regras e índices, cria um perfil fictício e publica apenas um canal de
+Hosting da homologação. Ela não publica Functions, não usa dados reais e não
+altera `sorvysmile`.
 
 ## Cliente piloto
 
