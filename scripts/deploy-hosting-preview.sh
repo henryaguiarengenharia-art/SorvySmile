@@ -5,6 +5,7 @@ set -euo pipefail
 readonly FIREBASE_PROJECT_ID="sorvysmile"
 readonly PREVIEW_CHANNEL_ID="migracao-smile"
 
+export FIREBASE_CLI_DISABLE_UPDATE_CHECK="true"
 export VITE_FIREBASE_API_KEY="AIzaSyBSb8DndxCaxZWi6dAayLs7xtTSfPQLiKA"
 export VITE_FIREBASE_AUTH_DOMAIN="sorvysmile.firebaseapp.com"
 export VITE_FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID}"
@@ -37,4 +38,5 @@ npm run build
 printf 'Publicando somente o canal temporário %s...\n' "${PREVIEW_CHANNEL_ID}"
 npx --no-install firebase hosting:channel:deploy "${PREVIEW_CHANNEL_ID}" \
   --expires 14d \
-  --project "${FIREBASE_PROJECT_ID}"
+  --project "${FIREBASE_PROJECT_ID}" \
+  --non-interactive
