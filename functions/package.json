@@ -1,0 +1,33 @@
+{
+  "name": "sorvy-smile-functions",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('lib',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc",
+    "build:watch": "tsc --watch",
+    "test": "vitest run",
+    "seed:hq": "npm run build && node lib/seedHq.js",
+    "seed:pilot": "npm run build && node lib/seedPilot.js"
+  },
+  "dependencies": {
+    "@google/genai": "2.13.0",
+    "firebase-admin": "14.2.0",
+    "firebase-functions": "7.3.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.11",
+    "typescript": "5.9.3",
+    "vitest": "4.1.0"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.8",
+    "uuid": "11.1.1"
+  }
+}

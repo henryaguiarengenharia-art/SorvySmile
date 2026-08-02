@@ -1,6 +1,6 @@
 {
-  "name": "Sorvy Smile Dispatch",
-  "description": "Sorvy Smile: AI-powered dental screening and instant clinic matching.",
+  "name": "Sorvy Smile",
+  "description": "Triagem visual informativa e captação direta para profissionais de odontologia.",
   "requestFramePermissions": [
     "camera"
   ]
