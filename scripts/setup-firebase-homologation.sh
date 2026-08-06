@@ -19,6 +19,66 @@ fail() {
   exit 1
 }
 
+print_google_api_error() {
+  node -e '
+    const fs = require("node:fs");
+    const responseFile = process.argv[1];
+    try {
+      const payload = JSON.parse(fs.readFileSync(responseFile, "utf8"));
+      const error = payload.error ?? payload;
+      const details = Array.isArray(error.details)
+        ? error.details
+            .map((detail) => detail?.reason ?? detail?.metadata?.reason)
+            .filter(Boolean)
+        : [];
+      const lines = [
+        error.status ? `Status Google: ${error.status}` : "",
+        error.message ? `Mensagem: ${error.message}` : "",
+        details.length ? `Motivo: ${details.join(", ")}` : ""
+      ].filter(Boolean);
+      process.stderr.write(`${lines.join("\n") || "Resposta de erro sem detalhes."}\n`);
+    } catch {
+      process.stderr.write("A API retornou uma resposta de erro que nao era JSON.\n");
+    }
+  ' "$1"
+}
+
+google_api_request() {
+  local method="$1"
+  local url="$2"
+  local request_file="$3"
+  local response_file="$4"
+  local operation_name="$5"
+  local access_token
+  local http_status
+
+  access_token="$(gcloud auth print-access-token)" \
+    || fail "Nao foi possivel obter o token da conta Google ativa."
+
+  if ! http_status="$(
+    curl --silent --show-error \
+      --request "${method}" \
+      --header "Authorization: Bearer ${access_token}" \
+      --header "X-Goog-User-Project: ${FIREBASE_PROJECT_ID}" \
+      --header "Content-Type: application/json" \
+      --data-binary "@${request_file}" \
+      --output "${response_file}" \
+      --write-out '%{http_code}' \
+      "${url}"
+  )"; then
+    unset access_token
+    fail "Falha de rede ao ${operation_name}."
+  fi
+  unset access_token
+
+  if [[ ! "${http_status}" =~ ^2[0-9][0-9]$ ]]; then
+    printf 'A API Google retornou HTTP %s ao %s.\n' \
+      "${http_status}" "${operation_name}" >&2
+    print_google_api_error "${response_file}"
+    fail "Nao foi possivel ${operation_name}."
+  fi
+}
+
 if [[ $# -gt 1 ]]; then
   fail "Use sem argumentos ou somente com --verify-only."
 fi
@@ -102,15 +162,12 @@ node -e '
   }));
 ' "${TEMP_DIR}/auth-config.json"
 
-ACCESS_TOKEN="$(gcloud auth print-access-token)"
-curl --silent --show-error --fail-with-body \
-  --request PATCH \
-  --header "Authorization: Bearer ${ACCESS_TOKEN}" \
-  --header "Content-Type: application/json" \
-  --data-binary "@${TEMP_DIR}/auth-config.json" \
+google_api_request \
+  PATCH \
   "https://identitytoolkit.googleapis.com/admin/v2/projects/${FIREBASE_PROJECT_ID}/config?updateMask=signIn.email.enabled,signIn.email.passwordRequired,signIn.anonymous.enabled" \
-  > "${TEMP_DIR}/auth-response.json"
-unset ACCESS_TOKEN
+  "${TEMP_DIR}/auth-config.json" \
+  "${TEMP_DIR}/auth-response.json" \
+  "configurar o Firebase Authentication"
 
 printf 'Verificando o banco Firestore em Sao Paulo...\n'
 if ! gcloud firestore databases describe \
@@ -303,15 +360,12 @@ node -e '
 ' "${FIREBASE_PROJECT_ID}" "${DEMO_ACCOUNT_ID}" "${DEMO_PROFESSIONAL_ID}" \
   "${DEMO_SLUG}" "${TEMP_DIR}/firestore-seed.json"
 
-ACCESS_TOKEN="$(gcloud auth print-access-token)"
-curl --silent --show-error --fail-with-body \
-  --request POST \
-  --header "Authorization: Bearer ${ACCESS_TOKEN}" \
-  --header "Content-Type: application/json" \
-  --data-binary "@${TEMP_DIR}/firestore-seed.json" \
+google_api_request \
+  POST \
   "https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents:commit" \
-  > "${TEMP_DIR}/firestore-seed-response.json"
-unset ACCESS_TOKEN
+  "${TEMP_DIR}/firestore-seed.json" \
+  "${TEMP_DIR}/firestore-seed-response.json" \
+  "criar o perfil demonstrativo no Firestore"
 
 printf 'Compilando a interface com a configuracao publica da homologacao...\n'
 npm run build -- --mode homologation

@@ -40,4 +40,15 @@ describe("protecoes da homologacao Firebase", () => {
     expect(script).not.toContain("firebase deploy --only hosting");
     expect(script).not.toContain("VITE_PAYMENT_URL_LITE: config");
   });
+
+  it("informa o projeto de cota e preserva o diagnostico das APIs Google", () => {
+    const script = readFileSync(scriptPath, "utf8");
+
+    expect(script).toContain(
+      'X-Goog-User-Project: ${FIREBASE_PROJECT_ID}',
+    );
+    expect(script).toContain("--output \"${response_file}\"");
+    expect(script).toContain("print_google_api_error \"${response_file}\"");
+    expect(script).not.toContain("--fail-with-body");
+  });
 });
