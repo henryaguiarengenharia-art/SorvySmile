@@ -85,11 +85,19 @@ describe("deploy funcional da homologacao", () => {
     expect(deployScript).not.toContain(".env.sorvysmile\n");
   });
 
-  it("exige Blaze, Gemini, configuracao publica e publica as Functions", () => {
+  it("exige Blaze, usa Vertex sem chave e publica as Functions", () => {
     const script = readFileSync(fullDeployScriptPath, "utf8");
+    const functionsSource = readFileSync("functions/src/index.ts", "utf8");
+    const geminiSource = readFileSync("functions/src/gemini.ts", "utf8");
 
     expect(script).toContain("billingEnabled");
-    expect(script).toContain("GEMINI_API_KEY");
+    expect(script).toContain("aiplatform.googleapis.com");
+    expect(script).toContain("roles/aiplatform.user");
+    expect(script).toContain("GEMINI_VERTEX_LOCATION=southamerica-east1");
+    expect(script).not.toContain("GEMINI_API_KEY");
+    expect(functionsSource).not.toContain("defineSecret");
+    expect(geminiSource).toContain("vertexai: true");
+    expect(geminiSource).not.toContain("apiKey");
     expect(script).toContain("VITE_PAYMENT_URL_NETWORK");
     expect(script).toContain(
       "--only firestore:rules,firestore:indexes,functions",
