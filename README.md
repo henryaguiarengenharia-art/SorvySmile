@@ -86,8 +86,8 @@ npm run test:rules
 ```
 
 Somente a configuração pública do aplicativo Firebase e os links públicos de
-pagamento entram no Vite. `GEMINI_API_KEY` deve existir apenas no Secret
-Manager.
+pagamento entram no Vite. O Gemini é acessado pelo Vertex AI com a identidade
+de runtime da Function, sem chave de API persistente.
 
 ## Homologação sem Replit
 
@@ -106,8 +106,9 @@ altera `sorvysmile`.
 
 ## Backend funcional e acessos de teste
 
-Depois de ativar o Blaze, configurar o secret Gemini e informar os valores
-públicos da homologação, publique a camada funcional:
+Depois de ativar o Blaze e informar os valores públicos da homologação,
+publique a camada funcional. A automação habilita o Vertex AI em São Paulo e
+autoriza somente a identidade de runtime da Function:
 
 ```bash
 npm run deploy:hml
