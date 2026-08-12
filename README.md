@@ -7,8 +7,9 @@ Replit como rollback até a homologação.
 
 > Estado: recuperação do produto pronta para homologação isolada no projeto
 > `sorvysmile-homologacao`. A automação desta branch recusa explicitamente o
-> projeto de produção `sorvysmile`. Functions, Gemini, App Check, InfinitePay e
-> dados reais permanecem fora da primeira publicação.
+> projeto de produção `sorvysmile`. O primeiro setup publica somente a camada
+> gratuita; `npm run deploy:hml` conclui o backend funcional depois do Blaze e
+> do secret Gemini, ainda sem alterar a produção.
 
 ## Produto preservado
 
@@ -103,32 +104,30 @@ aplica regras e índices, cria um perfil fictício e publica apenas um canal de
 Hosting da homologação. Ela não publica Functions, não usa dados reais e não
 altera `sorvysmile`.
 
-## Cliente piloto
+## Backend funcional e acessos de teste
 
-Crie primeiro o acesso HQ por um comando administrativo idempotente:
-
-```bash
-HQ_EMAIL="email-hq" \
-HQ_PASSWORD="senha-forte" \
-HQ_NAME="Administração Sorvy" \
-npm --prefix functions run seed:hq
-```
-
-O seed é idempotente. Ele exige que o plano seja escolhido explicitamente:
+Depois de ativar o Blaze, configurar o secret Gemini e informar os valores
+públicos da homologação, publique a camada funcional:
 
 ```bash
-PILOT_EMAIL="email-do-cliente" \
-PILOT_PASSWORD="senha-temporaria-forte" \
-PILOT_WHATSAPP="55DDDNUMERO" \
-PILOT_NAME="Clínica Saúde Integrada BH" \
-PILOT_SLUG="clinica-saude-integrada-bh" \
-PILOT_PLAN="network" \
-npm --prefix functions run seed:pilot
+npm run deploy:hml
 ```
 
-Execute apenas no projeto Firebase correto. Digite credenciais diretamente no
-Shell; nunca envie senhas ou chaves no chat nem as salve no repositório. O
-cliente deve trocar a senha temporária pelo fluxo “Esqueci minha senha”.
+Crie HQ e clínica Network por um wrapper idempotente e protegido:
+
+```bash
+HML_HQ_EMAIL="email-hq" \
+HML_HQ_PASSWORD="senha-forte" \
+HML_CLINIC_EMAIL="email-clinica" \
+HML_CLINIC_PASSWORD="senha-temporaria-forte" \
+HML_CLINIC_WHATSAPP="55DDDNUMERO" \
+npm run seed:hml
+```
+
+Os dois comandos recusam `sorvysmile` e aceitam somente
+`sorvysmile-homologacao`. Digite credenciais diretamente no Shell; nunca salve
+senhas ou chaves no repositório. Crie o segundo dentista pelo painel da clínica
+para validar a Function real de gestão de equipe.
 
 ## Verificação
 

@@ -2,9 +2,11 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { normalizePlan, PLANS } from "./plans.js";
+import { requireSeedProject } from "./seedProject.js";
 import { slugSchema } from "./validation.js";
 
-if (getApps().length === 0) initializeApp();
+const seedProjectId = requireSeedProject();
+if (getApps().length === 0) initializeApp({ projectId: seedProjectId });
 
 const email = process.env.PILOT_EMAIL?.trim().toLowerCase();
 const password = process.env.PILOT_PASSWORD;

@@ -3,6 +3,9 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const scriptPath = "scripts/setup-firebase-homologation.sh";
+const fullDeployScriptPath =
+  "scripts/deploy-firebase-homologation-full.sh";
+const seedScriptPath = "scripts/seed-firebase-homologation.sh";
 
 describe("protecoes da homologacao Firebase", () => {
   it("recusa explicitamente o projeto de producao", () => {
@@ -50,5 +53,60 @@ describe("protecoes da homologacao Firebase", () => {
     expect(script).toContain("--output \"${response_file}\"");
     expect(script).toContain("print_google_api_error \"${response_file}\"");
     expect(script).not.toContain("--fail-with-body");
+  });
+});
+
+describe("deploy funcional da homologacao", () => {
+  it("recusa producao antes de consultar credenciais ou faturamento", () => {
+    const result = spawnSync("bash", [fullDeployScriptPath, "--verify-only"], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FIREBASE_PROJECT_ID: "sorvysmile",
+      },
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("projeto de producao sorvysmile esta protegido");
+  });
+
+  it("mantem App Check obrigatorio por padrao e abre excecao apenas na HML", () => {
+    const functionsSource = readFileSync("functions/src/index.ts", "utf8");
+    const deployScript = readFileSync(fullDeployScriptPath, "utf8");
+
+    expect(functionsSource).toContain(
+      'defineBoolean("ENFORCE_APP_CHECK"',
+    );
+    expect(functionsSource).not.toContain("enforceAppCheck: true");
+    expect(deployScript).toContain("ENFORCE_APP_CHECK=false");
+    expect(deployScript).toContain(
+      'FUNCTIONS_ENV_FILE="$ROOT_DIR/functions/.env.sorvysmile-homologacao"',
+    );
+    expect(deployScript).not.toContain(".env.sorvysmile\n");
+  });
+
+  it("exige Blaze, Gemini, configuracao publica e publica as Functions", () => {
+    const script = readFileSync(fullDeployScriptPath, "utf8");
+
+    expect(script).toContain("billingEnabled");
+    expect(script).toContain("GEMINI_API_KEY");
+    expect(script).toContain("VITE_PAYMENT_URL_NETWORK");
+    expect(script).toContain(
+      "--only firestore:rules,firestore:indexes,functions",
+    );
+    expect(script).toContain("hosting:channel:deploy");
+  });
+
+  it("protege tambem o provisionamento de acessos", () => {
+    const result = spawnSync("bash", [seedScriptPath, "--verify-only"], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FIREBASE_PROJECT_ID: "sorvysmile",
+      },
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("projeto de producao sorvysmile esta protegido");
   });
 });

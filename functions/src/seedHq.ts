@@ -1,8 +1,10 @@
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
+import { requireSeedProject } from "./seedProject.js";
 
-if (getApps().length === 0) initializeApp();
+const seedProjectId = requireSeedProject();
+if (getApps().length === 0) initializeApp({ projectId: seedProjectId });
 
 const email = process.env.HQ_EMAIL?.trim().toLowerCase();
 const password = process.env.HQ_PASSWORD;

@@ -26,6 +26,18 @@ fase não há Functions, Storage, Gemini, App Check, InfinitePay ou dados reais.
 6. execute novamente todos os testes antes de publicar Functions;
 7. mantenha `sorvysmile` sem alterações até o aceite final.
 
+Depois de configurar o secret e os valores públicos do ambiente, execute:
+
+```bash
+npm run deploy:hml
+```
+
+Esse comando recusa explicitamente `sorvysmile`, exige faturamento ativo,
+valida os links InfinitePay, executa testes e auditorias, publica as Functions
+e recompila o mesmo canal temporário. O App Check fica desativado apenas nessa
+homologação enquanto a jornada funcional é validada; produção mantém o padrão
+seguro `ENFORCE_APP_CHECK=true`.
+
 ## 3. Configurar frontend
 
 Copie `.env.example` para `.env.local` e preencha:
@@ -84,16 +96,18 @@ Crie o usuário HQ pelo comando administrativo, digitando os valores apenas no
 Shell:
 
 ```bash
-HQ_EMAIL="email-hq" \
-HQ_PASSWORD="senha-forte" \
-HQ_NAME="Administração Sorvy" \
-npm --prefix functions run seed:hq
+HML_HQ_EMAIL="email-hq" \
+HML_HQ_PASSWORD="senha-forte" \
+HML_CLINIC_EMAIL="email-clinica" \
+HML_CLINIC_PASSWORD="senha-temporaria-forte" \
+HML_CLINIC_WHATSAPP="55DDDNUMERO" \
+npm run seed:hml
 ```
 
-Depois execute `npm --prefix functions run seed:pilot` com email, senha
-temporária, WhatsApp, nome, slug e o plano `network` do cliente piloto. Digite os
-valores no Shell; não os salve no histórico do repositório nem envie no chat.
-O cliente deve trocar a senha temporária pelo fluxo “Esqueci minha senha”.
+O wrapper cria HQ e clínica Network somente em `sorvysmile-homologacao`.
+O segundo acesso profissional deve ser criado pelo painel da clínica durante
+o teste funcional, validando a mesma Function usada pelo produto. Digite as
+credenciais temporárias diretamente no Shell e não as salve no repositório.
 
 ## 8. Roteiro de homologação
 

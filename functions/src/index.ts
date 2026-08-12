@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
-import { defineSecret, defineString } from "firebase-functions/params";
+import {
+  defineBoolean,
+  defineSecret,
+  defineString,
+} from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2/options";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -47,6 +51,9 @@ const auth = getAuth();
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const GEMINI_MODEL = defineString("GEMINI_MODEL", {
   default: "gemini-3.6-flash",
+});
+const ENFORCE_APP_CHECK = defineBoolean("ENFORCE_APP_CHECK", {
+  default: true,
 });
 
 setGlobalOptions({
@@ -231,7 +238,7 @@ async function releasePhotoValidationAttempt(
 
 export const startTriage = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
@@ -282,8 +289,8 @@ export const startTriage = onCall(
 
 export const validateSmilePhoto = onCall(
   {
-    enforceAppCheck: true,
-    consumeAppCheckToken: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
+    consumeAppCheckToken: ENFORCE_APP_CHECK,
     secrets: [GEMINI_API_KEY],
     timeoutSeconds: 60,
     memory: "512MiB",
@@ -395,8 +402,8 @@ export const validateSmilePhoto = onCall(
 
 export const analyzeSmilePhoto = onCall(
   {
-    enforceAppCheck: true,
-    consumeAppCheckToken: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
+    consumeAppCheckToken: ENFORCE_APP_CHECK,
     secrets: [GEMINI_API_KEY],
     timeoutSeconds: 90,
     memory: "512MiB",
@@ -572,7 +579,7 @@ async function releaseUsageReservation(
 
 export const captureLead = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
@@ -650,7 +657,7 @@ export const captureLead = onCall(
 
 export const createPendingSubscription = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
@@ -822,7 +829,7 @@ export const createPendingSubscription = onCall(
 
 export const updateProfessionalProfile = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
@@ -879,7 +886,7 @@ export const updateProfessionalProfile = onCall(
 
 export const setAccountStatus = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
@@ -990,7 +997,7 @@ export const setAccountStatus = onCall(
 
 export const createTeamMember = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const managerUid = requireUid(request);
@@ -1101,7 +1108,7 @@ export const createTeamMember = onCall(
 
 export const setTeamMemberStatus = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const managerUid = requireUid(request);
@@ -1186,7 +1193,7 @@ export const setTeamMemberStatus = onCall(
 
 export const assignLead = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const managerUid = requireUid(request);
@@ -1226,7 +1233,7 @@ export const assignLead = onCall(
 
 export const deleteLead = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
