@@ -6,6 +6,7 @@ const scriptPath = "scripts/setup-firebase-homologation.sh";
 const fullDeployScriptPath =
   "scripts/deploy-firebase-homologation-full.sh";
 const seedScriptPath = "scripts/seed-firebase-homologation.sh";
+const smokeScriptPath = "scripts/smoke-test-homologation.mjs";
 
 describe("protecoes da homologacao Firebase", () => {
   it("recusa explicitamente o projeto de producao", () => {
@@ -121,5 +122,15 @@ describe("deploy funcional da homologacao", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("projeto de producao sorvysmile esta protegido");
+  });
+
+  it("mantem o smoke test restrito a homologacao e sem dados reais", () => {
+    const script = readFileSync(smokeScriptPath, "utf8");
+
+    expect(script).toContain('EXPECTED_PROJECT_ID = "sorvysmile-homologacao"');
+    expect(script).toContain('signInAnonymously(auth)');
+    expect(script).toContain('deleteUser(anonymousUser)');
+    expect(script).toContain('synthetic-smile-smoke.base64');
+    expect(script).not.toContain("sorvysmile.web.app");
   });
 });
