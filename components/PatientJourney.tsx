@@ -27,6 +27,7 @@ import {
   startTriage,
   validatePhoto,
 } from "../services/sorvyApi";
+import { preparePhotoFile } from "../services/photoFile";
 
 type Stage =
   | "capture"
@@ -39,11 +40,8 @@ type Stage =
 interface ImagePayload {
   dataUrl: string;
   base64: string;
-  mimeType: string;
+  mimeType: "image/jpeg";
 }
-
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const ACCEPTED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const formatWhatsApp = (value: string): string => {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -93,36 +91,30 @@ export const PatientJourney = ({
   const [privacyConsent, setPrivacyConsent] = useState(false);
   const [adultConfirmed, setAdultConfirmed] = useState(false);
   const [photoConsent, setPhotoConsent] = useState(false);
+  const [readingPhoto, setReadingPhoto] = useState(false);
 
-  const selectPhoto = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
+  const selectPhoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
-    if (!ACCEPTED_TYPES.has(file.type)) {
-      setError("Use uma foto JPG, PNG ou WebP.");
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setError("A foto deve ter no máximo 5 MB.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onerror = () => setError("Não foi possível ler a foto.");
-    reader.onload = async () => {
-      const dataUrl = String(reader.result ?? "");
-      const base64 = dataUrl.split(",")[1];
-      if (!base64) {
-        setError("A foto selecionada é inválida.");
-        return;
-      }
-      const payload = { dataUrl, base64, mimeType: file.type };
+    setReadingPhoto(true);
+    setError(null);
+    try {
+      const payload = await preparePhotoFile(file);
       setImage(payload);
       setValidation(null);
-      setError(null);
       setStage("validation");
-    };
-    reader.readAsDataURL(file);
+    } catch (photoError) {
+      setError(
+        photoError instanceof Error
+          ? photoError.message
+          : "Não foi possível preparar a foto.",
+      );
+    } finally {
+      // Limpa somente depois que a foto já foi copiada para a memória.
+      input.value = "";
+      setReadingPhoto(false);
+    }
   };
 
   const usePhoto = async () => {
@@ -245,7 +237,11 @@ export const PatientJourney = ({
       )}
 
       {stage === "capture" && (
-        <CaptureStep onPhoto={selectPhoto} onBack={onExit} />
+        <CaptureStep
+          onPhoto={selectPhoto}
+          onBack={onExit}
+          readingPhoto={readingPhoto}
+        />
       )}
       {stage === "validation" && image && (
         <ValidationStep
@@ -298,9 +294,11 @@ export const PatientJourney = ({
 const CaptureStep = ({
   onPhoto,
   onBack,
+  readingPhoto,
 }: {
   onPhoto: (event: React.ChangeEvent<HTMLInputElement>) => void;
   onBack: () => void;
+  readingPhoto: boolean;
 }) => (
   <main className="mx-auto max-w-xl px-6 py-12">
     <button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-black text-slate-500">
@@ -317,18 +315,23 @@ const CaptureStep = ({
     </div>
     <label className="relative mt-8 flex aspect-square cursor-pointer flex-col items-center justify-center overflow-hidden rounded-[3rem] bg-slate-900 text-white shadow-2xl">
       <div className="absolute inset-10 rounded-[48%] border-2 border-dashed border-blue-400/70" />
-      <Camera className="h-12 w-12 text-blue-400" />
+      {readingPhoto ? (
+        <LoaderCircle className="h-12 w-12 animate-spin text-blue-400" />
+      ) : (
+        <Camera className="h-12 w-12 text-blue-400" />
+      )}
       <p className="mt-5 text-sm font-black uppercase tracking-widest">
-        Fotografar ou escolher foto
+        {readingPhoto ? "Preparando foto" : "Fotografar ou escolher foto"}
       </p>
       <p className="mt-2 text-xs font-medium text-white/40">
-        JPG, PNG ou WebP · máximo 5 MB
+        Otimização automática · original de até 20 MB
       </p>
       <input
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/*"
         capture="user"
         onChange={onPhoto}
+        disabled={readingPhoto}
         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
       />
     </label>
@@ -467,7 +470,7 @@ const ValidationStep = ({
         <RefreshCw className="h-4 w-4" /> Repetir
         <input
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/*"
           capture="user"
           onChange={onPhoto}
           className="absolute inset-0 h-full w-full opacity-0"

@@ -22,8 +22,8 @@ fase não há Functions, Storage, Gemini, App Check, InfinitePay ou dados reais.
 2. configure a política de senha com no mínimo 10 caracteres;
 3. ative a limpeza automática de contas anônimas;
 4. configure App Check com reCAPTCHA Enterprise;
-5. habilite o Vertex AI e conceda `roles/aiplatform.user` somente à identidade
-   de runtime das Functions;
+5. grave uma chave exclusiva da Gemini API em `GEMINI_API_KEY` no Secret
+   Manager e conceda leitura somente à identidade de runtime das Functions;
 6. execute novamente todos os testes antes de publicar Functions;
 7. mantenha `sorvysmile` sem alterações até o aceite final.
 
@@ -34,11 +34,11 @@ npm run deploy:hml
 ```
 
 Esse comando recusa explicitamente `sorvysmile`, exige faturamento ativo,
-valida os links InfinitePay, habilita o Vertex AI em `southamerica-east1`,
-executa testes e auditorias, configura retenção de sete dias para os artefatos
-de build e publica as Functions em lotes menores. O App Check fica desativado
-apenas nessa homologação enquanto a jornada funcional é validada; produção
-mantém o padrão seguro `ENFORCE_APP_CHECK=true`.
+valida os links InfinitePay e o secret Gemini, executa testes e auditorias,
+configura retenção de sete dias para os artefatos de build e publica as
+Functions em lotes menores. O App Check fica desativado apenas nessa
+homologação enquanto a jornada funcional é validada; produção mantém o padrão
+seguro `ENFORCE_APP_CHECK=true`.
 
 ## 3. Configurar frontend
 
@@ -58,10 +58,22 @@ administrativa em arquivo `VITE_*`.
 
 ## 4. Configurar backend
 
-O backend usa o Vertex AI com Application Default Credentials da própria
-Function. Não crie nem distribua uma chave Gemini. O modelo padrão é
-configurável por `GEMINI_MODEL`, e a localização por
-`GEMINI_VERTEX_LOCATION`.
+O backend usa a Gemini Developer API, o mesmo caminho do aplicativo original.
+A chave nunca entra no frontend: ela fica no Secret Manager como
+`GEMINI_API_KEY` e é vinculada somente a `validateSmilePhoto` e
+`analyzeSmilePhoto`. O modelo estável padrão é `gemini-3.6-flash`, configurável
+por `GEMINI_MODEL`.
+
+Se apenas a leitura da foto estiver quebrada, repare e publique somente as duas
+Functions de IA:
+
+```bash
+npm run repair:gemini:hml
+```
+
+O reparo recusa o projeto de produção, testa a chave com uma chamada
+multimodal sem exibi-la, atualiza o secret apenas quando necessário e não
+publica Hosting, Firestore ou as demais Functions.
 
 ## 5. Validar
 

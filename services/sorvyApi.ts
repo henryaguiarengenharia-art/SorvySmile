@@ -77,6 +77,12 @@ function errorMessage(error: unknown): string {
     if (maybeMessage.includes("app-check-token-is-invalid")) {
       return "A verificação de segurança falhou. Atualize a página.";
     }
+    if (
+      maybeMessage === "internal"
+      || maybeMessage.includes("functions/internal")
+    ) {
+      return "O serviço de análise da foto está indisponível. Tente novamente em alguns instantes.";
+    }
     const details =
       "details" in error && typeof error.details === "object" && error.details
         ? (error.details as { message?: unknown }).message

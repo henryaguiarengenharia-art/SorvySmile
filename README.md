@@ -86,8 +86,8 @@ npm run test:rules
 ```
 
 Somente a configuração pública do aplicativo Firebase e os links públicos de
-pagamento entram no Vite. O Gemini é acessado pelo Vertex AI com a identidade
-de runtime da Function, sem chave de API persistente.
+pagamento entram no Vite. A chave da Gemini API fica exclusivamente no Secret
+Manager e é disponibilizada somente às duas Functions de IA.
 
 ## Homologação sem Replit
 
@@ -107,13 +107,17 @@ altera `sorvysmile`.
 ## Backend funcional e acessos de teste
 
 Depois de ativar o Blaze e informar os valores públicos da homologação,
-publique a camada funcional. A automação habilita o Vertex AI em São Paulo,
-autoriza somente a identidade de runtime da Function, publica em lotes menores
-e mantém sete dias de artefatos de build:
+publique a camada funcional. A automação valida o secret Gemini, autoriza
+somente a identidade de runtime da Function, publica em lotes menores e mantém
+sete dias de artefatos de build:
 
 ```bash
 npm run deploy:hml
 ```
+
+Para reparar somente a integração de foto, sem republicar frontend, Firestore
+ou as demais Functions, execute `npm run repair:gemini:hml`. O comando testa a
+chave e o modelo multimodal antes de publicar as duas Functions de IA.
 
 Crie HQ e clínica Network por um wrapper idempotente e protegido:
 

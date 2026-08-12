@@ -152,17 +152,31 @@ npm --prefix functions audit --omit=dev
 
 printf 'Habilitando APIs do backend somente na homologacao...\n'
 gcloud services enable \
-  aiplatform.googleapis.com \
   artifactregistry.googleapis.com \
   cloudbuild.googleapis.com \
   cloudfunctions.googleapis.com \
   cloudscheduler.googleapis.com \
-  compute.googleapis.com \
   eventarc.googleapis.com \
+  generativelanguage.googleapis.com \
   pubsub.googleapis.com \
   run.googleapis.com \
+  secretmanager.googleapis.com \
   --project "$PROJECT_ID" \
   --quiet
+
+gcloud secrets describe GEMINI_API_KEY \
+  --project "$PROJECT_ID" >/dev/null 2>&1 \
+  || fail "O secret GEMINI_API_KEY ainda nao foi criado na homologacao. Execute npm run repair:gemini:hml primeiro."
+
+SECRET_VERSION="$(
+  gcloud secrets versions list GEMINI_API_KEY \
+    --project "$PROJECT_ID" \
+    --filter='state=ENABLED' \
+    --limit=1 \
+    --format='value(name)' 2>/dev/null || true
+)"
+[[ -n "$SECRET_VERSION" ]] \
+  || fail "GEMINI_API_KEY nao possui uma versao ativa. Execute npm run repair:gemini:hml primeiro."
 
 PROJECT_NUMBER="$(
   gcloud projects describe "$PROJECT_ID" \
@@ -184,11 +198,11 @@ done
 [[ "$RUNTIME_IDENTITY_READY" == "true" ]] \
   || fail "A identidade de runtime das Functions ainda nao esta disponivel."
 
-printf 'Autorizando somente a identidade de runtime a usar o Vertex AI...\n'
-gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+printf 'Autorizando somente a identidade de runtime a ler o secret Gemini...\n'
+gcloud secrets add-iam-policy-binding GEMINI_API_KEY \
+  --project "$PROJECT_ID" \
   --member "serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" \
-  --role roles/aiplatform.user \
-  --condition=None \
+  --role roles/secretmanager.secretAccessor \
   --quiet >/dev/null
 
 node - "$FUNCTIONS_ENV_FILE" <<'NODE'
@@ -197,8 +211,7 @@ fs.writeFileSync(
   process.argv[2],
   [
     "ENFORCE_APP_CHECK=false",
-    "GEMINI_MODEL=gemini-2.5-flash",
-    "GEMINI_VERTEX_LOCATION=southamerica-east1",
+    "GEMINI_MODEL=gemini-3.6-flash",
     "",
   ].join("\n"),
 );
@@ -222,6 +235,16 @@ npx --no-install firebase deploy \
   --only functions:validateSmilePhoto,functions:analyzeSmilePhoto \
   --project "$PROJECT_ID" \
   --non-interactive
+
+printf 'Garantindo acesso HTTP às Functions callable de IA...\n'
+for service_name in validatesmilephoto analyzesmilephoto; do
+  gcloud run services add-iam-policy-binding "$service_name" \
+    --region southamerica-east1 \
+    --project "$PROJECT_ID" \
+    --member=allUsers \
+    --role=roles/run.invoker \
+    --quiet >/dev/null
+done
 
 printf 'Publicando o primeiro lote das demais Functions...\n'
 npx --no-install firebase deploy \

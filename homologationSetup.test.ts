@@ -7,6 +7,7 @@ const fullDeployScriptPath =
   "scripts/deploy-firebase-homologation-full.sh";
 const seedScriptPath = "scripts/seed-firebase-homologation.sh";
 const smokeScriptPath = "scripts/smoke-test-homologation.mjs";
+const geminiRepairScriptPath = "scripts/repair-gemini-homologation.sh";
 
 describe("protecoes da homologacao Firebase", () => {
   it("recusa explicitamente o projeto de producao", () => {
@@ -86,19 +87,23 @@ describe("deploy funcional da homologacao", () => {
     expect(deployScript).not.toContain(".env.sorvysmile\n");
   });
 
-  it("exige Blaze, usa Vertex sem chave e publica em lotes seguros", () => {
+  it("exige Blaze, restaura a Gemini API do original e publica em lotes seguros", () => {
     const script = readFileSync(fullDeployScriptPath, "utf8");
     const functionsSource = readFileSync("functions/src/index.ts", "utf8");
     const geminiSource = readFileSync("functions/src/gemini.ts", "utf8");
 
     expect(script).toContain("billingEnabled");
-    expect(script).toContain("aiplatform.googleapis.com");
-    expect(script).toContain("roles/aiplatform.user");
-    expect(script).toContain("GEMINI_VERTEX_LOCATION=southamerica-east1");
-    expect(script).not.toContain("GEMINI_API_KEY");
-    expect(functionsSource).not.toContain("defineSecret");
-    expect(geminiSource).toContain("vertexai: true");
-    expect(geminiSource).not.toContain("apiKey");
+    expect(script).toContain("generativelanguage.googleapis.com");
+    expect(script).toContain("secretmanager.googleapis.com");
+    expect(script).toContain("roles/secretmanager.secretAccessor");
+    expect(script).toContain("GEMINI_MODEL=gemini-3.6-flash");
+    expect(script).toContain("gcloud run services add-iam-policy-binding");
+    expect(script).toContain("roles/run.invoker");
+    expect(script).toContain("GEMINI_API_KEY");
+    expect(functionsSource).toContain('defineSecret("GEMINI_API_KEY")');
+    expect(functionsSource).toContain("secrets: [GEMINI_API_KEY]");
+    expect(geminiSource).toContain("new GoogleGenAI({ apiKey })");
+    expect(geminiSource).not.toContain("enterprise: true");
     expect(script).toContain("VITE_PAYMENT_URL_NETWORK");
     expect(script).toContain(
       "functions:validateSmilePhoto,functions:analyzeSmilePhoto",
@@ -109,6 +114,25 @@ describe("deploy funcional da homologacao", () => {
       "--only firestore:rules,firestore:indexes,functions",
     );
     expect(script).toContain("hosting:channel:deploy");
+  });
+
+  it("protege e valida o reparo isolado da IA antes do deploy", () => {
+    const result = spawnSync("bash", [geminiRepairScriptPath, "--verify-only"], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        FIREBASE_PROJECT_ID: "sorvysmile",
+      },
+    });
+    const script = readFileSync(geminiRepairScriptPath, "utf8");
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("projeto de producao sorvysmile esta protegido");
+    expect(script).toContain("verify-gemini-api.mjs");
+    expect(script).toContain(
+      "functions:validateSmilePhoto,functions:analyzeSmilePhoto",
+    );
+    expect(script).not.toContain("hosting:channel:deploy");
   });
 
   it("protege tambem o provisionamento de acessos", () => {

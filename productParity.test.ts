@@ -17,9 +17,18 @@ describe("paridade do produto Sorvy Smile", () => {
 
   it("mantém câmera e consentimento na confirmação da foto", () => {
     expect(journeySource).toContain('capture="user"');
+    expect(journeySource).toContain("preparePhotoFile(file)");
+    expect(journeySource).not.toContain("new FileReader()");
     expect(journeySource).toContain("Deseja utilizar esta foto?");
     expect(journeySource).toContain("Utilizar esta foto");
     expect(journeySource).toContain("processamento temporário desta foto");
+  });
+
+  it("não exibe o código interno bruto quando a Function de IA falha", () => {
+    const apiSource = readFileSync("services/sorvyApi.ts", "utf8");
+
+    expect(apiSource).toContain('maybeMessage === "internal"');
+    expect(apiSource).toContain("O serviço de análise da foto está indisponível");
   });
 
   it("mantém preview antes da captura do contato", () => {

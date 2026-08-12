@@ -13,6 +13,7 @@
     "test:all": "npm test && npm --prefix functions test",
     "setup:hml": "./scripts/setup-firebase-homologation.sh",
     "deploy:hml": "./scripts/deploy-firebase-homologation-full.sh",
+    "repair:gemini:hml": "./scripts/repair-gemini-homologation.sh",
     "seed:hml": "./scripts/seed-firebase-homologation.sh",
     "smoke:hml": "node scripts/smoke-test-homologation.mjs"
   },
