@@ -126,14 +126,15 @@ HML_CLINIC_WHATSAPP="55DDDNUMERO" \
 npm run seed:hml
 ```
 
-Valide a triagem ponta a ponta com uma imagem sintética, sem dado real:
+Valide a triagem ponta a ponta com uma foto mantida somente no Cloud Shell:
 
 ```bash
-npm run smoke:hml
+HML_SMOKE_IMAGE_PATH="$HOME/foto-sorriso-teste.jpg" npm run smoke:hml
 ```
 
 O teste confere sessão anônima, validação da foto, análise do sorriso e os três
-links InfinitePay; o usuário temporário é removido ao final.
+links InfinitePay; o usuário temporário é removido ao final. A imagem não é
+salva no repositório nem no painel.
 
 Os dois comandos recusam `sorvysmile` e aceitam somente
 `sorvysmile-homologacao`. Digite credenciais diretamente no Shell; nunca salve
