@@ -152,31 +152,44 @@ npm --prefix functions audit --omit=dev
 
 printf 'Habilitando APIs do backend somente na homologacao...\n'
 gcloud services enable \
+  aiplatform.googleapis.com \
   artifactregistry.googleapis.com \
   cloudbuild.googleapis.com \
   cloudfunctions.googleapis.com \
   cloudscheduler.googleapis.com \
+  compute.googleapis.com \
   eventarc.googleapis.com \
-  generativelanguage.googleapis.com \
   pubsub.googleapis.com \
   run.googleapis.com \
-  secretmanager.googleapis.com \
   --project "$PROJECT_ID" \
   --quiet
 
-gcloud secrets describe GEMINI_API_KEY \
-  --project "$PROJECT_ID" >/dev/null 2>&1 \
-  || fail "O secret GEMINI_API_KEY ainda nao foi criado na homologacao."
-
-SECRET_VERSION="$(
-  gcloud secrets versions list GEMINI_API_KEY \
-    --project "$PROJECT_ID" \
-    --filter='state=ENABLED' \
-    --limit=1 \
-    --format='value(name)' 2>/dev/null || true
+PROJECT_NUMBER="$(
+  gcloud projects describe "$PROJECT_ID" \
+    --format='value(projectNumber)' 2>/dev/null || true
 )"
-[[ -n "$SECRET_VERSION" ]] \
-  || fail "GEMINI_API_KEY nao possui uma versao ativa."
+[[ "$PROJECT_NUMBER" =~ ^[0-9]+$ ]] \
+  || fail "Nao foi possivel identificar o numero do projeto de homologacao."
+RUNTIME_SERVICE_ACCOUNT="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+RUNTIME_IDENTITY_READY=false
+for _ in {1..12}; do
+  if gcloud iam service-accounts describe "$RUNTIME_SERVICE_ACCOUNT" \
+    --project "$PROJECT_ID" >/dev/null 2>&1; then
+    RUNTIME_IDENTITY_READY=true
+    break
+  fi
+  sleep 5
+done
+[[ "$RUNTIME_IDENTITY_READY" == "true" ]] \
+  || fail "A identidade de runtime das Functions ainda nao esta disponivel."
+
+printf 'Autorizando somente a identidade de runtime a usar o Vertex AI...\n'
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member "serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" \
+  --role roles/aiplatform.user \
+  --condition=None \
+  --quiet >/dev/null
 
 node - "$FUNCTIONS_ENV_FILE" <<'NODE'
 const fs = require("node:fs");
@@ -184,7 +197,8 @@ fs.writeFileSync(
   process.argv[2],
   [
     "ENFORCE_APP_CHECK=false",
-    "GEMINI_MODEL=gemini-3.6-flash",
+    "GEMINI_MODEL=gemini-2.5-flash",
+    "GEMINI_VERTEX_LOCATION=southamerica-east1",
     "",
   ].join("\n"),
 );
