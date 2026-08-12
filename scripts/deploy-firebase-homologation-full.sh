@@ -204,9 +204,34 @@ fs.writeFileSync(
 );
 NODE
 
-printf 'Publicando Firestore e Functions somente em %s...\n' "$PROJECT_ID"
+printf 'Configurando limpeza segura dos artefatos de Functions...\n'
+npx --no-install firebase functions:artifacts:setpolicy \
+  --location southamerica-east1 \
+  --days 7 \
+  --project "$PROJECT_ID" \
+  --force
+
+printf 'Publicando Firestore somente em %s...\n' "$PROJECT_ID"
 npx --no-install firebase deploy \
-  --only firestore:rules,firestore:indexes,functions \
+  --only firestore:rules,firestore:indexes \
+  --project "$PROJECT_ID" \
+  --non-interactive
+
+printf 'Publicando as duas Functions de IA primeiro...\n'
+npx --no-install firebase deploy \
+  --only functions:validateSmilePhoto,functions:analyzeSmilePhoto \
+  --project "$PROJECT_ID" \
+  --non-interactive
+
+printf 'Publicando o primeiro lote das demais Functions...\n'
+npx --no-install firebase deploy \
+  --only functions:startTriage,functions:captureLead,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:setAccountStatus,functions:createTeamMember \
+  --project "$PROJECT_ID" \
+  --non-interactive
+
+printf 'Publicando o segundo lote das demais Functions...\n'
+npx --no-install firebase deploy \
+  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
   --project "$PROJECT_ID" \
   --non-interactive
 
