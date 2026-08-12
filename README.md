@@ -107,8 +107,9 @@ altera `sorvysmile`.
 ## Backend funcional e acessos de teste
 
 Depois de ativar o Blaze e informar os valores públicos da homologação,
-publique a camada funcional. A automação habilita o Vertex AI em São Paulo e
-autoriza somente a identidade de runtime da Function:
+publique a camada funcional. A automação habilita o Vertex AI em São Paulo,
+autoriza somente a identidade de runtime da Function, publica em lotes menores
+e mantém sete dias de artefatos de build:
 
 ```bash
 npm run deploy:hml
