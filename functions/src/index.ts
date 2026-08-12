@@ -4,7 +4,6 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import {
   defineBoolean,
-  defineSecret,
   defineString,
 } from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
@@ -48,9 +47,11 @@ if (getApps().length === 0) initializeApp();
 const db = getFirestore();
 const auth = getAuth();
 
-const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const GEMINI_MODEL = defineString("GEMINI_MODEL", {
-  default: "gemini-3.6-flash",
+  default: "gemini-2.5-flash",
+});
+const GEMINI_VERTEX_LOCATION = defineString("GEMINI_VERTEX_LOCATION", {
+  default: "southamerica-east1",
 });
 const ENFORCE_APP_CHECK = defineBoolean("ENFORCE_APP_CHECK", {
   default: true,
@@ -139,6 +140,22 @@ function requireUid(request: { auth?: { uid: string } }): string {
     throw new HttpsError("unauthenticated", "Faça login para continuar.");
   }
   return request.auth.uid;
+}
+
+function vertexGeminiConfig() {
+  const projectId = (
+    process.env.GCLOUD_PROJECT
+    || process.env.GOOGLE_CLOUD_PROJECT
+    || ""
+  ).trim();
+  if (!projectId) {
+    throw new HttpsError("internal", "O serviço de IA não está configurado.");
+  }
+  return {
+    projectId,
+    location: GEMINI_VERTEX_LOCATION.value(),
+    model: GEMINI_MODEL.value(),
+  };
 }
 
 async function readUser(uid: string): Promise<UserRecord> {
@@ -291,7 +308,6 @@ export const validateSmilePhoto = onCall(
   {
     enforceAppCheck: ENFORCE_APP_CHECK,
     consumeAppCheckToken: ENFORCE_APP_CHECK,
-    secrets: [GEMINI_API_KEY],
     timeoutSeconds: 60,
     memory: "512MiB",
   },
@@ -373,8 +389,7 @@ export const validateSmilePhoto = onCall(
 
     try {
       const validation = await validatePhotoWithGemini(
-        GEMINI_API_KEY.value(),
-        GEMINI_MODEL.value(),
+        vertexGeminiConfig(),
         input.imageBase64,
         input.mimeType,
       );
@@ -404,7 +419,6 @@ export const analyzeSmilePhoto = onCall(
   {
     enforceAppCheck: ENFORCE_APP_CHECK,
     consumeAppCheckToken: ENFORCE_APP_CHECK,
-    secrets: [GEMINI_API_KEY],
     timeoutSeconds: 90,
     memory: "512MiB",
   },
@@ -493,8 +507,7 @@ export const analyzeSmilePhoto = onCall(
 
     try {
       const scores = await analyzePhotoWithGemini(
-        GEMINI_API_KEY.value(),
-        GEMINI_MODEL.value(),
+        vertexGeminiConfig(),
         input.imageBase64,
         input.mimeType,
       );
