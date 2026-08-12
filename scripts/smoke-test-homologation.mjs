@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { extname } from "node:path";
 import { deleteApp, initializeApp } from "firebase/app";
 import { deleteUser, getAuth, signInAnonymously } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
@@ -46,11 +47,23 @@ for (const value of paymentUrls) {
   }
 }
 
-const imageBase64 = readFileSync(
-  "tests/fixtures/synthetic-smile-smoke.base64",
-  "utf8",
-).trim();
-if (imageBase64.length < 1_000) fail("A imagem sintetica de teste esta ausente.");
+const imagePath = process.env.HML_SMOKE_IMAGE_PATH?.trim();
+if (!imagePath) {
+  fail("Defina HML_SMOKE_IMAGE_PATH com uma foto JPG, PNG ou WebP local.");
+}
+const mimeTypes = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+};
+const mimeType = mimeTypes[extname(imagePath).toLowerCase()];
+if (!mimeType) fail("A foto de smoke deve ser JPG, PNG ou WebP.");
+const imageBuffer = readFileSync(imagePath);
+if (imageBuffer.length < 100 || imageBuffer.length > 5 * 1024 * 1024) {
+  fail("A foto de smoke deve ter entre 100 bytes e 5 MB.");
+}
+const imageBase64 = imageBuffer.toString("base64");
 
 const app = initializeApp({
   apiKey: env.VITE_FIREBASE_API_KEY,
@@ -82,7 +95,7 @@ try {
   const validation = await validateSmilePhoto({
     sessionId,
     imageBase64,
-    mimeType: "image/jpeg",
+    mimeType,
   });
   if (validation.data?.isAdequate !== true) {
     fail(`A foto sintetica foi recusada: ${validation.data?.feedback || "sem motivo"}`);
@@ -91,7 +104,7 @@ try {
   const analysis = await analyzeSmilePhoto({
     sessionId,
     imageBase64,
-    mimeType: "image/jpeg",
+    mimeType,
   });
   const harmonyIndex = Number(analysis.data?.harmonyIndex);
   if (!Number.isFinite(harmonyIndex)) {
