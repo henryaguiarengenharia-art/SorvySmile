@@ -126,6 +126,15 @@ HML_CLINIC_WHATSAPP="55DDDNUMERO" \
 npm run seed:hml
 ```
 
+Valide a triagem ponta a ponta com uma imagem sintética, sem dado real:
+
+```bash
+npm run smoke:hml
+```
+
+O teste confere sessão anônima, validação da foto, análise do sorriso e os três
+links InfinitePay; o usuário temporário é removido ao final.
+
 Os dois comandos recusam `sorvysmile` e aceitam somente
 `sorvysmile-homologacao`. Digite credenciais diretamente no Shell; nunca salve
 senhas ou chaves no repositório. Crie o segundo dentista pelo painel da clínica
