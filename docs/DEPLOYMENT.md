@@ -22,7 +22,8 @@ fase não há Functions, Storage, Gemini, App Check, InfinitePay ou dados reais.
 2. configure a política de senha com no mínimo 10 caracteres;
 3. ative a limpeza automática de contas anônimas;
 4. configure App Check com reCAPTCHA Enterprise;
-5. cadastre `GEMINI_API_KEY` no Secret Manager;
+5. habilite o Vertex AI e conceda `roles/aiplatform.user` somente à identidade
+   de runtime das Functions;
 6. execute novamente todos os testes antes de publicar Functions;
 7. mantenha `sorvysmile` sem alterações até o aceite final.
 
@@ -33,10 +34,11 @@ npm run deploy:hml
 ```
 
 Esse comando recusa explicitamente `sorvysmile`, exige faturamento ativo,
-valida os links InfinitePay, executa testes e auditorias, publica as Functions
-e recompila o mesmo canal temporário. O App Check fica desativado apenas nessa
-homologação enquanto a jornada funcional é validada; produção mantém o padrão
-seguro `ENFORCE_APP_CHECK=true`.
+valida os links InfinitePay, habilita o Vertex AI em `southamerica-east1`,
+executa testes e auditorias, publica as Functions e recompila o mesmo canal
+temporário. O App Check fica desativado apenas nessa homologação enquanto a
+jornada funcional é validada; produção mantém o padrão seguro
+`ENFORCE_APP_CHECK=true`.
 
 ## 3. Configurar frontend
 
@@ -56,13 +58,10 @@ administrativa em arquivo `VITE_*`.
 
 ## 4. Configurar backend
 
-```bash
-firebase functions:secrets:set GEMINI_API_KEY
-```
-
-Use somente uma chave vinculada a um projeto com faturamento ativo e confirme a
-modalidade contratual adequada ao processamento de fotografias potencialmente
-sensíveis. O modelo padrão é configurável por `GEMINI_MODEL`.
+O backend usa o Vertex AI com Application Default Credentials da própria
+Function. Não crie nem distribua uma chave Gemini. O modelo padrão é
+configurável por `GEMINI_MODEL`, e a localização por
+`GEMINI_VERTEX_LOCATION`.
 
 ## 5. Validar
 
