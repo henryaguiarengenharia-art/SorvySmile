@@ -124,13 +124,14 @@ describe("deploy funcional da homologacao", () => {
     expect(result.stderr).toContain("projeto de producao sorvysmile esta protegido");
   });
 
-  it("mantem o smoke test restrito a homologacao e sem dados reais", () => {
+  it("mantem o smoke test restrito a homologacao e sem imagem no repositorio", () => {
     const script = readFileSync(smokeScriptPath, "utf8");
 
     expect(script).toContain('EXPECTED_PROJECT_ID = "sorvysmile-homologacao"');
     expect(script).toContain('signInAnonymously(auth)');
     expect(script).toContain('deleteUser(anonymousUser)');
-    expect(script).toContain('synthetic-smile-smoke.base64');
+    expect(script).toContain('process.env.HML_SMOKE_IMAGE_PATH');
+    expect(script).not.toContain('tests/fixtures');
     expect(script).not.toContain("sorvysmile.web.app");
   });
 });
