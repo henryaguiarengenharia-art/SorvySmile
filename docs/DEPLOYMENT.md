@@ -35,10 +35,10 @@ npm run deploy:hml
 
 Esse comando recusa explicitamente `sorvysmile`, exige faturamento ativo,
 valida os links InfinitePay, habilita o Vertex AI em `southamerica-east1`,
-executa testes e auditorias, publica as Functions e recompila o mesmo canal
-temporário. O App Check fica desativado apenas nessa homologação enquanto a
-jornada funcional é validada; produção mantém o padrão seguro
-`ENFORCE_APP_CHECK=true`.
+executa testes e auditorias, configura retenção de sete dias para os artefatos
+de build e publica as Functions em lotes menores. O App Check fica desativado
+apenas nessa homologação enquanto a jornada funcional é validada; produção
+mantém o padrão seguro `ENFORCE_APP_CHECK=true`.
 
 ## 3. Configurar frontend
 
