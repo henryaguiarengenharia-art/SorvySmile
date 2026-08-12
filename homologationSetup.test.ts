@@ -85,7 +85,7 @@ describe("deploy funcional da homologacao", () => {
     expect(deployScript).not.toContain(".env.sorvysmile\n");
   });
 
-  it("exige Blaze, usa Vertex sem chave e publica as Functions", () => {
+  it("exige Blaze, usa Vertex sem chave e publica em lotes seguros", () => {
     const script = readFileSync(fullDeployScriptPath, "utf8");
     const functionsSource = readFileSync("functions/src/index.ts", "utf8");
     const geminiSource = readFileSync("functions/src/gemini.ts", "utf8");
@@ -100,6 +100,11 @@ describe("deploy funcional da homologacao", () => {
     expect(geminiSource).not.toContain("apiKey");
     expect(script).toContain("VITE_PAYMENT_URL_NETWORK");
     expect(script).toContain(
+      "functions:validateSmilePhoto,functions:analyzeSmilePhoto",
+    );
+    expect(script).toContain("functions:artifacts:setpolicy");
+    expect(script).toContain("--days 7");
+    expect(script).not.toContain(
       "--only firestore:rules,firestore:indexes,functions",
     );
     expect(script).toContain("hosting:channel:deploy");
