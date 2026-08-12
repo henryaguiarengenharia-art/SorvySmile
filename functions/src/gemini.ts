@@ -40,6 +40,12 @@ export interface SmileAnalysisResult {
   recommendedSpecialty: string;
 }
 
+interface VertexGeminiConfig {
+  projectId: string;
+  location: string;
+  model: string;
+}
+
 function parseJson(text: string | undefined): unknown {
   if (!text) throw new Error("A IA não retornou conteúdo.");
   return JSON.parse(text);
@@ -54,15 +60,26 @@ function imagePart(imageBase64: string, mimeType: string) {
   };
 }
 
+function vertexClient(config: VertexGeminiConfig): GoogleGenAI {
+  if (!config.projectId || !config.location || !config.model) {
+    throw new Error("A configuração do Vertex AI está incompleta.");
+  }
+  return new GoogleGenAI({
+    vertexai: true,
+    project: config.projectId,
+    location: config.location,
+    apiVersion: "v1",
+  });
+}
+
 export async function validatePhotoWithGemini(
-  apiKey: string,
-  model: string,
+  config: VertexGeminiConfig,
   imageBase64: string,
   mimeType: string,
 ): Promise<PhotoValidationResult> {
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = vertexClient(config);
   const response = await ai.models.generateContent({
-    model,
+    model: config.model,
     contents: {
       parts: [
         imagePart(imageBase64, mimeType),
@@ -93,14 +110,13 @@ export async function validatePhotoWithGemini(
 }
 
 export async function analyzePhotoWithGemini(
-  apiKey: string,
-  model: string,
+  config: VertexGeminiConfig,
   imageBase64: string,
   mimeType: string,
 ): Promise<SmileAnalysisResult> {
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = vertexClient(config);
   const response = await ai.models.generateContent({
-    model,
+    model: config.model,
     contents: {
       parts: [
         imagePart(imageBase64, mimeType),
