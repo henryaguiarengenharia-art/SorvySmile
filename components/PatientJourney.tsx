@@ -584,16 +584,16 @@ const AnalyzingStep = () => {
     return () => window.clearInterval(timer);
   }, []);
   return (
-    <main className="flex min-h-[75vh] flex-col items-center justify-center px-6 text-center">
-      <div className="relative flex h-36 w-36 items-center justify-center">
-        <div className="absolute inset-0 animate-spin rounded-full border-8 border-blue-50 border-t-blue-600" />
-        <Sparkles className="h-10 w-10 text-blue-600" />
+    <main className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col items-center justify-center overflow-hidden px-4 py-4 text-center sm:px-6 sm:py-6">
+      <div className="relative flex h-24 w-24 shrink-0 items-center justify-center sm:h-32 sm:w-32 lg:h-36 lg:w-36">
+        <div className="absolute inset-0 animate-spin rounded-full border-[6px] border-blue-50 border-t-blue-600 sm:border-8" />
+        <Sparkles className="h-8 w-8 text-blue-600 sm:h-10 sm:w-10" />
       </div>
-      <h1 className="mt-9 text-4xl font-black">Preparando sua descoberta</h1>
-      <p className="mt-4 min-h-6 text-xs font-black uppercase tracking-widest text-blue-600">
+      <h1 className="mt-6 text-3xl font-black sm:mt-8 sm:text-4xl">Preparando sua descoberta</h1>
+      <p className="mt-3 min-h-6 max-w-md text-[10px] font-black uppercase tracking-widest text-blue-600 sm:mt-4 sm:text-xs">
         {ANALYSIS_STAGES[index]}
       </p>
-      <p className="mt-7 max-w-sm text-sm font-medium text-slate-400">
+      <p className="mt-5 max-w-sm text-xs font-medium leading-relaxed text-slate-400 sm:mt-6 sm:text-sm">
         A imagem do sorriso é usada somente agora e não é adicionada ao cadastro ou ao painel.
       </p>
     </main>
@@ -623,7 +623,7 @@ const metricPresentation = (value: number) => {
   return { label: visualMetricLabel(value), ...colors };
 };
 
-const visualTone = (scores: SmileScores): string =>
+const vitaClassification = (scores: SmileScores): string =>
   scores.vitaShade.replace(/^Tom visual:\s*/i, "");
 
 const PreviewStep = ({
@@ -692,9 +692,8 @@ const PreviewStep = ({
         )}
         {fullReport && (
           <PreviewMetric
-            label="Referência VITA"
-            value={visualTone(scores)}
-            note="Estimada"
+            label="Classificação VITA"
+            value={vitaClassification(scores)}
           />
         )}
         <PreviewMetric
@@ -754,11 +753,13 @@ const PreviewMetric = ({
         {label}
       </p>
       <p className="mt-3 text-2xl font-black capitalize text-slate-900">{value}</p>
-      <span className={`mt-auto inline-flex w-fit rounded-full px-2.5 py-1 text-[8px] font-black uppercase tracking-wider ${
-        presentation?.badgeClass ?? "bg-violet-50 text-violet-700"
-      }`}>
-        {presentation?.label ?? note}
-      </span>
+      {(presentation || note) && (
+        <span className={`mt-auto inline-flex w-fit rounded-full px-2.5 py-1 text-[8px] font-black uppercase tracking-wider ${
+          presentation?.badgeClass ?? "bg-violet-50 text-violet-700"
+        }`}>
+          {presentation?.label ?? note}
+        </span>
+      )}
     </div>
   );
 };
@@ -1014,9 +1015,9 @@ const ReportStep = ({
           <div className="grid gap-3 sm:grid-cols-[0.8fr_1.2fr]">
             <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-5">
               <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                Referência VITA estimada
+                Classificação VITA estimada
               </p>
-              <p className="mt-2 text-2xl font-black capitalize">{visualTone(scores)}</p>
+              <p className="mt-2 text-2xl font-black">{vitaClassification(scores)}</p>
               <p className="mt-2 text-[10px] font-medium leading-relaxed text-slate-400">
                 A faixa exata precisa ser confirmada presencialmente; luz e câmera alteram a percepção.
               </p>
