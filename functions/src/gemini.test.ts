@@ -46,7 +46,7 @@ describe("integração Gemini Developer API", () => {
     const result = normalizeSmileAnalysisResult({
       harmonyIndex: 26.2,
       brightnessIndex: 20.4,
-      visualTone: "escuro",
+      visualTone: "c2",
       benchmarkText:
         "Áreas muito escurecidas e perda aparente de estrutura em vários dentes exigem investigação odontológica prioritária.",
       technicalInsights: { symmetry: 38.1, alignment: 22.3, reflectivity: 18.4 },
@@ -64,13 +64,14 @@ describe("integração Gemini Developer API", () => {
     expect(result.intentCategory).toBe("Restaurações e estrutura dental");
     expect(result.recommendedSpecialty).toBe("Dentística restauradora");
     expect(result.benchmarkText).toContain("investigação odontológica prioritária");
+    expect(result.vitaShade).toBe("Tom visual: C2");
   });
 
   it("não reduz a classificação ao índice isolado de harmonia", () => {
     const result = normalizeSmileAnalysisResult({
       harmonyIndex: 82,
       brightnessIndex: 42,
-      visualTone: "intermediário",
+      visualTone: "A3.5",
       benchmarkText: "Diferenças de luminosidade merecem avaliação.",
       technicalInsights: { symmetry: 44, alignment: 48, reflectivity: 39 },
       observations: ["Luminosidade irregular.", "Resposta à luz reduzida."],

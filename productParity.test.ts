@@ -54,9 +54,16 @@ describe("paridade do produto Sorvy Smile", () => {
     expect(journeySource).toContain("Principal achado visual");
     expect(journeySource).toContain("Harmonia do sorriso");
     expect(journeySource).toContain("Refletividade");
-    expect(journeySource).toContain("Referência VITA estimada");
+    expect(journeySource).toContain("Classificação VITA");
+    expect(journeySource).toContain("Classificação VITA estimada");
     expect(journeySource).toContain("Brilho geral");
     expect(journeySource).toContain("WhatsApp com DDD");
+  });
+
+  it("mantém a tela de processamento dentro da altura visível", () => {
+    expect(journeySource).toContain("h-[calc(100dvh-4rem)]");
+    expect(journeySource).toContain("overflow-hidden");
+    expect(journeySource).toContain("sm:h-32 sm:w-32");
   });
 
   it("mantém as duas CTAs finais e registra a escolha do paciente", () => {

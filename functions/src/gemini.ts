@@ -7,10 +7,22 @@ const photoValidationSchema = z.object({
   feedback: z.string().trim().min(3).max(240),
 });
 
+const VITA_CLASSIFICATIONS = [
+  "A1", "A2", "A3", "A3.5", "A4",
+  "B1", "B2", "B3", "B4",
+  "C1", "C2", "C3", "C4",
+  "D2", "D3", "D4",
+] as const;
+
+const vitaClassificationSchema = z.preprocess(
+  (value) => typeof value === "string" ? value.trim().toUpperCase() : value,
+  z.enum(VITA_CLASSIFICATIONS),
+);
+
 const scoreSchema = z.object({
   harmonyIndex: z.number().min(0).max(100),
   brightnessIndex: z.number().min(0).max(100),
-  visualTone: z.string().trim().min(1).max(50),
+  visualTone: vitaClassificationSchema,
   benchmarkText: z.string().trim().min(3).max(240),
   technicalInsights: z.object({
     symmetry: z.number().min(0).max(100),
@@ -195,7 +207,8 @@ export async function analyzePhotoWithGemini(
           "Seu papel é retratar o que está visível e conduzir a pessoa a uma avaliação presencial; não suavize alterações relevantes com expressões vagas como 'pontos interessantes', 'explorar possibilidades' ou 'está tudo bem'.",
           "Produza índices aproximados de 0 a 100 para harmonia visual, brilho aparente, simetria, alinhamento aparente e refletividade: 100 representa condição visual muito favorável e 0 representa alterações visuais muito marcantes.",
           "Calibre os índices de forma coerente entre si: alterações extensas, áreas muito escurecidas, perda aparente de estrutura, fraturas aparentes ou grande desorganização não podem receber notas medianas ou altas.",
-          "visualTone deve ser uma descrição simples como claro, intermediário ou escuro; não informe escala VITA, porque uma foto sem calibração não permite medição clínica.",
+          "visualTone deve conter somente a classificação VITA Classic aparente mais próxima: A1, A2, A3, A3.5, A4, B1, B2, B3, B4, C1, C2, C3, C4, D2, D3 ou D4.",
+          "A classificação VITA é apenas uma estimativa visual da imagem; não acrescente explicação dentro de visualTone.",
           "Não confirme diagnóstico, doença, dor, prognóstico, custo ou prazo de tratamento a partir da imagem.",
           "Você pode e deve nomear achados visuais com precisão, usando qualificadores quando necessário: áreas escurecidas, manchas aparentes, restaurações aparentes, desgaste aparente, fratura ou perda aparente de estrutura, desalinhamento, assimetria e alteração aparente do contorno gengival.",
           "Nunca afirme 'cárie', 'infecção' ou outra doença como diagnóstico confirmado; nesses casos recomende investigar presencialmente as alterações visíveis.",
