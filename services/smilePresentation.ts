@@ -23,15 +23,14 @@ export function visualMetricLabel(value: number): string {
 }
 
 export function overallVisualIndex(scores: SmileScores): number {
-  return Math.round(
-    (
-      scores.harmonyIndex
-      + scores.brightnessIndex
-      + scores.technicalInsights.symmetry
-      + scores.technicalInsights.alignment
-      + scores.technicalInsights.reflectivity
-    ) / 5,
-  );
+  const average = (
+    scores.harmonyIndex
+    + scores.brightnessIndex
+    + scores.technicalInsights.symmetry
+    + scores.technicalInsights.alignment
+    + scores.technicalInsights.reflectivity
+  ) / 5;
+  return Math.round(average / 5) * 5;
 }
 
 export function visualIndexHeadline(value: number): string {
@@ -61,3 +60,17 @@ export function reportHeadline(value: number): string {
   return "Priorize uma avaliação dos pontos identificados";
 }
 
+export function vitaToneDescription(classification: string): string {
+  switch (classification.trim().toUpperCase().charAt(0)) {
+    case "A":
+      return "Tom quente, com nuance amarelada";
+    case "B":
+      return "Tom amarelado, com aparência luminosa";
+    case "C":
+      return "Tom com nuance acinzentada";
+    case "D":
+      return "Tom neutro, com nuance avermelhada";
+    default:
+      return "Percepção de cor a confirmar presencialmente";
+  }
+}

@@ -23,6 +23,11 @@ import {
   validatePhotoWithGemini,
 } from "./gemini.js";
 import {
+  ANALYSIS_CACHE_TTL_MS,
+  analysisCacheId,
+  cachedAnalysisScores,
+} from "./analysisCache.js";
+import {
   monthKey,
   normalizePlan,
   photoValidationLimit,
@@ -417,6 +422,7 @@ export const analyzeSmilePhoto = onCall(
     const usageMonth = monthKey();
     const usageRefId = `${input.sessionId}_${usageMonth}`;
     const digest = imageHash(input.imageBase64);
+    const cacheRef = db.doc(`analysisCache/${analysisCacheId(digest)}`);
 
     const reservation = await db.runTransaction(async (transaction) => {
       const sessionSnap = await transaction.get(sessionRef);
@@ -425,7 +431,9 @@ export const analyzeSmilePhoto = onCall(
       }
       const session = sessionSnap.data() as SessionRecord;
       validateSession(session, uid);
-      if (session.scores) return { existing: session.scores, session };
+      if (session.scores) {
+        return { existing: session.scores, cached: null, session };
+      }
       if (
         session.state !== "validated"
         || session.validation?.isAdequate !== true
@@ -444,9 +452,10 @@ export const analyzeSmilePhoto = onCall(
 
       const accountRef = db.doc(`accounts/${session.accountId}`);
       const usageRef = db.doc(`usage/${session.accountId}_${usageMonth}`);
-      const [accountSnap, usageSnap] = await Promise.all([
+      const [accountSnap, usageSnap, cacheSnap] = await Promise.all([
         transaction.get(accountRef),
         transaction.get(usageRef),
+        transaction.get(cacheRef),
       ]);
       if (!accountSnap.exists) {
         throw new HttpsError("not-found", "Conta não encontrada.");
@@ -457,6 +466,7 @@ export const analyzeSmilePhoto = onCall(
       }
       const plan = PLANS[normalizePlan(account.plan)];
       const used = Number(usageSnap.data()?.triages ?? 0);
+      const cached = cachedAnalysisScores(cacheSnap.data());
       if (used >= plan.monthlyLeadLimit) {
         throw new HttpsError(
           "resource-exhausted",
@@ -480,18 +490,30 @@ export const analyzeSmilePhoto = onCall(
           accountId: session.accountId,
           sessionId: input.sessionId,
           month: usageMonth,
-          state: "reserved",
+          state: cached ? "consumed" : "reserved",
           createdAtMs: Date.now(),
+          updatedAtMs: Date.now(),
         },
       );
-      transaction.update(sessionRef, {
-        state: "analyzing",
-        updatedAtMs: Date.now(),
-      });
-      return { existing: null, session };
+      transaction.update(
+        sessionRef,
+        cached
+          ? {
+              scores: cached,
+              state: "analyzed",
+              analyzedAtMs: Date.now(),
+              updatedAtMs: Date.now(),
+            }
+          : {
+              state: "analyzing",
+              updatedAtMs: Date.now(),
+            },
+      );
+      return { existing: null, cached, session };
     });
 
     if (reservation.existing) return reservation.existing;
+    if (reservation.cached) return reservation.cached;
 
     try {
       const scores = await analyzePhotoWithGemini(
@@ -501,15 +523,23 @@ export const analyzeSmilePhoto = onCall(
         input.mimeType,
       );
       await db.runTransaction(async (transaction) => {
+        const now = Date.now();
         transaction.update(sessionRef, {
           scores,
           state: "analyzed",
-          analyzedAtMs: Date.now(),
-          updatedAtMs: Date.now(),
+          analyzedAtMs: now,
+          updatedAtMs: now,
         });
         transaction.update(db.doc(`usageReservations/${usageRefId}`), {
           state: "consumed",
-          updatedAtMs: Date.now(),
+          updatedAtMs: now,
+        });
+        // Somente o resultado e o hash criptográfico são reutilizados; a imagem
+        // nunca é gravada no cache.
+        transaction.set(cacheRef, {
+          scores,
+          createdAtMs: now,
+          expiresAtMs: now + ANALYSIS_CACHE_TTL_MS,
         });
       });
       return scores;
@@ -1324,15 +1354,29 @@ export const cleanupExpiredTriageSessions = onSchedule(
     timeZone: "America/Sao_Paulo",
   },
   async () => {
-    const expired = await db
-      .collection("triageSessions")
-      .where("expiresAtMs", "<", Date.now())
-      .limit(500)
-      .get();
-    if (expired.empty) return;
-    const batch = db.batch();
-    expired.docs.forEach((document) => batch.delete(document.ref));
-    await batch.commit();
+    const now = Date.now();
+    const [expiredSessions, expiredAnalysisCache] = await Promise.all([
+      db
+        .collection("triageSessions")
+        .where("expiresAtMs", "<", now)
+        .limit(500)
+        .get(),
+      db
+        .collection("analysisCache")
+        .where("expiresAtMs", "<", now)
+        .limit(500)
+        .get(),
+    ]);
+    if (!expiredSessions.empty) {
+      const sessionBatch = db.batch();
+      expiredSessions.docs.forEach((document) => sessionBatch.delete(document.ref));
+      await sessionBatch.commit();
+    }
+    if (!expiredAnalysisCache.empty) {
+      const cacheBatch = db.batch();
+      expiredAnalysisCache.docs.forEach((document) => cacheBatch.delete(document.ref));
+      await cacheBatch.commit();
+    }
   },
 );
 

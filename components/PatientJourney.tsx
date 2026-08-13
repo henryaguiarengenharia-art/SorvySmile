@@ -38,6 +38,7 @@ import {
   visualIndexSummary,
   visualMetricLabel,
   visualMetricLevel,
+  vitaToneDescription,
 } from "../services/smilePresentation";
 
 const GuidedCamera = React.lazy(() =>
@@ -626,6 +627,29 @@ const metricPresentation = (value: number) => {
 const vitaClassification = (scores: SmileScores): string =>
   scores.vitaShade.replace(/^Tom visual:\s*/i, "");
 
+const insightPresentation = (visualIndex: number) => {
+  const level = visualMetricLevel(visualIndex);
+  if (level === "evaluation") {
+    return {
+      panel: "border border-rose-200 bg-rose-50 text-slate-900 shadow-rose-100",
+      icon: "text-rose-600",
+      label: "text-rose-700",
+    };
+  }
+  if (level === "attention") {
+    return {
+      panel: "border border-amber-200 bg-amber-50 text-slate-900 shadow-amber-100",
+      icon: "text-amber-600",
+      label: "text-amber-700",
+    };
+  }
+  return {
+    panel: "bg-blue-600 text-white shadow-blue-100",
+    icon: "text-blue-200",
+    label: "text-blue-100",
+  };
+};
+
 const PreviewStep = ({
   scores,
   fullReport,
@@ -636,11 +660,7 @@ const PreviewStep = ({
   onContinue: () => void;
 }) => {
   const visualIndex = overallVisualIndex(scores);
-  const insightClass = visualMetricLevel(visualIndex) === "evaluation"
-    ? "bg-red-600 shadow-red-100"
-    : visualMetricLevel(visualIndex) === "attention"
-      ? "bg-amber-500 shadow-amber-100"
-      : "bg-blue-600 shadow-blue-100";
+  const insight = insightPresentation(visualIndex);
   return (
     <main className="mx-auto max-w-3xl px-6 py-9">
       <JourneyProgress current={1} />
@@ -694,6 +714,7 @@ const PreviewStep = ({
           <PreviewMetric
             label="Classificação VITA"
             value={vitaClassification(scores)}
+            description={vitaToneDescription(vitaClassification(scores))}
           />
         )}
         <PreviewMetric
@@ -703,17 +724,18 @@ const PreviewStep = ({
         />
       </div>
 
-      <section className={`mt-5 rounded-[2rem] p-7 text-white shadow-xl ${insightClass}`}>
-        <Sparkles className="h-7 w-7 text-blue-200" />
-        <p className="mt-4 text-[10px] font-black uppercase tracking-widest text-blue-100">
+      <section className={`mt-5 rounded-[2rem] p-7 shadow-xl ${insight.panel}`}>
+        <Sparkles className={`h-7 w-7 ${insight.icon}`} />
+        <p className={`mt-4 text-[10px] font-black uppercase tracking-widest ${insight.label}`}>
           Principal achado visual
         </p>
         <p className="mt-2 text-lg font-black leading-snug">{scores.benchmarkText}</p>
       </section>
 
       <p className="mt-4 text-center text-[10px] font-bold leading-relaxed text-slate-400">
-        Leitura visual aproximada. A causa dos achados e a referência VITA exata
-        precisam ser confirmadas em avaliação presencial.
+        Conteúdo gerado por IA a partir de uma imagem e sujeito a pequenas variações.
+        A causa dos achados e a classificação VITA exata precisam ser confirmadas
+        em avaliação presencial.
       </p>
       <div className="mt-7 rounded-[2rem] bg-slate-900 p-8 text-center text-white">
         <LockKeyhole className="mx-auto h-8 w-8 text-blue-400" />
@@ -740,11 +762,13 @@ const PreviewMetric = ({
   value,
   score,
   note,
+  description,
 }: {
   label: string;
   value: string;
   score?: number;
   note?: string;
+  description?: string;
 }) => {
   const presentation = score == null ? null : metricPresentation(score);
   return (
@@ -753,6 +777,11 @@ const PreviewMetric = ({
         {label}
       </p>
       <p className="mt-3 text-2xl font-black capitalize text-slate-900">{value}</p>
+      {description && (
+        <p className="mt-1 text-[10px] font-bold leading-snug text-slate-500">
+          {description}
+        </p>
+      )}
       {(presentation || note) && (
         <span className={`mt-auto inline-flex w-fit rounded-full px-2.5 py-1 text-[8px] font-black uppercase tracking-wider ${
           presentation?.badgeClass ?? "bg-violet-50 text-violet-700"
@@ -905,7 +934,7 @@ const ReportStep = ({
   const [requestingContact, setRequestingContact] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const visualIndex = overallVisualIndex(scores);
-  const attentionLevel = visualMetricLevel(visualIndex);
+  const reportInsight = insightPresentation(visualIndex);
   const reportMetrics = profile.plan === "lite"
     ? [
         ["Harmonia do sorriso", scores.harmonyIndex],
@@ -1018,19 +1047,16 @@ const ReportStep = ({
                 Classificação VITA estimada
               </p>
               <p className="mt-2 text-2xl font-black">{vitaClassification(scores)}</p>
+              <p className="mt-1 text-xs font-bold text-slate-600">
+                {vitaToneDescription(vitaClassification(scores))}
+              </p>
               <p className="mt-2 text-[10px] font-medium leading-relaxed text-slate-400">
                 A faixa exata precisa ser confirmada presencialmente; luz e câmera alteram a percepção.
               </p>
             </div>
-            <div className={`rounded-[1.75rem] p-6 text-white ${
-              attentionLevel === "evaluation"
-                ? "bg-red-600"
-                : attentionLevel === "attention"
-                  ? "bg-amber-500"
-                  : "bg-blue-600"
-            }`}>
-              <Sparkles className="h-6 w-6 text-blue-200" />
-              <p className="mt-4 text-[9px] font-black uppercase tracking-widest text-blue-100">
+            <div className={`rounded-[1.75rem] p-6 ${reportInsight.panel}`}>
+              <Sparkles className={`h-6 w-6 ${reportInsight.icon}`} />
+              <p className={`mt-4 text-[9px] font-black uppercase tracking-widest ${reportInsight.label}`}>
                 Principal achado visual
               </p>
               <p className="mt-2 text-base font-black leading-snug">{scores.benchmarkText}</p>
@@ -1069,8 +1095,9 @@ const ReportStep = ({
           </div>
 
           <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-[10px] font-medium leading-relaxed text-slate-500">
-            Esta leitura não confirma diagnóstico nem define tratamento. Se houver
-            dor, inchaço, sangramento ou trauma, procure atendimento odontológico.
+            Conteúdo gerado por IA e sujeito a pequenas variações. Esta leitura não
+            confirma diagnóstico nem define tratamento. Se houver dor, inchaço,
+            sangramento ou trauma, procure atendimento odontológico.
           </div>
 
           {actionError && (

@@ -102,6 +102,10 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
           month: "2026-07",
           triages: 3,
         }),
+        setDoc(doc(db, "analysisCache", "visual-calibration-v1_hash"), {
+          scores: { harmonyIndex: 60 },
+          expiresAtMs: Date.now() + 86_400_000,
+        }),
       ]);
     });
   });
@@ -120,6 +124,17 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
     const anonymous = environment.unauthenticatedContext().firestore();
     await assertFails(getDoc(doc(anonymous, "leads", "lead_a")));
     await assertFails(getDoc(doc(anonymous, "triageSessions", "session_a")));
+  });
+
+  it("não expõe o cache temporário nem mesmo para usuários internos", async () => {
+    const anonymous = environment.unauthenticatedContext().firestore();
+    const hq = environment.authenticatedContext("hq").firestore();
+    const cache = doc(anonymous, "analysisCache", "visual-calibration-v1_hash");
+
+    await assertFails(getDoc(cache));
+    await assertFails(
+      getDoc(doc(hq, "analysisCache", "visual-calibration-v1_hash")),
+    );
   });
 
   it("limita o profissional aos leads atribuídos a ele", async () => {

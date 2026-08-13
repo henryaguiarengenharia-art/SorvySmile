@@ -61,14 +61,18 @@ export interface AiFailureDetails {
   code: string | null;
 }
 
+export function normalizeVisualIndex(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value / 5) * 5));
+}
+
 export function normalizeSmileAnalysisResult(value: unknown): SmileAnalysisResult {
   const result = scoreSchema.parse(value);
-  const harmonyIndex = Math.round(result.harmonyIndex);
-  const brightnessIndex = Math.round(result.brightnessIndex);
-  const symmetry = Math.round(result.technicalInsights.symmetry);
-  const alignment = Math.round(result.technicalInsights.alignment);
-  const reflectivity = Math.round(result.technicalInsights.reflectivity);
-  const overallIndex = Math.round(
+  const harmonyIndex = normalizeVisualIndex(result.harmonyIndex);
+  const brightnessIndex = normalizeVisualIndex(result.brightnessIndex);
+  const symmetry = normalizeVisualIndex(result.technicalInsights.symmetry);
+  const alignment = normalizeVisualIndex(result.technicalInsights.alignment);
+  const reflectivity = normalizeVisualIndex(result.technicalInsights.reflectivity);
+  const overallIndex = normalizeVisualIndex(
     (harmonyIndex + brightnessIndex + symmetry + alignment + reflectivity) / 5,
   );
   return {
@@ -206,7 +210,10 @@ export async function analyzePhotoWithGemini(
           "Analise com rigor e objetividade as características visuais aparentes do sorriso para uma triagem odontológica informativa.",
           "Seu papel é retratar o que está visível e conduzir a pessoa a uma avaliação presencial; não suavize alterações relevantes com expressões vagas como 'pontos interessantes', 'explorar possibilidades' ou 'está tudo bem'.",
           "Produza índices aproximados de 0 a 100 para harmonia visual, brilho aparente, simetria, alinhamento aparente e refletividade: 100 representa condição visual muito favorável e 0 representa alterações visuais muito marcantes.",
+          "Use a mesma régua em todas as análises: 85–100 para condição visual muito favorável com variações mínimas; 70–84 para diferenças pequenas e localizadas; 50–69 para diferenças evidentes, porém localizadas ou moderadas; 30–49 para alterações marcantes em vários dentes; 0–29 somente para alterações extensas, perda aparente importante de estrutura ou grande desorganização.",
+          "Não reduza os indicadores abaixo de 50 apenas por diferença de cor, contorno ou restauração aparente localizada em um ou dois dentes quando o restante do sorriso visível mantém forma e organização.",
           "Calibre os índices de forma coerente entre si: alterações extensas, áreas muito escurecidas, perda aparente de estrutura, fraturas aparentes ou grande desorganização não podem receber notas medianas ou altas.",
+          "Considere somente o sorriso e os dentes visíveis. Compense variações de iluminação, exposição, sombra, balanço de branco e qualidade da câmera antes de pontuar brilho, cor e refletividade.",
           "visualTone deve conter somente a classificação VITA Classic aparente mais próxima: A1, A2, A3, A3.5, A4, B1, B2, B3, B4, C1, C2, C3, C4, D2, D3 ou D4.",
           "A classificação VITA é apenas uma estimativa visual da imagem; não acrescente explicação dentro de visualTone.",
           "Não confirme diagnóstico, doença, dor, prognóstico, custo ou prazo de tratamento a partir da imagem.",
@@ -268,7 +275,7 @@ export async function analyzePhotoWithGemini(
       model,
       contents,
       config: {
-        temperature: 0.1,
+        temperature: 0,
         responseMimeType: "application/json",
         responseSchema,
       },
@@ -278,7 +285,7 @@ export async function analyzePhotoWithGemini(
     response = await ai.models.generateContent({
       model,
       contents,
-      config: { temperature: 0.1, responseMimeType: "application/json" },
+      config: { temperature: 0, responseMimeType: "application/json" },
     });
   }
 

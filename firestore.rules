@@ -103,5 +103,9 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /analysisCache/{cacheId} {
+      allow read, write: if false;
+    }
+
   }
 }

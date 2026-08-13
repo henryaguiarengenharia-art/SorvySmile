@@ -56,6 +56,7 @@ describe("paridade do produto Sorvy Smile", () => {
     expect(journeySource).toContain("Refletividade");
     expect(journeySource).toContain("Classificação VITA");
     expect(journeySource).toContain("Classificação VITA estimada");
+    expect(journeySource).toContain("vitaToneDescription");
     expect(journeySource).toContain("Brilho geral");
     expect(journeySource).toContain("WhatsApp com DDD");
   });
@@ -79,9 +80,20 @@ describe("paridade do produto Sorvy Smile", () => {
       "Triagem informativa. Não substitui consulta com cirurgião-dentista.",
     );
     expect(journeySource).toContain("Não é diagnóstico");
-    expect(journeySource).toContain("não confirma diagnóstico nem define tratamento");
+    expect(journeySource).toContain("confirma diagnóstico nem define tratamento");
     expect(presentationSource).toContain("Alterações visuais importantes");
     expect(journeySource).toContain("Especialidade indicada");
     expect(journeySource).toContain("Foco do cuidado");
+    expect(journeySource).toContain("Conteúdo gerado por IA");
+    expect(journeySource).toContain("sujeito a pequenas variações");
+    expect(journeySource).toContain("bg-rose-50");
+  });
+
+  it("reutiliza temporariamente a mesma imagem sem armazenar a foto", () => {
+    expect(functionsSource).toContain("analysisCache/${analysisCacheId(digest)}");
+    expect(functionsSource).toContain("cachedAnalysisScores");
+    expect(functionsSource).toContain("ANALYSIS_CACHE_TTL_MS");
+    expect(functionsSource).toContain("a imagem");
+    expect(functionsSource).toContain("nunca é gravada no cache");
   });
 });

@@ -4,6 +4,7 @@ import {
   describeAiFailure,
   geminiDeveloperClient,
   normalizeSmileAnalysisResult,
+  normalizeVisualIndex,
 } from "./gemini.js";
 
 describe("integração Gemini Developer API", () => {
@@ -81,5 +82,20 @@ describe("integração Gemini Developer API", () => {
     });
 
     expect(result.status).toBe("Avaliação");
+  });
+
+  it("normaliza estimativas em passos de cinco para evitar falsa precisão", () => {
+    expect(normalizeVisualIndex(38.1)).toBe(40);
+    expect(normalizeVisualIndex(42.4)).toBe(40);
+    expect(normalizeVisualIndex(47.6)).toBe(50);
+    expect(normalizeVisualIndex(101)).toBe(100);
+  });
+
+  it("usa uma régua explícita para não tratar achado localizado como extenso", () => {
+    const source = readFileSync(new URL("./gemini.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("30–49 para alterações marcantes em vários dentes");
+    expect(source).toContain("diferença de cor, contorno ou restauração aparente localizada");
+    expect(source).toContain("temperature: 0");
   });
 });
