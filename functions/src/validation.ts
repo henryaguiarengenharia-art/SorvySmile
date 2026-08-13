@@ -39,12 +39,17 @@ export const captureLeadSchema = z.object({
   consentVersion: z.literal(CONSENT_VERSION),
 });
 
+export const patientConversionActionSchema = z.object({
+  sessionId: z.string().min(10).max(160),
+  action: z.enum(["whatsapp_opened", "contact_requested"]),
+});
+
 export const checkoutSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().toLowerCase().email().max(160),
   whatsapp: phoneSchema,
   specialty: z.string().trim().max(100).optional().default(""),
-  plan: z.enum(["lite", "pro", "elite", "network"]),
+  plan: z.enum(["lite", "pro", "network", "elite"]),
   termsVersion: z.literal(SUBSCRIBER_TERMS_VERSION),
 });
 
@@ -61,11 +66,30 @@ export const profilePatchSchema = z.object({
 export const accountStatusSchema = z.object({
   accountId: z.string().min(3).max(160),
   status: z.enum(["active", "overdue", "paused"]),
-  plan: z.enum(["lite", "pro", "elite", "network"]).optional(),
+  plan: z.enum(["lite", "pro", "network", "elite"]).optional(),
 });
 
 export const leadIdSchema = z.object({
   leadId: z.string().min(3).max(160),
+});
+
+export const leadAssignmentSchema = z.object({
+  leadId: z.string().min(3).max(160),
+  professionalId: z.string().min(3).max(160).nullable(),
+});
+
+export const teamMemberSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().toLowerCase().email().max(160),
+  whatsapp: phoneSchema,
+  specialty: z.string().trim().max(100).optional().default(""),
+  teamTag: z.string().trim().max(80).optional().default("Dentista"),
+  temporaryPassword: z.string().min(10).max(128),
+});
+
+export const professionalStatusSchema = z.object({
+  professionalId: z.string().min(3).max(160),
+  isActive: z.boolean(),
 });
 
 export function slugify(value: string): string {

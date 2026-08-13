@@ -1,48 +1,81 @@
 # Implantação e rollback
 
-## 1. Preparar o Firebase
+## 1. Preparar a homologação gratuita
 
-1. crie ou selecione um projeto dedicado;
-2. ative o plano Blaze;
-3. crie o Firestore em região compatível com `southamerica-east1`;
-4. habilite Authentication por Email/Password e Anonymous;
-5. configure a política de senha com no mínimo 10 caracteres;
-6. ative a limpeza automática de contas anônimas;
-7. registre o aplicativo Web;
-8. configure App Check com reCAPTCHA Enterprise;
-9. copie `.firebaserc.example` para `.firebaserc` e informe o project ID.
+O projeto autorizado para esta etapa é exclusivamente
+`sorvysmile-homologacao`. A partir da raiz do repositório, no Google Cloud
+Shell da conta proprietária, execute:
 
-Use um projeto separado de homologação, quando possível.
+```bash
+npm run setup:hml
+```
 
-## 2. Configurar frontend
+O script é idempotente e recusa `sorvysmile`. Ele executa testes e auditorias,
+habilita Authentication por Email/Password e Anonymous, cria o Firestore
+Standard em `southamerica-east1`, registra o app Web, publica regras/índices,
+cria um perfil fictício e publica o canal `migracao-smile` por 30 dias. Nesta
+fase não há Functions, Storage, Gemini, App Check, InfinitePay ou dados reais.
+
+## 2. Preparar o backend completo após aprovação do Blaze
+
+1. ative o plano Blaze apenas em `sorvysmile-homologacao`;
+2. configure a política de senha com no mínimo 10 caracteres;
+3. ative a limpeza automática de contas anônimas;
+4. configure App Check com reCAPTCHA Enterprise;
+5. grave uma chave exclusiva da Gemini API em `GEMINI_API_KEY` no Secret
+   Manager e conceda leitura somente à identidade de runtime das Functions;
+6. execute novamente todos os testes antes de publicar Functions;
+7. mantenha `sorvysmile` sem alterações até o aceite final.
+
+Depois de configurar o secret e os valores públicos do ambiente, execute:
+
+```bash
+npm run deploy:hml
+```
+
+Esse comando recusa explicitamente `sorvysmile`, exige faturamento ativo,
+valida os links InfinitePay e o secret Gemini, executa testes e auditorias,
+configura retenção de sete dias para os artefatos de build e publica as
+Functions em lotes menores. O App Check fica desativado apenas nessa
+homologação enquanto a jornada funcional é validada; produção mantém o padrão
+seguro `ENFORCE_APP_CHECK=true`.
+
+## 3. Configurar frontend
 
 Copie `.env.example` para `.env.local` e preencha:
 
 - configuração pública do Firebase;
 - chave pública do App Check;
-- links atuais da InfinitePay para Lite, Pro e Elite;
-- renomeie no checkout da InfinitePay o antigo produto Network para Elite antes
-  do corte;
+- links atuais da InfinitePay para Lite, Pro e Network;
+- confirme que o checkout de R$ 497 está identificado como Network antes do corte;
 - WhatsApp comercial;
-- email público de privacidade
-  (`henry.aguiar.engenharia@gmail.com`);
+- email público de privacidade;
 - slug padrão opcional. Deixe vazio para manter a raiz como página comercial;
   o cliente piloto continuará em `/p/clinica-saude-integrada-bh`.
 
 Esses valores são públicos. Não coloque chave do Gemini, senha ou credencial
 administrativa em arquivo `VITE_*`.
 
-## 3. Configurar backend
+## 4. Configurar backend
+
+O backend usa a Gemini Developer API, o mesmo caminho do aplicativo original.
+A chave nunca entra no frontend: ela fica no Secret Manager como
+`GEMINI_API_KEY` e é vinculada somente a `validateSmilePhoto` e
+`analyzeSmilePhoto`. O modelo estável padrão é `gemini-3.6-flash`, configurável
+por `GEMINI_MODEL`.
+
+Se apenas a leitura da foto estiver quebrada, repare e publique somente as duas
+Functions de IA:
 
 ```bash
-firebase functions:secrets:set GEMINI_API_KEY
+npm run repair:gemini:hml
 ```
 
-Use somente uma chave vinculada a um projeto com faturamento ativo e confirme a
-modalidade contratual adequada ao processamento de fotografias potencialmente
-sensíveis. O modelo padrão é configurável por `GEMINI_MODEL`.
+O reparo recusa o projeto de produção, testa a chave com uma chamada
+multimodal sem exibi-la, atualiza o secret apenas quando necessário e não
+publica Hosting, Firestore ou as demais Functions.
 
-## 4. Validar
+## 5. Validar
 
 ```bash
 npm ci
@@ -58,7 +91,7 @@ git diff --check
 O emulador do Firestore requer Java 21 ou superior. Faça os testes de regras
 antes de qualquer deploy.
 
-## 5. Publicar preview
+## 6. Publicar preview completo
 
 ```bash
 firebase deploy --only firestore:rules,firestore:indexes,storage,functions
@@ -68,24 +101,26 @@ firebase hosting:channel:deploy migracao-smile --expires 14d
 
 Não use o domínio final nessa etapa.
 
-## 6. Preparar HQ e piloto
+## 7. Preparar HQ e piloto
 
 Crie o usuário HQ pelo comando administrativo, digitando os valores apenas no
 Shell:
 
 ```bash
-HQ_EMAIL="email-hq" \
-HQ_PASSWORD="senha-forte" \
-HQ_NAME="Administração Sorvy" \
-npm --prefix functions run seed:hq
+HML_HQ_EMAIL="email-hq" \
+HML_HQ_PASSWORD="senha-forte" \
+HML_CLINIC_EMAIL="email-clinica" \
+HML_CLINIC_PASSWORD="senha-temporaria-forte" \
+HML_CLINIC_WHATSAPP="55DDDNUMERO" \
+npm run seed:hml
 ```
 
-Depois execute `npm --prefix functions run seed:pilot` com email, senha
-temporária, WhatsApp, nome, slug e o plano `elite` do único cliente. Digite os
-valores no Shell; não os salve no histórico do repositório nem envie no chat.
-O cliente deve trocar a senha temporária pelo fluxo “Esqueci minha senha”.
+O wrapper cria HQ e clínica Network somente em `sorvysmile-homologacao`.
+O segundo acesso profissional deve ser criado pelo painel da clínica durante
+o teste funcional, validando a mesma Function usada pelo produto. Digite as
+credenciais temporárias diretamente no Shell e não as salve no repositório.
 
-## 7. Roteiro de homologação
+## 8. Roteiro de homologação
 
 - link limpo e parâmetros legados;
 - consentimento e recusa;
@@ -94,6 +129,8 @@ O cliente deve trocar a senha temporária pelo fluxo “Esqueci minha senha”.
 - captura com duas autorizações;
 - cota por plano;
 - WhatsApp e atualização do funil;
+- fila da clínica, atribuição e isolamento por dentista;
+- criação, pausa e reativação de acesso da equipe;
 - exclusão de lead;
 - cadastro de assinante;
 - link de pagamento e mensagem do comprovante;
@@ -102,7 +139,7 @@ O cliente deve trocar a senha temporária pelo fluxo “Esqueci minha senha”.
 - navegação móvel;
 - Política de Privacidade e Termos.
 
-## 8. Corte sem interrupção
+## 9. Corte sem interrupção
 
 1. mantenha o Replit ativo;
 2. valide o preview com o cliente atual;

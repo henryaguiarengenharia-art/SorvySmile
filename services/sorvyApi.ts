@@ -77,6 +77,12 @@ function errorMessage(error: unknown): string {
     if (maybeMessage.includes("app-check-token-is-invalid")) {
       return "A verificação de segurança falhou. Atualize a página.";
     }
+    if (
+      maybeMessage === "internal"
+      || maybeMessage.includes("functions/internal")
+    ) {
+      return "O serviço de análise da foto está indisponível. Tente novamente em alguns instantes.";
+    }
     const details =
       "details" in error && typeof error.details === "object" && error.details
         ? (error.details as { message?: unknown }).message
@@ -88,8 +94,8 @@ function errorMessage(error: unknown): string {
 }
 
 function normalizeTier(value: unknown): PlanTier {
-  if (value === "network") return "elite";
-  if (value === "pro" || value === "elite") return value;
+  if (value === "elite") return "network";
+  if (value === "pro" || value === "network") return value;
   return "lite";
 }
 
@@ -97,6 +103,7 @@ function mapAccount(id: string, data: DocumentData): BillingAccount {
   const tier = normalizeTier(data.plan ?? data.tier);
   return {
     id,
+    ownerType: data.ownerType === "clinic" ? "clinic" : "dentist",
     tier,
     isActive: data.status === "active",
     startAt: Number(data.createdAtMs ?? Date.now()),
@@ -109,6 +116,8 @@ function mapAccount(id: string, data: DocumentData): BillingAccount {
     checkoutName: data.checkoutName ?? data.accountName,
     checkoutEmail: data.checkoutEmail,
     checkoutWhatsapp: data.checkoutWhatsapp,
+    seatsTotal: Number(data.seatsTotal ?? 1),
+    seatsUsed: Number(data.seatsUsed ?? 1),
   };
 }
 
@@ -131,6 +140,9 @@ function mapProfessional(id: string, data: DocumentData): DentistRecord {
     bioLink: data.bioLink ?? "",
     standardMessage: data.standardMessage ?? "",
     templates: Array.isArray(data.templates) ? data.templates : [],
+    teamTag: data.teamTag ?? "Dentista",
+    isOnDuty: data.isOnDuty !== false,
+    profileImage: data.profileImage ?? "",
   };
 }
 
@@ -154,7 +166,12 @@ async function currentWorkspaceUser(user: User): Promise<WorkspaceUser> {
   return {
     uid: user.uid,
     email: user.email ?? "",
-    role: snap.data().role === "hq" ? "hq" : "professional",
+    role:
+      snap.data().role === "hq"
+        ? "hq"
+        : snap.data().role === "clinic"
+          ? "clinic"
+          : "professional",
     accountId: snap.data().accountId,
     professionalId: snap.data().professionalId,
     status: snap.data().status,
@@ -178,7 +195,8 @@ export async function getPublicProfile(
     return {
       slug,
       accountId: snap.data().accountId,
-      professionalId: snap.data().professionalId,
+      professionalId: snap.data().professionalId ?? null,
+      ownerType: snap.data().ownerType === "clinic" ? "clinic" : "dentist",
       name: snap.data().name ?? "",
       whatsapp: snap.data().whatsapp ?? "",
       specialty: snap.data().specialty ?? "",
@@ -284,6 +302,21 @@ export async function saveLead(input: {
       consentVersion: CONSENT_VERSION,
     });
     return result.data.leadId;
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
+export async function recordPatientConversionAction(
+  sessionId: string,
+  action: "whatsapp_opened" | "contact_requested",
+): Promise<void> {
+  const callable = httpsCallable<
+    { sessionId: string; action: typeof action },
+    { ok: true }
+  >(functions, "recordPatientConversionAction");
+  try {
+    await callable({ sessionId, action });
   } catch (error) {
     throw new Error(errorMessage(error));
   }
@@ -451,6 +484,55 @@ export async function changeAccountStatus(
   await callable({ accountId, status, plan });
 }
 
+export async function createTeamMember(input: {
+  name: string;
+  email: string;
+  whatsapp: string;
+  specialty: string;
+  teamTag: string;
+  temporaryPassword: string;
+}): Promise<{ professionalId: string; slug: string }> {
+  const callable = httpsCallable<
+    typeof input,
+    { professionalId: string; slug: string }
+  >(functions, "createTeamMember");
+  try {
+    return (await callable(input)).data;
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
+export async function setTeamMemberStatus(
+  professionalId: string,
+  isActive: boolean,
+): Promise<void> {
+  const callable = httpsCallable<
+    { professionalId: string; isActive: boolean },
+    { ok: true }
+  >(functions, "setTeamMemberStatus");
+  try {
+    await callable({ professionalId, isActive });
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
+export async function assignLead(
+  leadId: string,
+  professionalId: string | null,
+): Promise<void> {
+  const callable = httpsCallable<
+    { leadId: string; professionalId: string | null },
+    { ok: true }
+  >(functions, "assignLead");
+  try {
+    await callable({ leadId, professionalId });
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
 export async function subscribeWorkspace(
   user: WorkspaceUser,
   onChange: (data: WorkspaceData) => void,
@@ -475,7 +557,13 @@ export async function subscribeWorkspace(
 
   const leadQuery = user.role === "hq"
     ? collection(db, "leads")
-    : query(collection(db, "leads"), where("accountId", "==", user.accountId));
+    : user.role === "clinic"
+      ? query(collection(db, "leads"), where("accountId", "==", user.accountId))
+      : query(
+          collection(db, "leads"),
+          where("accountId", "==", user.accountId),
+          where("professionalId", "==", user.professionalId),
+        );
   subscriptions.push(onSnapshot(leadQuery, (snapshot) => {
     state.leads = snapshot.docs
       .map((item) => mapLead(item.id, item.data()))
@@ -483,18 +571,31 @@ export async function subscribeWorkspace(
     emit();
   }, handleError));
 
-  const professionalQuery = user.role === "hq"
-    ? collection(db, "professionals")
-    : query(
-        collection(db, "professionals"),
-        where("accountId", "==", user.accountId),
+  if (user.role === "professional" && user.professionalId) {
+    subscriptions.push(onSnapshot(
+      doc(db, "professionals", user.professionalId),
+      (snapshot) => {
+        state.professionals = snapshot.exists()
+          ? [mapProfessional(snapshot.id, snapshot.data())]
+          : [];
+        emit();
+      },
+      handleError,
+    ));
+  } else {
+    const professionalQuery = user.role === "hq"
+      ? collection(db, "professionals")
+      : query(
+          collection(db, "professionals"),
+          where("accountId", "==", user.accountId),
+        );
+    subscriptions.push(onSnapshot(professionalQuery, (snapshot) => {
+      state.professionals = snapshot.docs.map((item) =>
+        mapProfessional(item.id, item.data()),
       );
-  subscriptions.push(onSnapshot(professionalQuery, (snapshot) => {
-    state.professionals = snapshot.docs.map((item) =>
-      mapProfessional(item.id, item.data()),
-    );
-    emit();
-  }, handleError));
+      emit();
+    }, handleError));
+  }
 
   if (user.role === "hq") {
     subscriptions.push(onSnapshot(collection(db, "accounts"), (snapshot) => {

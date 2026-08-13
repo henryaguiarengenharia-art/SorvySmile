@@ -10,11 +10,17 @@
     "test": "vitest run",
     "test:rules": "FIREBASE_EMULATORS_PATH=/tmp/sorvysmile-firebase-emulators XDG_CACHE_HOME=/tmp/sorvysmile-xdg-cache XDG_CONFIG_HOME=/tmp/sorvysmile-xdg-config FIREBASE_CLI_DISABLE_UPDATE_CHECK=true firebase emulators:exec --project demo-sorvy-smile --only firestore \"vitest run tests/firestore.rules.test.ts\"",
     "build:all": "npm run build && npm --prefix functions run build",
-    "test:all": "npm test && npm --prefix functions test"
+    "test:all": "npm test && npm --prefix functions test",
+    "setup:hml": "./scripts/setup-firebase-homologation.sh",
+    "deploy:hml": "./scripts/deploy-firebase-homologation-full.sh",
+    "repair:gemini:hml": "./scripts/repair-gemini-homologation.sh",
+    "seed:hml": "./scripts/seed-firebase-homologation.sh",
+    "smoke:hml": "node scripts/smoke-test-homologation.mjs"
   },
   "dependencies": {
     "firebase": "12.16.0",
     "lucide-react": "^0.462.0",
+    "@mediapipe/tasks-vision": "1.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

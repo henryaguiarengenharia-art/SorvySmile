@@ -29,19 +29,22 @@ describe("solicitação manual de assinatura", () => {
     });
   });
 
-  it("converte Network legado para Elite sem reintroduzir o produto antigo", () => {
+  it("converte Elite legado para Network preservando a conta", () => {
     const result = pendingSubscriptionFields(
       {
         name: "Cliente legado",
         email: "legado@exemplo.com",
         whatsapp: "5531888888888",
-        plan: "network",
+        plan: "elite",
         termsVersion: "2026-07",
       },
       1,
     );
 
-    expect(result.plan).toBe("elite");
+    expect(result.plan).toBe("network");
+    expect(result.ownerType).toBe("clinic");
+    expect(result.seatsTotal).toBe(2);
+    expect(result.extraSeatPrice).toBe(79);
     expect(result.requestedPrice).toBe(497);
     expect(result.monthlyLeadLimit).toBe(150);
   });

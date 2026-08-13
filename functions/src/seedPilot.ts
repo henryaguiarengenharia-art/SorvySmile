@@ -2,9 +2,11 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore } from "firebase-admin/firestore";
 import { normalizePlan, PLANS } from "./plans.js";
+import { requireSeedProject } from "./seedProject.js";
 import { slugSchema } from "./validation.js";
 
-if (getApps().length === 0) initializeApp();
+const seedProjectId = requireSeedProject();
+if (getApps().length === 0) initializeApp({ projectId: seedProjectId });
 
 const email = process.env.PILOT_EMAIL?.trim().toLowerCase();
 const password = process.env.PILOT_PASSWORD;
@@ -28,6 +30,8 @@ if (
   );
 }
 const plan = normalizePlan(requestedPlan);
+const accessRole = plan === "network" ? "clinic" : "professional";
+const ownerType = plan === "network" ? "clinic" : "dentist";
 
 const auth = getAuth();
 const db = getFirestore();
@@ -58,7 +62,7 @@ batch.set(
   {
     uid: user.uid,
     email,
-    role: "professional",
+    role: accessRole,
     accountId,
     professionalId,
     slug,
@@ -83,6 +87,10 @@ batch.set(
     status: "active",
     isActive: true,
     monthlyLeadLimit: PLANS[plan].monthlyLeadLimit,
+    ownerType,
+    seatsTotal: PLANS[plan].includedSeats,
+    seatsUsed: 1,
+    extraSeatPrice: PLANS[plan].extraSeatPrice,
     paymentProvider: "legacy_migration",
     paymentStatus: "confirmed",
     paymentConfirmedAtMs: now,
@@ -127,6 +135,7 @@ batch.set(
     name,
     whatsapp,
     plan,
+    ownerType,
     active: true,
     createdAtMs: now,
     updatedAtMs: now,
@@ -135,7 +144,7 @@ batch.set(
 );
 await batch.commit();
 await auth.setCustomUserClaims(user.uid, {
-  role: "professional",
+  role: accessRole,
   accountId,
   professionalId,
   accountStatus: "active",

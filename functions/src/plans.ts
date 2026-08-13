@@ -1,11 +1,13 @@
 import { MAX_VALIDATION_ATTEMPTS } from "./constants.js";
 
-export type PlanTier = "lite" | "pro" | "elite";
+export type PlanTier = "lite" | "pro" | "network";
 
 export interface PlanDefinition {
   label: string;
   price: number;
   monthlyLeadLimit: number;
+  includedSeats: number;
+  extraSeatPrice: number;
 }
 
 export const PLANS: Record<PlanTier, PlanDefinition> = {
@@ -13,22 +15,28 @@ export const PLANS: Record<PlanTier, PlanDefinition> = {
     label: "Lite",
     price: 149,
     monthlyLeadLimit: 15,
+    includedSeats: 1,
+    extraSeatPrice: 0,
   },
   pro: {
     label: "Pro",
     price: 297,
     monthlyLeadLimit: 60,
+    includedSeats: 1,
+    extraSeatPrice: 0,
   },
-  elite: {
-    label: "Elite",
+  network: {
+    label: "Network",
     price: 497,
     monthlyLeadLimit: 150,
+    includedSeats: 2,
+    extraSeatPrice: 79,
   },
 };
 
 export function normalizePlan(value: unknown): PlanTier {
-  if (value === "network") return "elite";
-  if (value === "lite" || value === "pro" || value === "elite") return value;
+  if (value === "elite") return "network";
+  if (value === "lite" || value === "pro" || value === "network") return value;
   throw new Error("Plano inválido.");
 }
 

@@ -6,13 +6,15 @@ export interface PlanCopy {
   features: string[];
 }
 
-export const PLAN_ORDER: PlanTier[] = ["lite", "pro", "elite"];
+export const PLAN_ORDER: PlanTier[] = ["lite", "pro", "network"];
 
 export const PLAN_CONFIGS: Record<PlanTier, PlanConfig> = {
   lite: {
     tier: "lite",
     price: 149,
     baseMonthlyLeadLimit: 15,
+    includedSeats: 1,
+    extraSeatPrice: 0,
     features: {
       aiBasic: true,
       aiFull: false,
@@ -23,12 +25,18 @@ export const PLAN_CONFIGS: Record<PlanTier, PlanConfig> = {
       scheduling: false,
       bioLink: true,
       assistantPreview: false,
+      gamification: false,
+      performanceKpis: false,
+      teamManagement: false,
+      leadAssignment: false,
     },
   },
   pro: {
     tier: "pro",
     price: 297,
     baseMonthlyLeadLimit: 60,
+    includedSeats: 1,
+    extraSeatPrice: 0,
     features: {
       aiBasic: true,
       aiFull: true,
@@ -39,12 +47,18 @@ export const PLAN_CONFIGS: Record<PlanTier, PlanConfig> = {
       scheduling: true,
       bioLink: true,
       assistantPreview: false,
+      gamification: true,
+      performanceKpis: false,
+      teamManagement: false,
+      leadAssignment: false,
     },
   },
-  elite: {
-    tier: "elite",
+  network: {
+    tier: "network",
     price: 497,
     baseMonthlyLeadLimit: 150,
+    includedSeats: 2,
+    extraSeatPrice: 79,
     features: {
       aiBasic: true,
       aiFull: true,
@@ -55,6 +69,10 @@ export const PLAN_CONFIGS: Record<PlanTier, PlanConfig> = {
       scheduling: true,
       bioLink: true,
       assistantPreview: true,
+      gamification: true,
+      performanceKpis: true,
+      teamManagement: true,
+      leadAssignment: true,
     },
   },
 };
@@ -80,17 +98,23 @@ export const PLAN_COPY: Record<PlanTier, PlanCopy> = {
       "Templates, alertas e agendamento",
     ],
   },
-  elite: {
-    name: "Elite",
-    tagline: "Automatize o acompanhamento",
+  network: {
+    name: "Network",
+    tagline: "Gerencie sua clínica e sua equipe",
     features: [
       "Até 150 triagens por mês",
       "Tudo do plano Pro",
-      "Assistente especializado (em validação)",
-      "Follow-up com liberação por etapas",
+      "2 acessos profissionais incluídos",
+      "KPIs de 7, 30 e 90 dias por dentista",
+      "Gestão de equipe e atribuição de leads",
     ],
   },
 };
+
+export const LEAD_ADD_ONS = [
+  { leads: 50, price: 99 },
+  { leads: 150, price: 249 },
+] as const;
 
 export function planName(tier: PlanTier): string {
   return PLAN_COPY[tier].name;
@@ -100,7 +124,10 @@ export function paymentUrlFor(tier: PlanTier): string {
   const urls: Record<PlanTier, string> = {
     lite: import.meta.env.VITE_PAYMENT_URL_LITE ?? "",
     pro: import.meta.env.VITE_PAYMENT_URL_PRO ?? "",
-    elite: import.meta.env.VITE_PAYMENT_URL_ELITE ?? "",
+    network:
+      import.meta.env.VITE_PAYMENT_URL_NETWORK
+      ?? import.meta.env.VITE_PAYMENT_URL_ELITE
+      ?? "",
   };
   return urls[tier].trim();
 }

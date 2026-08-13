@@ -19,8 +19,8 @@
 | `publicProfiles` | somente perfil ativo por slug | nenhuma |
 | `users` | próprio usuário ou HQ | nenhuma |
 | `accounts` | mesma conta ou HQ | nenhuma |
-| `professionals` | mesma conta ou HQ | campos seguros e Function |
-| `leads` | mesma conta ou HQ | somente campos de CRM; criação via Function |
+| `professionals` | HQ; clínica da conta; dentista lê o próprio perfil | campos seguros e Functions de equipe |
+| `leads` | HQ; clínica da conta; dentista lê somente os atribuídos | CRM; criação e atribuição via Function |
 | `triageSessions` | nenhuma | nenhuma |
 | `usage` | mesma conta ou HQ | nenhuma |
 | `usageReservations` | nenhuma | nenhuma |
@@ -33,12 +33,18 @@ autoritativos no servidor.
 - JPEG, PNG e WebP;
 - no máximo 5 MB no navegador e no backend;
 - consentimento específico antes da primeira chamada;
-- confirmação de maioridade e de que a foto pertence ao usuário;
+- aceite único e destacado reúne maioridade, titularidade e processamento temporário;
 - até três tentativas de validação por sessão;
 - hash impede analisar uma imagem diferente da que foi validada;
 - a faixa Bom/Atenção/Avaliação é calculada deterministicamente a partir do
   índice de harmonia e nunca representa urgência clínica;
+- o índice visual geral mostrado ao paciente é a média aritmética dos índices
+  aparentes de harmonia, brilho, simetria, alinhamento e refletividade; serve
+  somente para resumir a leitura e não é escore clínico;
 - a Sorvy não grava a foto no Firestore, Storage ou lead;
+- a orientação de câmera usa landmarks e luminosidade processados somente no
+  aparelho; a interface destaca a boca e recorta o sorriso antes da confirmação;
+  nenhum quadro do vídeo é persistido ou enviado;
 - a Function envia a imagem temporariamente à API paga do Gemini;
 - a sessão expira em 30 minutos e é removida por tarefa agendada;
 - o resultado é informativo e não deve afirmar diagnóstico.
@@ -60,11 +66,14 @@ com concorrência controlada, como proteção adicional de custo.
 ## Consentimentos e retenção
 
 - versão atual de consentimento: `2026-07`;
-- foto, contato e privacidade têm campos separados;
+- uso da imagem, contato e privacidade têm autorizações separadas; maioridade,
+  titularidade e processamento ficam reunidos no aceite específico da imagem;
 - data, versão e responsável pelo link ficam registrados;
 - leads expiram após 365 dias;
 - o profissional ou a HQ pode excluir antes;
 - fotos nunca são anexadas ao lead.
+- o clique para abrir o WhatsApp e o pedido para receber contato são registrados
+  sem criar novos dados de contato e ajudam a priorizar o atendimento no painel.
 
 ## Pagamento
 
@@ -76,10 +85,10 @@ restrita para ativar, pausar ou marcar inadimplência.
 ## Pendências para produção
 
 - revisão jurídica dos textos e identificação formal do controlador;
-- renomear no checkout da InfinitePay o antigo produto Network para Elite;
+- confirmar nome Network no checkout da InfinitePay sem alterar o link atual;
 - projeto Firebase Blaze e região;
 - API paga do Gemini e Secret Manager;
 - App Check com reCAPTCHA Enterprise;
 - criação do usuário HQ;
-- credenciais e WhatsApp do cliente piloto Elite;
+- credenciais e WhatsApp do cliente piloto Network;
 - teste das regras no emulador com Java 21+.

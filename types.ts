@@ -3,6 +3,7 @@ export type AppView =
   | "landing"
   | "patient"
   | "dentist-portal"
+  | "admin-dashboard"
   | "pricing"
   | "hq-dashboard"
   | "checkout-pix"
@@ -12,11 +13,13 @@ export type AppView =
   | "privacy"
   | "subscriber-terms";
 
-export type PlanTier = 'lite' | 'pro' | 'elite';
+export type PlanTier = 'lite' | 'pro' | 'network';
 export interface PlanConfig {
   tier: PlanTier;
   price: number;
   baseMonthlyLeadLimit: number;
+  includedSeats: number;
+  extraSeatPrice: number;
   features: {
     aiBasic: boolean;
     aiFull: boolean;
@@ -27,6 +30,10 @@ export interface PlanConfig {
     scheduling: boolean;
     bioLink: boolean;
     assistantPreview: boolean;
+    gamification: boolean;
+    performanceKpis: boolean;
+    teamManagement: boolean;
+    leadAssignment: boolean;
   };
 }
 
@@ -35,6 +42,7 @@ export type AccountRisk = 'ok' | 'attention' | 'critical';
 
 export interface BillingAccount {
   id: string;
+  ownerType?: 'dentist' | 'clinic';
   tier: PlanTier;
   isActive: boolean;
   startAt: number;
@@ -50,6 +58,8 @@ export interface BillingAccount {
   checkoutName?: string;
   checkoutEmail?: string;
   checkoutWhatsapp?: string;
+  seatsTotal?: number;
+  seatsUsed?: number;
 }
 
 export interface SmileScores {
@@ -94,6 +104,9 @@ export interface LeadRecord {
   dentistId?: string | null;
   scheduledAt?: number | null;
   firstContactAt?: number | null;
+  contactRequestedAtMs?: number | null;
+  patientOpenedWhatsAppAtMs?: number | null;
+  contactPreference?: 'patient_whatsapp' | 'professional_contact';
   intentCategory?: string;
   recommendedSpecialty?: string;
   source?: 'direct' | 'bio';
@@ -111,7 +124,7 @@ export interface LeadRecord {
 
 export type DentistPlan = PlanTier;
 
-export type UserRole = 'hq' | 'dentist';
+export type UserRole = 'hq' | 'clinic' | 'dentist';
 
 export interface DentistRecord {
   id: string;
@@ -131,12 +144,16 @@ export interface DentistRecord {
   bio?: string;
   standardMessage?: string;
   templates?: string[];
+  teamTag?: string;
+  isOnDuty?: boolean;
+  profileImage?: string;
 }
 
 export interface PublicProfessionalProfile {
   slug: string;
   accountId: string;
-  professionalId: string;
+  professionalId?: string | null;
+  ownerType?: 'dentist' | 'clinic';
   name: string;
   whatsapp: string;
   specialty?: string;
@@ -150,7 +167,7 @@ export interface PublicProfessionalProfile {
 export interface WorkspaceUser {
   uid: string;
   email: string;
-  role: 'hq' | 'professional';
+  role: 'hq' | 'clinic' | 'professional';
   accountId?: string;
   professionalId?: string;
   status?: AccountStatus;

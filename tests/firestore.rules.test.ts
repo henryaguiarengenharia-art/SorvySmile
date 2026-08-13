@@ -51,6 +51,11 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
           accountId: "acc_b",
           professionalId: "pro_b",
         }),
+        setDoc(doc(db, "users", "clinic_a"), {
+          role: "clinic",
+          accountId: "acc_a",
+          professionalId: "pro_manager",
+        }),
         setDoc(doc(db, "users", "hq"), { role: "hq" }),
         setDoc(doc(db, "accounts", "acc_a"), {
           status: "active",
@@ -65,6 +70,11 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
           name: "Profissional A",
           plan: "pro",
         }),
+        setDoc(doc(db, "professionals", "pro_c"), {
+          accountId: "acc_a",
+          name: "Profissional C",
+          plan: "network",
+        }),
         setDoc(doc(db, "leads", "lead_a"), {
           accountId: "acc_a",
           professionalId: "pro_a",
@@ -77,6 +87,12 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
           status: "new",
           lead: { name: "Outro", whatsapp: "5511888888888" },
         }),
+        setDoc(doc(db, "leads", "lead_c"), {
+          accountId: "acc_a",
+          professionalId: "pro_c",
+          status: "new",
+          lead: { name: "Terceiro", whatsapp: "5511777777777" },
+        }),
         setDoc(doc(db, "triageSessions", "session_a"), {
           uid: "anon",
           accountId: "acc_a",
@@ -85,6 +101,10 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
           accountId: "acc_a",
           month: "2026-07",
           triages: 3,
+        }),
+        setDoc(doc(db, "analysisCache", "visual-calibration-v1_hash"), {
+          scores: { harmonyIndex: 60 },
+          expiresAtMs: Date.now() + 86_400_000,
         }),
       ]);
     });
@@ -106,7 +126,18 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
     await assertFails(getDoc(doc(anonymous, "triageSessions", "session_a")));
   });
 
-  it("limita o profissional à própria conta", async () => {
+  it("não expõe o cache temporário nem mesmo para usuários internos", async () => {
+    const anonymous = environment.unauthenticatedContext().firestore();
+    const hq = environment.authenticatedContext("hq").firestore();
+    const cache = doc(anonymous, "analysisCache", "visual-calibration-v1_hash");
+
+    await assertFails(getDoc(cache));
+    await assertFails(
+      getDoc(doc(hq, "analysisCache", "visual-calibration-v1_hash")),
+    );
+  });
+
+  it("limita o profissional aos leads atribuídos a ele", async () => {
     const professional = environment
       .authenticatedContext("user_a")
       .firestore();
@@ -114,9 +145,19 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
     await assertSucceeds(getDoc(doc(professional, "leads", "lead_a")));
     await assertFails(getDoc(doc(professional, "accounts", "acc_b")));
     await assertFails(getDoc(doc(professional, "leads", "lead_b")));
+    await assertFails(getDoc(doc(professional, "leads", "lead_c")));
     await assertSucceeds(
       getDoc(doc(professional, "usage", "acc_a_2026-07")),
     );
+  });
+
+  it("permite ao administrador da clínica gerenciar toda a própria equipe", async () => {
+    const clinic = environment.authenticatedContext("clinic_a").firestore();
+    await assertSucceeds(getDoc(doc(clinic, "leads", "lead_a")));
+    await assertSucceeds(getDoc(doc(clinic, "leads", "lead_c")));
+    await assertSucceeds(getDoc(doc(clinic, "professionals", "pro_a")));
+    await assertSucceeds(getDoc(doc(clinic, "professionals", "pro_c")));
+    await assertFails(getDoc(doc(clinic, "leads", "lead_b")));
   });
 
   it("impede alteração direta de cobrança até mesmo pelo HQ", async () => {
@@ -167,7 +208,7 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
     );
     await assertFails(
       updateDoc(doc(professional, "professionals", "pro_a"), {
-        plan: "elite",
+        plan: "network",
         updatedAtMs: 124,
       }),
     );

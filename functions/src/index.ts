@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
-import { defineSecret, defineString } from "firebase-functions/params";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import {
+  defineBoolean,
+  defineSecret,
+  defineString,
+} from "firebase-functions/params";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { setGlobalOptions } from "firebase-functions/v2/options";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -15,8 +19,14 @@ import {
 } from "./constants.js";
 import {
   analyzePhotoWithGemini,
+  describeAiFailure,
   validatePhotoWithGemini,
 } from "./gemini.js";
+import {
+  ANALYSIS_CACHE_TTL_MS,
+  analysisCacheId,
+  cachedAnalysisScores,
+} from "./analysisCache.js";
 import {
   monthKey,
   normalizePlan,
@@ -30,10 +40,14 @@ import {
   captureLeadSchema,
   checkoutSchema,
   imageSchema,
+  leadAssignmentSchema,
   leadIdSchema,
+  patientConversionActionSchema,
+  professionalStatusSchema,
   profilePatchSchema,
   slugify,
   startTriageSchema,
+  teamMemberSchema,
 } from "./validation.js";
 
 if (getApps().length === 0) initializeApp();
@@ -44,6 +58,9 @@ const auth = getAuth();
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const GEMINI_MODEL = defineString("GEMINI_MODEL", {
   default: "gemini-3.6-flash",
+});
+const ENFORCE_APP_CHECK = defineBoolean("ENFORCE_APP_CHECK", {
+  default: true,
 });
 
 setGlobalOptions({
@@ -63,7 +80,7 @@ type SessionState =
 interface SessionRecord {
   uid: string;
   accountId: string;
-  professionalId: string;
+  professionalId: string | null;
   slug: string;
   expiresAtMs: number;
   state: SessionState;
@@ -84,13 +101,13 @@ interface SessionRecord {
 interface AccountRecord {
   ownerUid: string;
   professionalId: string;
-  plan: PlanTier | "network";
+  plan: PlanTier | "elite";
   status: "pending" | "active" | "overdue" | "paused";
   slug: string;
 }
 
 interface UserRecord {
-  role?: "hq" | "professional";
+  role?: "hq" | "clinic" | "professional";
   accountId?: string;
   professionalId?: string;
   slug?: string;
@@ -144,6 +161,30 @@ async function requireHq(uid: string): Promise<void> {
   if (user.role !== "hq") {
     throw new HttpsError("permission-denied", "Acesso restrito à administração.");
   }
+}
+
+async function requireClinicManager(uid: string): Promise<
+  UserRecord & { accountId: string }
+> {
+  const user = await readUser(uid);
+  if (user.role !== "clinic" || !user.accountId) {
+    throw new HttpsError(
+      "permission-denied",
+      "Acesso restrito à administração da clínica.",
+    );
+  }
+  const account = await db.doc(`accounts/${user.accountId}`).get();
+  if (
+    !account.exists
+    || account.data()?.status !== "active"
+    || normalizePlan(account.data()?.plan) !== "network"
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "A gestão de equipe exige uma conta Network ativa.",
+    );
+  }
+  return { ...user, accountId: user.accountId };
 }
 
 function validateSession(session: SessionRecord, uid: string): void {
@@ -204,7 +245,7 @@ async function releasePhotoValidationAttempt(
 
 export const startTriage = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
@@ -216,7 +257,8 @@ export const startTriage = onCall(
 
     const profile = profileSnap.data() as {
       accountId: string;
-      professionalId: string;
+      professionalId?: string | null;
+      ownerType?: "dentist" | "clinic";
     };
     const accountSnap = await db.doc(`accounts/${profile.accountId}`).get();
     if (!accountSnap.exists || accountSnap.data()?.status !== "active") {
@@ -231,7 +273,8 @@ export const startTriage = onCall(
     await sessionRef.set({
       uid,
       accountId: profile.accountId,
-      professionalId: profile.professionalId,
+      professionalId:
+        profile.ownerType === "clinic" ? null : profile.professionalId ?? null,
       slug: input.slug,
       state: "started",
       photoConsent: true,
@@ -253,8 +296,8 @@ export const startTriage = onCall(
 
 export const validateSmilePhoto = onCall(
   {
-    enforceAppCheck: true,
-    consumeAppCheckToken: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
+    consumeAppCheckToken: ENFORCE_APP_CHECK,
     secrets: [GEMINI_API_KEY],
     timeoutSeconds: 60,
     memory: "512MiB",
@@ -349,7 +392,7 @@ export const validateSmilePhoto = onCall(
       });
       return validation;
     } catch (error) {
-      console.error("Falha de validação da imagem", error);
+      console.error("Falha de validação da imagem", describeAiFailure(error));
       await releasePhotoValidationAttempt(
         reservation.accountId,
         input.sessionId,
@@ -366,8 +409,8 @@ export const validateSmilePhoto = onCall(
 
 export const analyzeSmilePhoto = onCall(
   {
-    enforceAppCheck: true,
-    consumeAppCheckToken: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
+    consumeAppCheckToken: ENFORCE_APP_CHECK,
     secrets: [GEMINI_API_KEY],
     timeoutSeconds: 90,
     memory: "512MiB",
@@ -379,6 +422,7 @@ export const analyzeSmilePhoto = onCall(
     const usageMonth = monthKey();
     const usageRefId = `${input.sessionId}_${usageMonth}`;
     const digest = imageHash(input.imageBase64);
+    const cacheRef = db.doc(`analysisCache/${analysisCacheId(digest)}`);
 
     const reservation = await db.runTransaction(async (transaction) => {
       const sessionSnap = await transaction.get(sessionRef);
@@ -387,7 +431,9 @@ export const analyzeSmilePhoto = onCall(
       }
       const session = sessionSnap.data() as SessionRecord;
       validateSession(session, uid);
-      if (session.scores) return { existing: session.scores, session };
+      if (session.scores) {
+        return { existing: session.scores, cached: null, session };
+      }
       if (
         session.state !== "validated"
         || session.validation?.isAdequate !== true
@@ -406,9 +452,10 @@ export const analyzeSmilePhoto = onCall(
 
       const accountRef = db.doc(`accounts/${session.accountId}`);
       const usageRef = db.doc(`usage/${session.accountId}_${usageMonth}`);
-      const [accountSnap, usageSnap] = await Promise.all([
+      const [accountSnap, usageSnap, cacheSnap] = await Promise.all([
         transaction.get(accountRef),
         transaction.get(usageRef),
+        transaction.get(cacheRef),
       ]);
       if (!accountSnap.exists) {
         throw new HttpsError("not-found", "Conta não encontrada.");
@@ -419,6 +466,7 @@ export const analyzeSmilePhoto = onCall(
       }
       const plan = PLANS[normalizePlan(account.plan)];
       const used = Number(usageSnap.data()?.triages ?? 0);
+      const cached = cachedAnalysisScores(cacheSnap.data());
       if (used >= plan.monthlyLeadLimit) {
         throw new HttpsError(
           "resource-exhausted",
@@ -442,18 +490,30 @@ export const analyzeSmilePhoto = onCall(
           accountId: session.accountId,
           sessionId: input.sessionId,
           month: usageMonth,
-          state: "reserved",
+          state: cached ? "consumed" : "reserved",
           createdAtMs: Date.now(),
+          updatedAtMs: Date.now(),
         },
       );
-      transaction.update(sessionRef, {
-        state: "analyzing",
-        updatedAtMs: Date.now(),
-      });
-      return { existing: null, session };
+      transaction.update(
+        sessionRef,
+        cached
+          ? {
+              scores: cached,
+              state: "analyzed",
+              analyzedAtMs: Date.now(),
+              updatedAtMs: Date.now(),
+            }
+          : {
+              state: "analyzing",
+              updatedAtMs: Date.now(),
+            },
+      );
+      return { existing: null, cached, session };
     });
 
     if (reservation.existing) return reservation.existing;
+    if (reservation.cached) return reservation.cached;
 
     try {
       const scores = await analyzePhotoWithGemini(
@@ -463,20 +523,28 @@ export const analyzeSmilePhoto = onCall(
         input.mimeType,
       );
       await db.runTransaction(async (transaction) => {
+        const now = Date.now();
         transaction.update(sessionRef, {
           scores,
           state: "analyzed",
-          analyzedAtMs: Date.now(),
-          updatedAtMs: Date.now(),
+          analyzedAtMs: now,
+          updatedAtMs: now,
         });
         transaction.update(db.doc(`usageReservations/${usageRefId}`), {
           state: "consumed",
-          updatedAtMs: Date.now(),
+          updatedAtMs: now,
+        });
+        // Somente o resultado e o hash criptográfico são reutilizados; a imagem
+        // nunca é gravada no cache.
+        transaction.set(cacheRef, {
+          scores,
+          createdAtMs: now,
+          expiresAtMs: now + ANALYSIS_CACHE_TTL_MS,
         });
       });
       return scores;
     } catch (error) {
-      console.error("Falha de análise da imagem", error);
+      console.error("Falha de análise da imagem", describeAiFailure(error));
       await releaseUsageReservation(usageRefId, input.sessionId, usageMonth);
       throw new HttpsError(
         "internal",
@@ -543,7 +611,7 @@ async function releaseUsageReservation(
 
 export const captureLead = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
@@ -590,7 +658,7 @@ export const captureLead = onCall(
         },
         scores,
         photoAdequate: true,
-        matchStatus: "matched",
+        matchStatus: session.professionalId ? "matched" : "idle",
         status: "new",
         source: "bio",
         intentCategory: scores.intentCategory ?? "Avaliação estética",
@@ -619,9 +687,63 @@ export const captureLead = onCall(
   },
 );
 
+export const recordPatientConversionAction = onCall(
+  {
+    enforceAppCheck: ENFORCE_APP_CHECK,
+  },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(patientConversionActionSchema, request.data);
+    const sessionRef = db.doc(`triageSessions/${input.sessionId}`);
+
+    return db.runTransaction(async (transaction) => {
+      const sessionSnap = await transaction.get(sessionRef);
+      if (!sessionSnap.exists) {
+        throw new HttpsError("not-found", "Triagem não encontrada.");
+      }
+      const session = sessionSnap.data() as SessionRecord;
+      validateSession(session, uid);
+      if (!session.leadId || session.state !== "captured") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Compartilhe seu contato antes de escolher o próximo passo.",
+        );
+      }
+
+      const leadRef = db.doc(`leads/${session.leadId}`);
+      const leadSnap = await transaction.get(leadRef);
+      if (
+        !leadSnap.exists
+        || leadSnap.data()?.accountId !== session.accountId
+        || leadSnap.data()?.contactConsent !== true
+      ) {
+        throw new HttpsError(
+          "permission-denied",
+          "A autorização de contato não foi encontrada.",
+        );
+      }
+
+      const now = Date.now();
+      const lead = leadSnap.data() ?? {};
+      const update: Record<string, unknown> = {
+        updatedAtMs: now,
+      };
+      if (input.action === "contact_requested") {
+        update.contactPreference = "professional_contact";
+        update.contactRequestedAtMs = lead.contactRequestedAtMs ?? now;
+      } else {
+        update.contactPreference = "patient_whatsapp";
+        update.patientOpenedWhatsAppAtMs = lead.patientOpenedWhatsAppAtMs ?? now;
+      }
+      transaction.update(leadRef, update);
+      return { ok: true };
+    });
+  },
+);
+
 export const createPendingSubscription = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
@@ -640,13 +762,14 @@ export const createPendingSubscription = onCall(
     }
 
     const plan = normalizePlan(input.plan);
+    const accessRole = plan === "network" ? "clinic" : "professional";
     const now = Date.now();
     const subscription = pendingSubscriptionFields(input, now);
     const userRef = db.doc(`users/${uid}`);
     const existingUser = await userRef.get();
     if (
       existingUser.exists
-      && existingUser.data()?.role !== "professional"
+      && !["professional", "clinic"].includes(existingUser.data()?.role)
     ) {
       throw new HttpsError(
         "permission-denied",
@@ -679,6 +802,7 @@ export const createPendingSubscription = onCall(
         userRef,
         {
           email: input.email,
+          role: accessRole,
           status: "pending",
           updatedAtMs: now,
         },
@@ -716,6 +840,7 @@ export const createPendingSubscription = onCall(
           whatsapp: input.whatsapp,
           specialty: input.specialty,
           plan,
+          ownerType: plan === "network" ? "clinic" : "dentist",
           active: false,
           updatedAtMs: now,
         },
@@ -731,7 +856,7 @@ export const createPendingSubscription = onCall(
       batch.set(userRef, {
         uid,
         email: input.email,
-        role: "professional",
+        role: accessRole,
         accountId,
         professionalId,
         slug,
@@ -773,6 +898,7 @@ export const createPendingSubscription = onCall(
         whatsapp: input.whatsapp,
         specialty: input.specialty,
         plan,
+        ownerType: plan === "network" ? "clinic" : "dentist",
         active: false,
         createdAtMs: now,
         updatedAtMs: now,
@@ -789,14 +915,14 @@ export const createPendingSubscription = onCall(
 
 export const updateProfessionalProfile = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
     const input = parseInput(profilePatchSchema, request.data);
     const user = await readUser(uid);
     if (
-      user.role !== "professional"
+      !["professional", "clinic"].includes(user.role ?? "")
       || !user.accountId
       || !user.professionalId
       || !user.slug
@@ -846,7 +972,7 @@ export const updateProfessionalProfile = onCall(
 
 export const setAccountStatus = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
@@ -862,6 +988,7 @@ export const setAccountStatus = onCall(
       ? normalizePlan(input.plan)
       : normalizePlan(account.plan);
     const active = input.status === "active";
+    const accessRole = plan === "network" ? "clinic" : "professional";
     const now = Date.now();
     const professionalRef = db.doc(
       `professionals/${account.professionalId}`,
@@ -875,6 +1002,9 @@ export const setAccountStatus = onCall(
       tier: plan,
       requestedPlan: plan,
       monthlyLeadLimit: PLANS[plan].monthlyLeadLimit,
+      ownerType: plan === "network" ? "clinic" : "dentist",
+      seatsTotal: PLANS[plan].includedSeats,
+      extraSeatPrice: PLANS[plan].extraSeatPrice,
       status: input.status,
       isActive: active,
       activatedAtMs: active
@@ -906,6 +1036,7 @@ export const setAccountStatus = onCall(
     batch.set(
       db.doc(`users/${account.ownerUid}`),
       {
+        role: accessRole,
         status: input.status,
         updatedAtMs: now,
       },
@@ -933,6 +1064,7 @@ export const setAccountStatus = onCall(
         state: professional?.state ?? "",
         bio: professional?.bio ?? "",
         plan,
+        ownerType: plan === "network" ? "clinic" : "dentist",
         active,
         updatedAtMs: now,
       },
@@ -940,7 +1072,7 @@ export const setAccountStatus = onCall(
     );
     await batch.commit();
     await auth.setCustomUserClaims(account.ownerUid, {
-      role: "professional",
+      role: accessRole,
       accountId: input.accountId,
       professionalId: account.professionalId,
       accountStatus: input.status,
@@ -949,9 +1081,245 @@ export const setAccountStatus = onCall(
   },
 );
 
+export const createTeamMember = onCall(
+  {
+    enforceAppCheck: ENFORCE_APP_CHECK,
+  },
+  async (request) => {
+    const managerUid = requireUid(request);
+    const manager = await requireClinicManager(managerUid);
+    const input = parseInput(teamMemberSchema, request.data);
+    const accountRef = db.doc(`accounts/${manager.accountId}`);
+    const accountSnap = await accountRef.get();
+    const seatsTotal = Number(
+      accountSnap.data()?.seatsTotal ?? PLANS.network.includedSeats,
+    );
+    const activeMembers = await db
+      .collection("professionals")
+      .where("accountId", "==", manager.accountId)
+      .where("isActive", "==", true)
+      .get();
+    if (activeMembers.size >= seatsTotal) {
+      throw new HttpsError(
+        "resource-exhausted",
+        `Todos os ${seatsTotal} acessos da conta estão em uso.`,
+      );
+    }
+
+    let firebaseUser;
+    try {
+      firebaseUser = await auth.createUser({
+        email: input.email,
+        password: input.temporaryPassword,
+        displayName: input.name,
+        disabled: false,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.includes("email-already-exists")) {
+        throw new HttpsError("already-exists", "Este email já possui um acesso.");
+      }
+      throw error;
+    }
+
+    const professionalId = `pro_${firebaseUser.uid}`;
+    const slugBase = slugify(input.name) || "dentista";
+    const slug = `${slugBase}-${firebaseUser.uid.slice(0, 6).toLowerCase()}`;
+    const now = Date.now();
+    const batch = db.batch();
+    batch.set(db.doc(`users/${firebaseUser.uid}`), {
+      uid: firebaseUser.uid,
+      email: input.email,
+      role: "professional",
+      accountId: manager.accountId,
+      professionalId,
+      slug,
+      status: "active",
+      createdAtMs: now,
+      updatedAtMs: now,
+    });
+    batch.set(db.doc(`professionals/${professionalId}`), {
+      id: professionalId,
+      accountId: manager.accountId,
+      ownerUid: firebaseUser.uid,
+      name: input.name,
+      email: input.email,
+      whatsapp: input.whatsapp,
+      specialty: input.specialty,
+      teamTag: input.teamTag,
+      publicSlug: slug,
+      plan: "network",
+      role: "dentist",
+      isActive: true,
+      createdAt: now,
+      createdAtMs: now,
+      updatedAtMs: now,
+    });
+    batch.set(db.doc(`publicProfiles/${slug}`), {
+      slug,
+      accountId: manager.accountId,
+      professionalId,
+      ownerType: "dentist",
+      name: input.name,
+      whatsapp: input.whatsapp,
+      specialty: input.specialty,
+      plan: "network",
+      active: true,
+      createdAtMs: now,
+      updatedAtMs: now,
+    });
+    batch.set(
+      accountRef,
+      {
+        seatsUsed: FieldValue.increment(1),
+        updatedAtMs: now,
+      },
+      { merge: true },
+    );
+    try {
+      await auth.setCustomUserClaims(firebaseUser.uid, {
+        role: "professional",
+        accountId: manager.accountId,
+        professionalId,
+        accountStatus: "active",
+      });
+      await batch.commit();
+    } catch (error) {
+      await auth.deleteUser(firebaseUser.uid).catch(() => undefined);
+      throw error;
+    }
+    return { professionalId, slug };
+  },
+);
+
+export const setTeamMemberStatus = onCall(
+  {
+    enforceAppCheck: ENFORCE_APP_CHECK,
+  },
+  async (request) => {
+    const managerUid = requireUid(request);
+    const manager = await requireClinicManager(managerUid);
+    const input = parseInput(professionalStatusSchema, request.data);
+    const professionalRef = db.doc(`professionals/${input.professionalId}`);
+    const professionalSnap = await professionalRef.get();
+    if (
+      !professionalSnap.exists
+      || professionalSnap.data()?.accountId !== manager.accountId
+    ) {
+      throw new HttpsError("not-found", "Profissional não encontrado.");
+    }
+    if (professionalSnap.data()?.ownerUid === managerUid) {
+      throw new HttpsError(
+        "failed-precondition",
+        "O administrador principal não pode ser desativado por este painel.",
+      );
+    }
+    const currentlyActive = professionalSnap.data()?.isActive === true;
+    if (currentlyActive === input.isActive) return { ok: true };
+    if (input.isActive) {
+      const [accountSnap, activeMembers] = await Promise.all([
+        db.doc(`accounts/${manager.accountId}`).get(),
+        db
+          .collection("professionals")
+          .where("accountId", "==", manager.accountId)
+          .where("isActive", "==", true)
+          .get(),
+      ]);
+      const seatsTotal = Number(
+        accountSnap.data()?.seatsTotal ?? PLANS.network.includedSeats,
+      );
+      if (activeMembers.size >= seatsTotal) {
+        throw new HttpsError(
+          "resource-exhausted",
+          `Todos os ${seatsTotal} acessos da conta estão em uso.`,
+        );
+      }
+    }
+
+    const memberUid = String(professionalSnap.data()?.ownerUid ?? "");
+    const slug = String(professionalSnap.data()?.publicSlug ?? "");
+    const now = Date.now();
+    const batch = db.batch();
+    batch.update(professionalRef, {
+      isActive: input.isActive,
+      updatedAtMs: now,
+    });
+    if (memberUid) {
+      batch.set(
+        db.doc(`users/${memberUid}`),
+        {
+          status: input.isActive ? "active" : "paused",
+          updatedAtMs: now,
+        },
+        { merge: true },
+      );
+    }
+    if (slug) {
+      batch.set(
+        db.doc(`publicProfiles/${slug}`),
+        { active: input.isActive, updatedAtMs: now },
+        { merge: true },
+      );
+    }
+    batch.set(
+      db.doc(`accounts/${manager.accountId}`),
+      {
+        seatsUsed: FieldValue.increment(input.isActive ? 1 : -1),
+        updatedAtMs: now,
+      },
+      { merge: true },
+    );
+    await batch.commit();
+    if (memberUid) {
+      await auth.updateUser(memberUid, { disabled: !input.isActive });
+    }
+    return { ok: true };
+  },
+);
+
+export const assignLead = onCall(
+  {
+    enforceAppCheck: ENFORCE_APP_CHECK,
+  },
+  async (request) => {
+    const managerUid = requireUid(request);
+    const manager = await requireClinicManager(managerUid);
+    const input = parseInput(leadAssignmentSchema, request.data);
+    const leadRef = db.doc(`leads/${input.leadId}`);
+    const leadSnap = await leadRef.get();
+    if (!leadSnap.exists || leadSnap.data()?.accountId !== manager.accountId) {
+      throw new HttpsError("not-found", "Lead não encontrado.");
+    }
+    if (input.professionalId) {
+      const professional = await db
+        .doc(`professionals/${input.professionalId}`)
+        .get();
+      if (
+        !professional.exists
+        || professional.data()?.accountId !== manager.accountId
+        || professional.data()?.isActive !== true
+      ) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Escolha um profissional ativo desta clínica.",
+        );
+      }
+    }
+    await leadRef.update({
+      professionalId: input.professionalId,
+      dentistId: input.professionalId,
+      matchStatus: input.professionalId ? "matched" : "idle",
+      assignedAtMs: Date.now(),
+      assignedBy: managerUid,
+      updatedAtMs: Date.now(),
+    });
+    return { ok: true };
+  },
+);
+
 export const deleteLead = onCall(
   {
-    enforceAppCheck: true,
+    enforceAppCheck: ENFORCE_APP_CHECK,
   },
   async (request) => {
     const uid = requireUid(request);
@@ -964,7 +1332,12 @@ export const deleteLead = onCall(
       throw new HttpsError("not-found", "Lead não encontrado.");
     }
     const accountId = String(leadSnap.data()?.accountId ?? "");
-    if (user.role !== "hq" && user.accountId !== accountId) {
+    const ownsAccount = user.accountId === accountId;
+    const ownsLead =
+      user.role === "professional"
+      && user.professionalId === leadSnap.data()?.professionalId;
+    const managesClinic = user.role === "clinic" && ownsAccount;
+    if (user.role !== "hq" && !ownsLead && !managesClinic) {
       throw new HttpsError(
         "permission-denied",
         "Você não pode excluir este lead.",
@@ -981,15 +1354,29 @@ export const cleanupExpiredTriageSessions = onSchedule(
     timeZone: "America/Sao_Paulo",
   },
   async () => {
-    const expired = await db
-      .collection("triageSessions")
-      .where("expiresAtMs", "<", Date.now())
-      .limit(500)
-      .get();
-    if (expired.empty) return;
-    const batch = db.batch();
-    expired.docs.forEach((document) => batch.delete(document.ref));
-    await batch.commit();
+    const now = Date.now();
+    const [expiredSessions, expiredAnalysisCache] = await Promise.all([
+      db
+        .collection("triageSessions")
+        .where("expiresAtMs", "<", now)
+        .limit(500)
+        .get(),
+      db
+        .collection("analysisCache")
+        .where("expiresAtMs", "<", now)
+        .limit(500)
+        .get(),
+    ]);
+    if (!expiredSessions.empty) {
+      const sessionBatch = db.batch();
+      expiredSessions.docs.forEach((document) => sessionBatch.delete(document.ref));
+      await sessionBatch.commit();
+    }
+    if (!expiredAnalysisCache.empty) {
+      const cacheBatch = db.batch();
+      expiredAnalysisCache.docs.forEach((document) => cacheBatch.delete(document.ref));
+      await cacheBatch.commit();
+    }
   },
 );
 
