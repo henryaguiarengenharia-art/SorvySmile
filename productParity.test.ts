@@ -14,7 +14,8 @@ const functionsSource = readFileSync("functions/src/index.ts", "utf8");
 
 describe("paridade do produto Sorvy Smile", () => {
   it("mantém a página inicial orientada à triagem do paciente", () => {
-    expect(appSource).toContain("Quero conhecer meu sorriso");
+    expect(appSource).toContain("Descubra o potencial do seu");
+    expect(appSource).toContain("Mapear meu sorriso agora");
     expect(appSource).toContain("Foto guiada");
     expect(appSource).toContain("Primeira descoberta");
     expect(appSource).toContain("Mapa do Sorriso");
@@ -24,12 +25,14 @@ describe("paridade do produto Sorvy Smile", () => {
     expect(cameraSource).toContain("navigator.mediaDevices.getUserMedia");
     expect(cameraSource).toContain("FaceLandmarker.createFromOptions");
     expect(cameraSource).toContain("Nenhum quadro do vídeo é enviado ou salvo");
+    expect(cameraSource).toContain("smileCropRect");
+    expect(cameraSource).toContain("moldura acompanha apenas a região da boca");
     expect(cameraSource).toContain('capture="user"');
     expect(journeySource).toContain("preparePhotoFile(file)");
     expect(journeySource).not.toContain("new FileReader()");
-    expect(journeySource).toContain("Sua foto está pronta?");
-    expect(journeySource).toContain("Continuar com esta foto");
-    expect(journeySource).toContain("processamento temporário desta foto");
+    expect(journeySource).toContain("Este é o sorriso que vamos analisar?");
+    expect(journeySource).toContain("Analisar meu sorriso");
+    expect(journeySource).toContain("processamento temporário para gerar a leitura do sorriso");
   });
 
   it("não exibe o código interno bruto quando a Function de IA falha", () => {
@@ -44,6 +47,11 @@ describe("paridade do produto Sorvy Smile", () => {
       journeySource.indexOf('setStage("contact")'),
     );
     expect(journeySource).toContain("Sem dados pessoais");
+    expect(journeySource).toContain("Insight visual detectado");
+    expect(journeySource).toContain("Harmonia do sorriso");
+    expect(journeySource).toContain("Refletividade");
+    expect(journeySource).toContain("Tom visual estimado");
+    expect(journeySource).toContain("Brilho geral");
     expect(journeySource).toContain("WhatsApp com DDD");
   });
 

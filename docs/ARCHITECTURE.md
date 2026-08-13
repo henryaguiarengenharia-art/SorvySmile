@@ -33,14 +33,18 @@ autoritativos no servidor.
 - JPEG, PNG e WebP;
 - no máximo 5 MB no navegador e no backend;
 - consentimento específico antes da primeira chamada;
-- confirmação de maioridade e de que a foto pertence ao usuário;
+- aceite único e destacado reúne maioridade, titularidade e processamento temporário;
 - até três tentativas de validação por sessão;
 - hash impede analisar uma imagem diferente da que foi validada;
 - a faixa Bom/Atenção/Avaliação é calculada deterministicamente a partir do
   índice de harmonia e nunca representa urgência clínica;
+- o índice visual geral mostrado ao paciente é a média aritmética dos índices
+  aparentes de harmonia, brilho, simetria, alinhamento e refletividade; serve
+  somente para resumir a leitura e não é escore clínico;
 - a Sorvy não grava a foto no Firestore, Storage ou lead;
 - a orientação de câmera usa landmarks e luminosidade processados somente no
-  aparelho; nenhum quadro do vídeo é persistido ou enviado;
+  aparelho; a interface destaca a boca e recorta o sorriso antes da confirmação;
+  nenhum quadro do vídeo é persistido ou enviado;
 - a Function envia a imagem temporariamente à API paga do Gemini;
 - a sessão expira em 30 minutos e é removida por tarefa agendada;
 - o resultado é informativo e não deve afirmar diagnóstico.
@@ -62,7 +66,8 @@ com concorrência controlada, como proteção adicional de custo.
 ## Consentimentos e retenção
 
 - versão atual de consentimento: `2026-07`;
-- foto, contato e privacidade têm campos separados;
+- uso da imagem, contato e privacidade têm autorizações separadas; maioridade,
+  titularidade e processamento ficam reunidos no aceite específico da imagem;
 - data, versão e responsável pelo link ficam registrados;
 - leads expiram após 365 dias;
 - o profissional ou a HQ pode excluir antes;

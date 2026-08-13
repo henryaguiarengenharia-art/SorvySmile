@@ -6,10 +6,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ExternalLink,
-  Eye,
   ImageOff,
   ImagePlus,
-  Lightbulb,
   LoaderCircle,
   LockKeyhole,
   MessageCircle,
@@ -65,25 +63,6 @@ const formatWhatsApp = (value: string): string => {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
 
-const statusCopy = (status: SmileScores["status"]) => {
-  if (status === "Bom") {
-    return {
-      label: "Boa consistência visual",
-      className: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    };
-  }
-  if (status === "Atenção") {
-    return {
-      label: "Oportunidades para avaliar",
-      className: "bg-amber-50 text-amber-700 border-amber-100",
-    };
-  }
-  return {
-    label: "Mais pontos para conversar",
-    className: "bg-violet-50 text-violet-700 border-violet-100",
-  };
-};
-
 export const PatientJourney = ({
   profile,
   onExit,
@@ -101,8 +80,7 @@ export const PatientJourney = ({
   const [lead, setLead] = useState({ name: "", whatsapp: "" });
   const [contactConsent, setContactConsent] = useState(false);
   const [privacyConsent, setPrivacyConsent] = useState(false);
-  const [adultConfirmed, setAdultConfirmed] = useState(false);
-  const [photoConsent, setPhotoConsent] = useState(false);
+  const [imageConsent, setImageConsent] = useState(false);
   const [readingPhoto, setReadingPhoto] = useState(false);
 
   const prepareSelectedPhoto = useCallback(async (file: File) => {
@@ -135,8 +113,8 @@ export const PatientJourney = ({
 
   const usePhoto = async () => {
     if (!image) return;
-    if (!adultConfirmed || !photoConsent) {
-      setError("Confirme as duas autorizações para utilizar esta foto.");
+    if (!imageConsent) {
+      setError("Confirme a autorização para analisar seu sorriso.");
       return;
     }
     setBusy(true);
@@ -292,10 +270,8 @@ export const PatientJourney = ({
           validation={validation}
           busy={busy}
           onPhoto={selectPhoto}
-          adultConfirmed={adultConfirmed}
-          photoConsent={photoConsent}
-          onAdultConfirmed={setAdultConfirmed}
-          onPhotoConsent={setPhotoConsent}
+          imageConsent={imageConsent}
+          onImageConsent={setImageConsent}
           onUsePhoto={usePhoto}
         />
       )}
@@ -357,7 +333,7 @@ const CaptureStep = ({
       <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
         Sua primeira descoberta
       </p>
-      <h1 className="mt-2 text-4xl font-black">Vamos preparar sua foto</h1>
+      <h1 className="mt-2 text-4xl font-black">Vamos enquadrar seu sorriso</h1>
       <p className="mt-3 font-medium text-slate-500">
         O guia acompanha o enquadramento e avisa quando estiver tudo pronto.
       </p>
@@ -404,7 +380,7 @@ const CaptureStep = ({
       ) : (
         <ImagePlus className="h-5 w-5 text-blue-600" />
       )}
-      {readingPhoto ? "Preparando foto" : "Escolher uma foto"}
+      {readingPhoto ? "Preparando sorriso" : "Escolher uma imagem"}
       <input
         type="file"
         accept="image/*"
@@ -431,12 +407,12 @@ const CaptureStep = ({
     </div>
     <p className="mt-5 flex items-center justify-center gap-2 text-center text-xs font-medium text-slate-400">
       <ShieldCheck className="h-4 w-4 text-emerald-500" />
-      A câmera é orientada no aparelho. A foto só é enviada após sua confirmação.
+      A câmera é orientada no aparelho. A imagem só é enviada após sua confirmação.
     </p>
   </main>
 );
 
-const JOURNEY_STEPS = ["Foto", "Descoberta", "Mapa", "Conversa"];
+const JOURNEY_STEPS = ["Sorriso", "Descoberta", "Mapa", "Conversa"];
 
 const JourneyProgress = ({ current }: { current: number }) => (
   <div className="mb-8 grid grid-cols-4 gap-2" aria-label="Progresso da experiência">
@@ -464,20 +440,16 @@ const ValidationStep = ({
   validation,
   busy,
   onPhoto,
-  adultConfirmed,
-  photoConsent,
-  onAdultConfirmed,
-  onPhotoConsent,
+  imageConsent,
+  onImageConsent,
   onUsePhoto,
 }: {
   image: string;
   validation: PhotoValidation | null;
   busy: boolean;
   onPhoto: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  adultConfirmed: boolean;
-  photoConsent: boolean;
-  onAdultConfirmed: (value: boolean) => void;
-  onPhotoConsent: (value: boolean) => void;
+  imageConsent: boolean;
+  onImageConsent: (value: boolean) => void;
   onUsePhoto: () => void;
 }) => (
   <main className="mx-auto max-w-xl px-6 py-9">
@@ -486,13 +458,13 @@ const ValidationStep = ({
       <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
         Você está no controle
       </p>
-      <h1 className="mt-2 text-3xl font-black">Sua foto está pronta?</h1>
+      <h1 className="mt-2 text-3xl font-black">Este é o sorriso que vamos analisar?</h1>
       <p className="mt-2 text-sm font-medium text-slate-500">
         Confirme a imagem e autorize somente o processamento necessário para sua leitura.
       </p>
     </div>
     <div className="relative overflow-hidden rounded-[3rem] border-8 border-white bg-slate-900 shadow-2xl">
-      <img src={image} alt="Prévia da foto selecionada" className="aspect-square w-full object-cover" />
+      <img src={image} alt="Prévia do sorriso selecionado" className="aspect-[3/2] w-full object-cover" />
       {busy && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/70 text-white">
           <LoaderCircle className="h-12 w-12 animate-spin text-blue-400" />
@@ -518,7 +490,7 @@ const ValidationStep = ({
           )}
           <div>
             <p className="font-black">
-              {validation.isAdequate ? "Foto pronta" : "Refaça a foto"}
+              {validation.isAdequate ? "Sorriso pronto" : "Precisamos de outro enquadramento"}
             </p>
             <p className="mt-1 text-sm font-medium">{validation.feedback}</p>
           </div>
@@ -536,26 +508,16 @@ const ValidationStep = ({
           </p>
         </div>
       </div>
-      <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-slate-50 p-4">
-        <input
-          type="checkbox"
-          checked={adultConfirmed}
-          onChange={(event) => onAdultConfirmed(event.target.checked)}
-          className="mt-0.5 h-5 w-5"
-        />
-        <span className="text-xs font-bold leading-relaxed text-slate-600">
-          Confirmo que tenho 18 anos ou mais e que a foto é minha.
-        </span>
-      </label>
       <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4">
         <input
           type="checkbox"
-          checked={photoConsent}
-          onChange={(event) => onPhotoConsent(event.target.checked)}
+          checked={imageConsent}
+          onChange={(event) => onImageConsent(event.target.checked)}
           className="mt-0.5 h-5 w-5"
         />
         <span className="text-xs font-bold leading-relaxed text-slate-600">
-          Autorizo o processamento temporário desta foto para gerar minha triagem.
+          Confirmo que tenho 18 anos ou mais, que esta imagem é minha e autorizo
+          seu processamento temporário para gerar a leitura do sorriso.
           Li a{" "}
           <a
             href="/privacidade"
@@ -569,7 +531,7 @@ const ValidationStep = ({
         </span>
       </label>
       <p className="text-center text-[10px] font-bold text-slate-400">
-          Consentimento {CONSENT_VERSION} · a foto não ficará no painel e seus
+          Consentimento {CONSENT_VERSION} · a imagem não ficará no painel e seus
           dados só serão compartilhados após outra autorização.
       </p>
     </section>
@@ -585,21 +547,21 @@ const ValidationStep = ({
         />
       </label>
       <button
-        disabled={busy || !adultConfirmed || !photoConsent}
+        disabled={busy || !imageConsent}
         onClick={onUsePhoto}
         className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-3 py-5 text-xs font-black uppercase tracking-widest text-white disabled:opacity-30"
       >
         {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-        Continuar com esta foto
+        Analisar meu sorriso
       </button>
     </div>
   </main>
 );
 
 const ANALYSIS_STAGES = [
-  "Observando os detalhes da foto",
-  "Organizando seus destaques",
-  "Preparando sua primeira descoberta",
+  "Observando os detalhes do sorriso",
+  "Mapeando harmonia e luminosidade",
+  "Organizando sua primeira descoberta",
 ];
 
 const AnalyzingStep = () => {
@@ -622,11 +584,52 @@ const AnalyzingStep = () => {
         {ANALYSIS_STAGES[index]}
       </p>
       <p className="mt-7 max-w-sm text-sm font-medium text-slate-400">
-        Sua foto é usada somente agora e não é adicionada ao cadastro ou ao painel.
+        A imagem do sorriso é usada somente agora e não é adicionada ao cadastro ou ao painel.
       </p>
     </main>
   );
 };
+
+const metricPresentation = (value: number) => {
+  if (value >= 72) {
+    return {
+      label: "Em destaque",
+      badgeClass: "bg-emerald-50 text-emerald-700",
+      barClass: "bg-emerald-500",
+    };
+  }
+  if (value >= 48) {
+    return {
+      label: "Equilíbrio visual",
+      badgeClass: "bg-blue-50 text-blue-700",
+      barClass: "bg-blue-600",
+    };
+  }
+  return {
+    label: "Vale explorar",
+    badgeClass: "bg-amber-50 text-amber-700",
+    barClass: "bg-amber-500",
+  };
+};
+
+const overallVisualIndex = (scores: SmileScores): number => Math.round(
+  (
+    scores.harmonyIndex
+    + scores.brightnessIndex
+    + scores.technicalInsights.symmetry
+    + scores.technicalInsights.alignment
+    + scores.technicalInsights.reflectivity
+  ) / 5,
+);
+
+const visualIndexHeadline = (value: number): string => {
+  if (value >= 72) return "Seu sorriso apresenta equilíbrio visual em destaque";
+  if (value >= 48) return "Seu sorriso tem uma boa base visual para explorar";
+  return "Seu sorriso revela pontos interessantes para explorar";
+};
+
+const visualTone = (scores: SmileScores): string =>
+  scores.vitaShade.replace(/^Tom visual:\s*/i, "");
 
 const PreviewStep = ({
   scores,
@@ -637,12 +640,7 @@ const PreviewStep = ({
   fullReport: boolean;
   onContinue: () => void;
 }) => {
-  const status = statusCopy(scores.status);
-  const brightnessLabel = scores.brightnessIndex >= 70
-    ? "Boa luminosidade aparente"
-    : scores.brightnessIndex >= 45
-      ? "Luminosidade suave na foto"
-      : "A iluminação influencia esta leitura";
+  const visualIndex = overallVisualIndex(scores);
   return (
     <main className="mx-auto max-w-3xl px-6 py-9">
       <JourneyProgress current={1} />
@@ -655,28 +653,70 @@ const PreviewStep = ({
         </p>
         <h1 className="mt-2 text-4xl font-black">Seus primeiros destaques</h1>
         <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-500">
-          A foto permitiu observar características visuais que podem deixar sua
-          próxima conversa com o dentista mais clara.
+          Uma leitura visual rápida para você chegar à conversa com o dentista
+          sabendo o que deseja explorar.
         </p>
       </div>
-      <div className="mt-9 grid gap-5 sm:grid-cols-2">
-        <DiscoveryCard
-          icon={<Eye className="h-7 w-7" />}
-          label="Equilíbrio do sorriso"
-          value={status.label}
-          className="bg-blue-50 text-blue-700"
+      <section className="mt-8 overflow-hidden rounded-[2.5rem] border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-amber-50 p-6 shadow-sm sm:p-8">
+        <div className="flex flex-col items-center gap-6 sm:flex-row sm:text-left">
+          <div className="flex h-32 w-32 shrink-0 flex-col items-center justify-center rounded-full border-[10px] border-white bg-slate-950 text-white shadow-xl">
+            <span className="text-4xl font-black">{visualIndex}</span>
+            <span className="text-[9px] font-black uppercase tracking-widest text-blue-300">de 100</span>
+          </div>
+          <div className="text-center sm:text-left">
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
+              Índice visual geral
+            </p>
+            <h2 className="mt-2 text-2xl font-black leading-tight text-slate-900">
+              {visualIndexHeadline(visualIndex)}
+            </h2>
+            <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500">
+              Combina características aparentes de harmonia, organização,
+              luminosidade e resposta à luz.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <div className={`mt-5 grid grid-cols-2 gap-3 ${fullReport ? "sm:grid-cols-4" : "sm:grid-cols-2"}`}>
+        <PreviewMetric
+          label="Harmonia do sorriso"
+          value={`${scores.harmonyIndex}%`}
+          score={scores.harmonyIndex}
         />
-        <DiscoveryCard
-          icon={<Sparkles className="h-7 w-7" />}
-          label="Leitura da imagem"
-          value={brightnessLabel}
-          className="bg-emerald-50 text-emerald-700"
+        {fullReport && (
+          <PreviewMetric
+            label="Refletividade"
+            value={`${scores.technicalInsights.reflectivity}%`}
+            score={scores.technicalInsights.reflectivity}
+          />
+        )}
+        {fullReport && (
+          <PreviewMetric
+            label="Tom visual"
+            value={visualTone(scores)}
+            note="Estimativa"
+          />
+        )}
+        <PreviewMetric
+          label="Brilho geral"
+          value={`${scores.brightnessIndex}%`}
+          score={scores.brightnessIndex}
         />
       </div>
-      <div className={`mt-5 rounded-[2rem] border p-6 ${status.className}`}>
-        <p className="text-[10px] font-black uppercase tracking-widest">O que isso significa</p>
-        <p className="mt-2 text-sm font-medium opacity-80">{scores.benchmarkText}</p>
-      </div>
+
+      <section className="mt-5 rounded-[2rem] bg-blue-600 p-7 text-white shadow-xl shadow-blue-100">
+        <Sparkles className="h-7 w-7 text-blue-200" />
+        <p className="mt-4 text-[10px] font-black uppercase tracking-widest text-blue-100">
+          Insight visual detectado
+        </p>
+        <p className="mt-2 text-lg font-black leading-snug">{scores.benchmarkText}</p>
+      </section>
+
+      <p className="mt-4 text-center text-[10px] font-bold leading-relaxed text-slate-400">
+        Indicadores aproximados de percepção visual. Não representam diagnóstico
+        nem medição clínica de cor.
+      </p>
       <div className="mt-7 rounded-[2rem] bg-slate-900 p-8 text-center text-white">
         <LockKeyhole className="mx-auto h-8 w-8 text-blue-400" />
         <h2 className="mt-4 text-2xl font-black">Seu Mapa do Sorriso está pronto</h2>
@@ -686,7 +726,7 @@ const PreviewStep = ({
             : "Salve sua descoberta e receba o principal ponto para conversar em uma avaliação."}
         </p>
         <div className="mx-auto mt-5 max-w-sm space-y-2 text-left text-xs font-bold text-white/75">
-          <p className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Destaques da sua foto</p>
+          <p className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Leitura visual detalhada</p>
           <p className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Perguntas para levar ao dentista</p>
           <p className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Próximo passo recomendado</p>
         </div>
@@ -702,25 +742,32 @@ const PreviewStep = ({
   );
 };
 
-const DiscoveryCard = ({
-  icon,
+const PreviewMetric = ({
   label,
   value,
-  className,
+  score,
+  note,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: string;
-  className: string;
-}) => (
-  <div className={`rounded-[2rem] p-7 ${className}`}>
-    {icon}
-    <p className="mt-5 text-[10px] font-black uppercase tracking-widest opacity-60">
-      {label}
-    </p>
-    <p className="mt-2 text-xl font-black">{value}</p>
-  </div>
-);
+  score?: number;
+  note?: string;
+}) => {
+  const presentation = score == null ? null : metricPresentation(score);
+  return (
+    <div className="flex min-h-36 flex-col rounded-[1.75rem] border border-slate-100 bg-white p-4 shadow-sm">
+      <p className="text-[9px] font-black uppercase leading-relaxed tracking-widest text-slate-400">
+        {label}
+      </p>
+      <p className="mt-3 text-2xl font-black capitalize text-slate-900">{value}</p>
+      <span className={`mt-auto inline-flex w-fit rounded-full px-2.5 py-1 text-[8px] font-black uppercase tracking-wider ${
+        presentation?.badgeClass ?? "bg-violet-50 text-violet-700"
+      }`}>
+        {presentation?.label ?? note}
+      </span>
+    </div>
+  );
+};
 
 const ContactStep = ({
   lead,
@@ -857,17 +904,21 @@ const ReportStep = ({
   onRequestContact: () => Promise<void>;
   onExit: () => void;
 }) => {
-  const status = statusCopy(scores.status);
   const [contactRequested, setContactRequested] = useState(false);
   const [requestingContact, setRequestingContact] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const visualDetails = profile.plan === "lite"
-    ? []
+  const visualIndex = overallVisualIndex(scores);
+  const reportMetrics = profile.plan === "lite"
+    ? [
+        ["Harmonia do sorriso", scores.harmonyIndex],
+        ["Brilho geral", scores.brightnessIndex],
+      ] as const
     : [
-        ["Equilíbrio aparente", qualitativeInsight(scores.technicalInsights.symmetry)],
-        ["Organização visual", qualitativeInsight(scores.technicalInsights.alignment)],
-        ["Resposta à luz", qualitativeInsight(scores.technicalInsights.reflectivity)],
-      ];
+        ["Harmonia do sorriso", scores.harmonyIndex],
+        ["Alinhamento aparente", scores.technicalInsights.alignment],
+        ["Refletividade", scores.technicalInsights.reflectivity],
+        ["Brilho geral", scores.brightnessIndex],
+      ] as const;
 
   const requestContact = async () => {
     setRequestingContact(true);
@@ -890,91 +941,129 @@ const ReportStep = ({
     <main className="mx-auto max-w-3xl px-5 py-9">
       <JourneyProgress current={3} />
       <section className="overflow-hidden rounded-[2.5rem] border border-slate-100 bg-white shadow-2xl">
-        <header className="bg-gradient-to-br from-slate-950 via-blue-950 to-blue-700 p-8 text-white">
-          <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-blue-100">
-            <Sparkles className="h-4 w-4" /> Mapa liberado
+        <header className="bg-gradient-to-br from-slate-950 via-blue-950 to-blue-700 p-7 text-white sm:p-9">
+          <div className="flex items-center justify-between gap-4">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-blue-100">
+              <Sparkles className="h-4 w-4" /> Mapa liberado
+            </div>
+            <p className="text-right text-[9px] font-black uppercase tracking-widest text-white/50">
+              Sorvy Smile
+            </p>
           </div>
-          <p className="mt-6 text-[9px] font-black uppercase tracking-widest text-white/50">
-            Sorvy Smile · Mapa visual informativo
-          </p>
-          <h1 className="mt-2 text-4xl font-black">Seu Mapa do Sorriso</h1>
-          <p className="mt-3 text-sm font-medium text-white/70">
-            {leadName}, estes são os destaques da sua foto.
+          <h1 className="mt-7 text-4xl font-black">Seu Mapa do Sorriso</h1>
+          <p className="mt-2 text-sm font-medium text-white/70">
+            {leadName}, agora você já sabe quais pontos deseja explorar.
           </p>
           <p className="mt-1 text-xs font-medium text-white/50">
-            Experiência oferecida por {profile.name}
+            Oferecido por {profile.name}
           </p>
         </header>
-        <div className="space-y-8 p-8">
-          <div className={`rounded-2xl border p-5 ${status.className}`}>
-            <p className="text-[9px] font-black uppercase tracking-widest">
-              Seu primeiro destaque
-            </p>
-            <p className="mt-2 text-xl font-black">{status.label}</p>
-            <p className="mt-2 text-sm font-medium">{scores.benchmarkText}</p>
-          </div>
-
-          {visualDetails.length > 0 && (
-            <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                O que a foto permitiu observar
-              </p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                {visualDetails.map(([label, value]) => (
-                  <div key={label} className="rounded-2xl bg-slate-50 p-5">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                      {label}
-                    </p>
-                    <p className="mt-2 text-sm font-black text-slate-700">{value}</p>
-                  </div>
-                ))}
+        <div className="space-y-7 p-5 sm:p-8">
+          <div className="grid gap-3 sm:grid-cols-[0.9fr_1.1fr_1.1fr]">
+            <div className="flex items-center gap-4 rounded-[1.75rem] bg-slate-950 p-5 text-white">
+              <div>
+                <p className="text-4xl font-black text-blue-400">{visualIndex}</p>
+                <p className="text-[9px] font-black uppercase tracking-widest text-white/40">de 100</p>
+              </div>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-blue-300">
+                  Índice geral
+                </p>
+                <p className="mt-1 text-xs font-bold leading-snug">
+                  {metricPresentation(visualIndex).label}
+                </p>
               </div>
             </div>
-          )}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl bg-slate-50 p-5">
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                Percepção de luminosidade e cor
-              </p>
-              <p className="mt-2 text-lg font-black">{scores.vitaShade}</p>
-              <p className="mt-1 text-xs font-medium text-slate-400">
-                A câmera e a iluminação podem alterar essa percepção.
-              </p>
-            </div>
-            <div className="rounded-2xl bg-blue-50 p-5">
+            <div className="rounded-[1.75rem] bg-blue-50 p-5">
               <p className="text-[9px] font-black uppercase tracking-widest text-blue-500">
-                Seu próximo passo
+                Experiência principal
               </p>
-              <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
-                {scores.recommendation}
+              <p className="mt-2 text-lg font-black text-slate-900">Estética do sorriso</p>
+            </div>
+            <div className="rounded-[1.75rem] bg-amber-50 p-5">
+              <p className="text-[9px] font-black uppercase tracking-widest text-amber-600">
+                Foco da conversa
+              </p>
+              <p className="mt-2 text-lg font-black text-slate-900">
+                Explorar possibilidades
               </p>
             </div>
           </div>
 
-          <div>
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-              Pontos para conversar na avaliação
+          <section>
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">
+                  Seu painel visual
+                </p>
+                <h2 className="mt-1 text-2xl font-black">O que se destacou no sorriso</h2>
+              </div>
+              <div className="hidden items-center gap-3 text-[8px] font-black uppercase tracking-wider text-slate-400 sm:flex">
+                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-500" /> Destaque</span>
+                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-600" /> Equilíbrio</span>
+                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-500" /> Explorar</span>
+              </div>
+            </div>
+            <div className="mt-5 space-y-5">
+              {reportMetrics.map(([label, value]) => (
+                <ReportMetric key={label} label={label} value={value} />
+              ))}
+            </div>
+          </section>
+
+          <div className="grid gap-3 sm:grid-cols-[0.8fr_1.2fr]">
+            <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-5">
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+                Tom visual estimado
+              </p>
+              <p className="mt-2 text-2xl font-black capitalize">{visualTone(scores)}</p>
+              <p className="mt-2 text-[10px] font-medium leading-relaxed text-slate-400">
+                Não equivale à escala clínica VITA; luz e câmera alteram a percepção.
+              </p>
+            </div>
+            <div className="rounded-[1.75rem] bg-blue-600 p-6 text-white">
+              <Sparkles className="h-6 w-6 text-blue-200" />
+              <p className="mt-4 text-[9px] font-black uppercase tracking-widest text-blue-100">
+                Insight visual detectado
+              </p>
+              <p className="mt-2 text-base font-black leading-snug">{scores.benchmarkText}</p>
+            </div>
+          </div>
+
+          <section>
+            <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">
+              Leve para a conversa
             </p>
-            <div className="mt-3 space-y-2">
+            <h2 className="mt-1 text-2xl font-black">Pontos que merecem ser explorados</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {scores.observations
                 .slice(0, profile.plan === "lite" ? 1 : undefined)
-                .map((observation) => (
+                .map((observation, index) => (
                   <div
                     key={observation}
-                    className="flex items-start gap-3 rounded-xl bg-slate-50 p-4"
+                    className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm"
                   >
-                    <Lightbulb className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
-                    <p className="text-sm font-bold text-slate-600">{observation}</p>
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-black text-blue-600">
+                      {index + 1}
+                    </span>
+                    <p className="text-sm font-bold leading-relaxed text-slate-600">{observation}</p>
                   </div>
                 ))}
             </div>
+          </section>
+
+          <div className="rounded-[1.75rem] border border-blue-100 bg-blue-50 p-5">
+            <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">
+              Próximo passo sugerido
+            </p>
+            <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
+              {scores.recommendation}
+            </p>
           </div>
 
-          <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-xs font-medium leading-relaxed text-amber-900">
-            Este mapa descreve somente aspectos visuais aparentes. Não
-            detecta doença, não indica urgência e não define tratamento ou custo.
-            A avaliação presencial é indispensável para decisões clínicas.
+          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-[10px] font-medium leading-relaxed text-slate-500">
+            Leitura visual informativa: não diagnostica, não indica urgência e
+            não define tratamento. Decisões clínicas exigem avaliação presencial.
           </div>
 
           {actionError && (
@@ -1032,8 +1121,25 @@ const ReportStep = ({
   );
 };
 
-const qualitativeInsight = (value: number): string => {
-  if (value >= 72) return "Destaque visual bem definido";
-  if (value >= 48) return "Detalhes interessantes para observar";
-  return "Vale observar melhor presencialmente";
+const ReportMetric = ({ label, value }: { label: string; value: number }) => {
+  const presentation = metricPresentation(value);
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-black text-slate-800">{label}</p>
+          <p className="mt-0.5 text-[9px] font-bold text-slate-400">
+            {presentation.label}
+          </p>
+        </div>
+        <p className="text-lg font-black text-slate-900">{value}%</p>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full ${presentation.barClass}`}
+          style={{ width: `${Math.max(4, value)}%` }}
+        />
+      </div>
+    </div>
+  );
 };

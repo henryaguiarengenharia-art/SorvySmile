@@ -12,10 +12,10 @@ ranking e escolha aleatória de profissional permanecem fora do produto.
 | Etapa | Dados | Resultado |
 |---|---|---|
 | Landing | nenhum | proposta e responsável pelo link |
-| Foto guiada + consentimento | enquadramento local, imagem temporária, versão, maioridade e titularidade | confirmação “Continuar com esta foto” |
-| Descoberta | nenhum contato | destaques visuais qualitativos |
+| Sorriso guiado + consentimento | enquadramento local da boca, imagem temporária, versão, maioridade, titularidade e processamento reunidos em um aceite | confirmação “Analisar meu sorriso” |
+| Descoberta | nenhum contato | índice visual, quatro indicadores aparentes e insight em linguagem simples |
 | Captura | nome + WhatsApp | autorizações separadas de compartilhamento e contato |
-| Mapa | dados já autorizados | pontos para conversar e próximo passo permitido pelo plano |
+| Mapa | dados já autorizados | painel visual, pontos para conversar e próximo passo permitido pelo plano |
 | Conversão | escolha registrada | conversa direta ou pedido de contato ao profissional do link |
 
 O profissional é resolvido pelo slug no início. O sistema mantém os formatos

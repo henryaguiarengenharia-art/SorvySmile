@@ -16,6 +16,9 @@ import {
   averageFrameBrightness,
   CameraGuidance,
   evaluateCameraFrame,
+  SmileRegion,
+  smileCropRect,
+  smileRegionFromLandmarks,
 } from "../services/cameraGuidance";
 
 const READY_HOLD_MS = 1_200;
@@ -27,7 +30,7 @@ const FACE_LANDMARKER_MODEL_URL =
 
 const initialGuidance: CameraGuidance = {
   code: "no-face",
-  message: "Posicione seu rosto dentro do contorno",
+  message: "Posicione seu sorriso dentro da moldura",
   ready: false,
 };
 
@@ -67,6 +70,7 @@ export const GuidedCamera = ({
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
   const animationRef = useRef<number | null>(null);
   const previousFaceRef = useRef<{ x: number; y: number; width: number } | null>(null);
+  const latestSmileRef = useRef<SmileRegion | null>(null);
   const readySinceRef = useRef<number | null>(null);
   const captureStartedRef = useRef(false);
   const lastFrameRef = useRef(0);
@@ -96,22 +100,24 @@ export const GuidedCamera = ({
     setCapturing(true);
 
     try {
-      const size = Math.min(video.videoWidth, video.videoHeight);
-      const sourceX = (video.videoWidth - size) / 2;
-      const sourceY = (video.videoHeight - size) / 2;
+      const crop = smileCropRect(
+        video.videoWidth,
+        video.videoHeight,
+        latestSmileRef.current,
+      );
       const canvas = document.createElement("canvas");
-      canvas.width = Math.min(1600, size);
-      canvas.height = canvas.width;
+      canvas.width = Math.min(1200, Math.round(crop.sourceWidth));
+      canvas.height = Math.round(canvas.width * 2 / 3);
       const context = canvas.getContext("2d");
       if (!context) throw new Error("Canvas indisponível.");
       context.translate(canvas.width, 0);
       context.scale(-1, 1);
       context.drawImage(
         video,
-        sourceX,
-        sourceY,
-        size,
-        size,
+        crop.sourceX,
+        crop.sourceY,
+        crop.sourceWidth,
+        crop.sourceHeight,
         0,
         0,
         canvas.width,
@@ -131,7 +137,7 @@ export const GuidedCamera = ({
     } catch {
       captureStartedRef.current = false;
       setCapturing(false);
-      setError("Não foi possível capturar a foto. Tente novamente ou escolha uma imagem.");
+      setError("Não foi possível capturar o sorriso. Tente novamente ou escolha uma imagem.");
     }
   }, [onCapture, stopCamera]);
 
@@ -182,7 +188,7 @@ export const GuidedCamera = ({
             setTrackerAvailable(false);
             setGuidance({
               code: "no-face",
-              message: "Use o contorno e capture quando estiver pronto",
+              message: "Use a moldura do sorriso e capture quando estiver pronto",
               ready: false,
             });
           }
@@ -208,6 +214,7 @@ export const GuidedCamera = ({
               timestamp,
             );
             const landmarks = result.faceLandmarks[0] ?? null;
+            latestSmileRef.current = smileRegionFromLandmarks(landmarks);
             const canvas = analysisCanvasRef.current;
             const context = canvas.getContext("2d", { willReadFrequently: true });
             let brightness = 128;
@@ -299,11 +306,11 @@ export const GuidedCamera = ({
 
       <div className="text-center">
         <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
-          Foto guiada · etapa 1 de 4
+          Sorriso guiado · etapa 1 de 4
         </p>
         <h1 className="mt-2 text-3xl font-black">Enquadre seu sorriso</h1>
         <p className="mt-2 text-sm font-medium text-slate-500">
-          O guia funciona no seu aparelho. Nenhum quadro do vídeo é enviado ou salvo.
+          A moldura acompanha apenas a região da boca. Nenhum quadro do vídeo é enviado ou salvo.
         </p>
       </div>
 
@@ -316,10 +323,10 @@ export const GuidedCamera = ({
         />
         <canvas ref={analysisCanvasRef} width={48} height={48} className="hidden" />
         <div
-          className={`pointer-events-none absolute inset-[12%] rounded-[45%] border-[3px] transition-colors ${
+          className={`pointer-events-none absolute inset-x-[16%] top-[49%] h-[19%] rounded-[42%] border-[3px] transition-colors ${
             guidance.ready
-              ? "border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.18)]"
-              : "border-white/70 shadow-[0_0_0_999px_rgba(2,6,23,0.30)]"
+              ? "border-emerald-400 shadow-[0_0_0_999px_rgba(2,6,23,0.48)]"
+              : "border-white/80 shadow-[0_0_0_999px_rgba(2,6,23,0.58)]"
           }`}
         />
         {loading && (
@@ -334,7 +341,7 @@ export const GuidedCamera = ({
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 text-white">
             <CheckCircle2 className="h-12 w-12 text-emerald-400" />
             <p className="mt-4 text-xs font-black uppercase tracking-widest">
-              Foto capturada
+              Sorriso capturado
             </p>
           </div>
         )}
@@ -382,7 +389,7 @@ export const GuidedCamera = ({
 
       <p className="mt-4 flex items-center justify-center gap-2 text-center text-xs font-medium text-slate-400">
         <ShieldCheck className="h-4 w-4 text-emerald-500" />
-        O Gemini só recebe a foto depois da sua confirmação.
+        A imagem do sorriso só é enviada depois da sua confirmação.
       </p>
     </main>
   );

@@ -39,8 +39,8 @@ como alias legado e normalizado para `network`.
 Paciente:
 
 1. abre o link da clínica ou do profissional;
-2. tira a foto e confirma maioridade, titularidade e consentimento ao clicar em
-   “Utilizar esta foto”;
+2. enquadra o sorriso e confirma maioridade, titularidade e processamento em um
+   único aceite antes de clicar em “Analisar meu sorriso”;
 3. recebe um preview antes de informar contato;
 4. fornece somente nome e WhatsApp;
 5. autoriza separadamente o compartilhamento e o contato;

@@ -469,14 +469,14 @@ const LandingView = ({
   <main>
     <section className="mx-auto max-w-6xl px-6 py-20 text-center">
       <div className="mx-auto mb-7 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-700">
-        <Sparkles className="h-4 w-4" /> Uma descoberta sobre o seu sorriso · gratuita
+        <Sparkles className="h-4 w-4" /> Mapeamento visual gratuito · leva poucos segundos
       </div>
       <h1 className="mx-auto max-w-4xl text-5xl font-black leading-[0.95] tracking-tighter md:text-8xl">
-        Descubra novos detalhes do seu <span className="text-blue-600">sorriso.</span>
+        Descubra o potencial do seu <span className="text-blue-600">sorriso em segundos.</span>
       </h1>
       <p className="mx-auto mt-7 max-w-2xl text-lg font-medium leading-relaxed text-slate-500">
-        Tire uma foto guiada, receba seu Mapa do Sorriso e chegue à conversa
-        com o dentista sabendo quais pontos deseja explorar.
+        Tenha seu sorriso mapeado e chegue à conversa com o dentista sabendo
+        quais pontos deseja explorar. Sem cadastro. Sem compromisso.
       </p>
       {profile && (
         <div className="mx-auto mt-7 max-w-xl rounded-[2rem] border border-blue-100 bg-white p-5 text-left shadow-sm">
@@ -515,7 +515,7 @@ const LandingView = ({
         ) : (
           <Smile className="h-5 w-5" />
         )}
-        Quero conhecer meu sorriso <ArrowRight className="h-5 w-5" />
+        Mapear meu sorriso agora <ArrowRight className="h-5 w-5" />
       </button>
       {!loading && !profile && (
         <p className="mx-auto mt-3 max-w-md text-xs font-bold text-amber-700">
@@ -983,11 +983,13 @@ const LegalView = ({
               nome e WhatsApp permitem compartilhar o resultado com o
               profissional do link e realizar o contato autorizado.
             </LegalSection>
-            <LegalSection title="3. Consentimento e maioridade">
+            <LegalSection title="3. Consentimento e uso da imagem">
               A foto pode revelar dado de saúde e, por isso, só é processada
-              após consentimento específico e destacado. A experiência é
-              destinada a maiores de 18 anos que utilizem uma foto própria.
-              O consentimento para contato é separado e pode ser revogado.
+              após consentimento específico e destacado. Esta experiência é
+              destinada a maiores de 18 anos que utilizem uma imagem própria.
+              Para a avaliação de menores, o responsável legal deve contatar a
+              clínica sem utilizar esta triagem. O consentimento para contato é
+              separado e pode ser revogado.
             </LegalSection>
             <LegalSection title="4. Fornecedores e transferência internacional">
               Firebase/Google Cloud hospedam autenticação, banco e Functions.

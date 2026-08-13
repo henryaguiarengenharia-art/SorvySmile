@@ -12,6 +12,20 @@ export interface CameraFrameSignals {
   smile: number;
 }
 
+export interface SmileRegion {
+  centerX: number;
+  centerY: number;
+  width: number;
+  height: number;
+}
+
+export interface SmileCropRect {
+  sourceX: number;
+  sourceY: number;
+  sourceWidth: number;
+  sourceHeight: number;
+}
+
 export type CameraGuidanceCode =
   | "no-face"
   | "center"
@@ -36,12 +50,66 @@ const guidance = (
   ready = false,
 ): CameraGuidance => ({ code, message, ready });
 
+const clamp = (value: number, minimum: number, maximum: number): number =>
+  Math.min(maximum, Math.max(minimum, value));
+
+export function smileRegionFromLandmarks(
+  landmarks: FacePoint[] | null,
+): SmileRegion | null {
+  if (!landmarks || landmarks.length <= 291) return null;
+  const leftCorner = landmarks[61];
+  const rightCorner = landmarks[291];
+  const upperLip = landmarks[13];
+  const lowerLip = landmarks[14];
+  if (!leftCorner || !rightCorner || !upperLip || !lowerLip) return null;
+
+  return {
+    centerX: (leftCorner.x + rightCorner.x) / 2,
+    centerY: (upperLip.y + lowerLip.y) / 2,
+    width: Math.abs(rightCorner.x - leftCorner.x),
+    height: Math.abs(lowerLip.y - upperLip.y),
+  };
+}
+
+export function smileCropRect(
+  videoWidth: number,
+  videoHeight: number,
+  region: SmileRegion | null,
+): SmileCropRect {
+  const safeWidth = Math.max(1, videoWidth);
+  const safeHeight = Math.max(1, videoHeight);
+  const centerX = (region?.centerX ?? 0.5) * safeWidth;
+  const centerY = (region?.centerY ?? 0.58) * safeHeight;
+  let sourceWidth = clamp(
+    (region?.width ?? 0.24) * safeWidth * 2.25,
+    safeWidth * 0.44,
+    safeWidth * 0.82,
+  );
+  let sourceHeight = sourceWidth * 2 / 3;
+  if (sourceHeight > safeHeight * 0.68) {
+    sourceHeight = safeHeight * 0.68;
+    sourceWidth = sourceHeight * 3 / 2;
+  }
+
+  return {
+    sourceX: clamp(centerX - sourceWidth / 2, 0, safeWidth - sourceWidth),
+    sourceY: clamp(centerY - sourceHeight / 2, 0, safeHeight - sourceHeight),
+    sourceWidth,
+    sourceHeight,
+  };
+}
+
 export function evaluateCameraFrame(
   signals: CameraFrameSignals,
 ): CameraGuidance {
   const landmarks = signals.landmarks;
   if (!landmarks || landmarks.length < 264) {
-    return guidance("no-face", "Posicione seu rosto dentro do contorno");
+    return guidance("no-face", "Posicione seu sorriso dentro da moldura");
+  }
+
+  const smileRegion = smileRegionFromLandmarks(landmarks);
+  if (!smileRegion) {
+    return guidance("no-face", "Mostre seu sorriso para a câmera");
   }
 
   let minX = 1;
@@ -57,15 +125,16 @@ export function evaluateCameraFrame(
 
   const width = maxX - minX;
   const height = maxY - minY;
-  const centerX = minX + width / 2;
-  const centerY = minY + height / 2;
-  if (Math.abs(centerX - 0.5) > 0.1 || Math.abs(centerY - 0.48) > 0.13) {
-    return guidance("center", "Centralize seu rosto");
+  if (
+    Math.abs(smileRegion.centerX - 0.5) > 0.11
+    || Math.abs(smileRegion.centerY - 0.58) > 0.14
+  ) {
+    return guidance("center", "Centralize sua boca na moldura");
   }
-  if (width < 0.34 || height < 0.42) {
-    return guidance("closer", "Aproxime um pouco o celular");
+  if (smileRegion.width < 0.16 || width < 0.36 || height < 0.44) {
+    return guidance("closer", "Aproxime o sorriso da câmera");
   }
-  if (width > 0.76 || height > 0.88) {
+  if (smileRegion.width > 0.46 || width > 0.82 || height > 0.92) {
     return guidance("farther", "Afaste um pouco o celular");
   }
 
@@ -108,4 +177,3 @@ export function averageFrameBrightness(
   }
   return samples ? total / samples : 0;
 }
-
