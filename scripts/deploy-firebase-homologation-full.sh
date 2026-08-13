@@ -248,7 +248,7 @@ done
 
 printf 'Publicando o primeiro lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:startTriage,functions:captureLead,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:setAccountStatus,functions:createTeamMember \
+  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:setAccountStatus,functions:createTeamMember \
   --project "$PROJECT_ID" \
   --non-interactive
 

@@ -12,11 +12,11 @@ ranking e escolha aleatória de profissional permanecem fora do produto.
 | Etapa | Dados | Resultado |
 |---|---|---|
 | Landing | nenhum | proposta e responsável pelo link |
-| Foto + consentimento | imagem temporária, versão, maioridade e titularidade | confirmação “Utilizar esta foto” |
-| Preview | nenhum contato | harmonia e brilho aparentes |
+| Foto guiada + consentimento | enquadramento local, imagem temporária, versão, maioridade e titularidade | confirmação “Continuar com esta foto” |
+| Descoberta | nenhum contato | destaques visuais qualitativos |
 | Captura | nome + WhatsApp | autorizações separadas de compartilhamento e contato |
-| Relatório | dados já autorizados | leitura visual permitida pelo plano |
-| Conversão | WhatsApp | conversa direta com o profissional do link |
+| Mapa | dados já autorizados | pontos para conversar e próximo passo permitido pelo plano |
+| Conversão | escolha registrada | conversa direta ou pedido de contato ao profissional do link |
 
 O profissional é resolvido pelo slug no início. O sistema mantém os formatos
 legados `?d=slug`, `?c=slug` e `?p=slug`; o endereço canônico é `/p/slug`.

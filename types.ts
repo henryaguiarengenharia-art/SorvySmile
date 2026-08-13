@@ -104,6 +104,9 @@ export interface LeadRecord {
   dentistId?: string | null;
   scheduledAt?: number | null;
   firstContactAt?: number | null;
+  contactRequestedAtMs?: number | null;
+  patientOpenedWhatsAppAtMs?: number | null;
+  contactPreference?: 'patient_whatsapp' | 'professional_contact';
   intentCategory?: string;
   recommendedSpecialty?: string;
   source?: 'direct' | 'bio';

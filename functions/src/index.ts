@@ -37,6 +37,7 @@ import {
   imageSchema,
   leadAssignmentSchema,
   leadIdSchema,
+  patientConversionActionSchema,
   professionalStatusSchema,
   profilePatchSchema,
   slugify,
@@ -652,6 +653,60 @@ export const captureLead = onCall(
         updatedAtMs: now,
       });
       return { leadId: leadRef.id };
+    });
+  },
+);
+
+export const recordPatientConversionAction = onCall(
+  {
+    enforceAppCheck: ENFORCE_APP_CHECK,
+  },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(patientConversionActionSchema, request.data);
+    const sessionRef = db.doc(`triageSessions/${input.sessionId}`);
+
+    return db.runTransaction(async (transaction) => {
+      const sessionSnap = await transaction.get(sessionRef);
+      if (!sessionSnap.exists) {
+        throw new HttpsError("not-found", "Triagem não encontrada.");
+      }
+      const session = sessionSnap.data() as SessionRecord;
+      validateSession(session, uid);
+      if (!session.leadId || session.state !== "captured") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Compartilhe seu contato antes de escolher o próximo passo.",
+        );
+      }
+
+      const leadRef = db.doc(`leads/${session.leadId}`);
+      const leadSnap = await transaction.get(leadRef);
+      if (
+        !leadSnap.exists
+        || leadSnap.data()?.accountId !== session.accountId
+        || leadSnap.data()?.contactConsent !== true
+      ) {
+        throw new HttpsError(
+          "permission-denied",
+          "A autorização de contato não foi encontrada.",
+        );
+      }
+
+      const now = Date.now();
+      const lead = leadSnap.data() ?? {};
+      const update: Record<string, unknown> = {
+        updatedAtMs: now,
+      };
+      if (input.action === "contact_requested") {
+        update.contactPreference = "professional_contact";
+        update.contactRequestedAtMs = lead.contactRequestedAtMs ?? now;
+      } else {
+        update.contactPreference = "patient_whatsapp";
+        update.patientOpenedWhatsAppAtMs = lead.patientOpenedWhatsAppAtMs ?? now;
+      }
+      transaction.update(leadRef, update);
+      return { ok: true };
     });
   },
 );

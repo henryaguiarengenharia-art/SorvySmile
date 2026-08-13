@@ -14,6 +14,7 @@ import {
   captureLeadSchema,
   checkoutSchema,
   leadAssignmentSchema,
+  patientConversionActionSchema,
   slugify,
   startTriageSchema,
   teamMemberSchema,
@@ -65,6 +66,7 @@ describe("slug", () => {
 
 describe("gestão Network", () => {
   it("valida um novo acesso profissional com senha temporária forte", () => {
+    const generatedTestPassword = `${crypto.randomUUID()}A!`;
     expect(
       teamMemberSchema.parse({
         name: "Dentista Exemplo",
@@ -72,7 +74,7 @@ describe("gestão Network", () => {
         whatsapp: "31999999999",
         specialty: "Ortodontia",
         teamTag: "Especialista",
-        temporaryPassword: "Sorvy!temporaria123",
+        temporaryPassword: generatedTestPassword,
       }),
     ).toBeTruthy();
   });
@@ -125,5 +127,22 @@ describe("consentimentos versionados", () => {
     ).toThrow();
     expect(SUBSCRIBER_TERMS_VERSION).toBe(CONSENT_VERSION);
     expect(MAX_VALIDATION_ATTEMPTS).toBe(3);
+  });
+});
+
+describe("ações de conversão do paciente", () => {
+  it("aceita somente ações conhecidas vinculadas à sessão", () => {
+    expect(
+      patientConversionActionSchema.parse({
+        sessionId: "sessao-segura-123",
+        action: "contact_requested",
+      }),
+    ).toBeTruthy();
+    expect(() =>
+      patientConversionActionSchema.parse({
+        sessionId: "sessao-segura-123",
+        action: "diagnostico",
+      }),
+    ).toThrow();
   });
 });

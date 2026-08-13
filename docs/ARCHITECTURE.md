@@ -39,6 +39,8 @@ autoritativos no servidor.
 - a faixa Bom/Atenção/Avaliação é calculada deterministicamente a partir do
   índice de harmonia e nunca representa urgência clínica;
 - a Sorvy não grava a foto no Firestore, Storage ou lead;
+- a orientação de câmera usa landmarks e luminosidade processados somente no
+  aparelho; nenhum quadro do vídeo é persistido ou enviado;
 - a Function envia a imagem temporariamente à API paga do Gemini;
 - a sessão expira em 30 minutos e é removida por tarefa agendada;
 - o resultado é informativo e não deve afirmar diagnóstico.
@@ -65,6 +67,8 @@ com concorrência controlada, como proteção adicional de custo.
 - leads expiram após 365 dias;
 - o profissional ou a HQ pode excluir antes;
 - fotos nunca são anexadas ao lead.
+- o clique para abrir o WhatsApp e o pedido para receber contato são registrados
+  sem criar novos dados de contato e ajudam a priorizar o atendimento no painel.
 
 ## Pagamento
 

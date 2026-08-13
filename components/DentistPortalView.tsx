@@ -127,7 +127,11 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
           const matchesStatus = filter === "all" || record.status === filter;
           return matchesTerm && matchesStatus;
         })
-        .sort((a, b) => b.createdAt - a.createdAt),
+        .sort((a, b) => {
+          const requestedDifference = Number(Boolean(b.contactRequestedAtMs))
+            - Number(Boolean(a.contactRequestedAtMs));
+          return requestedDifference || b.createdAt - a.createdAt;
+        }),
     [filter, leadRecords, search],
   );
 
@@ -167,11 +171,15 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
     return { averageMinutes, conversion };
   }, [leadRecords]);
 
-  const oldestNewLead = useMemo(
+  const priorityLead = useMemo(
     () =>
       [...leadRecords]
         .filter((lead) => lead.status === "new")
-        .sort((a, b) => a.createdAt - b.createdAt)[0] ?? null,
+        .sort((a, b) => {
+          const requestedDifference = Number(Boolean(b.contactRequestedAtMs))
+            - Number(Boolean(a.contactRequestedAtMs));
+          return requestedDifference || a.createdAt - b.createdAt;
+        })[0] ?? null,
     [leadRecords],
   );
 
@@ -401,17 +409,22 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             <article className="rounded-[2rem] border border-slate-100 bg-white p-7">
               <Clock className="h-6 w-6 text-amber-500" />
               <h2 className="mt-5 text-xl font-black">Contato pendente</h2>
-              {oldestNewLead ? (
+              {priorityLead ? (
                 <>
                   <p className="mt-3 text-lg font-black">
-                    {oldestNewLead.lead.name}
+                    {priorityLead.lead.name}
                   </p>
+                  {priorityLead.contactRequestedAtMs && (
+                    <span className="mt-2 inline-flex rounded-full bg-amber-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                      Pediu para receber contato
+                    </span>
+                  )}
                   <p className="mt-1 text-sm font-medium text-slate-500">
                     Aguardando desde{" "}
-                    {new Date(oldestNewLead.createdAt).toLocaleString("pt-BR")}
+                    {new Date(priorityLead.createdAt).toLocaleString("pt-BR")}
                   </p>
                   <button
-                    onClick={() => void openWhatsApp(oldestNewLead)}
+                    onClick={() => void openWhatsApp(priorityLead)}
                     className="mt-5 flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase tracking-widest text-white"
                   >
                     <Phone className="h-4 w-4" /> Abrir WhatsApp
@@ -538,6 +551,16 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                       >
                         {statusLabel[lead.status]}
                       </span>
+                      {lead.contactRequestedAtMs && (
+                        <span className="rounded-full bg-amber-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-amber-700">
+                          Pediu contato
+                        </span>
+                      )}
+                      {lead.patientOpenedWhatsAppAtMs && (
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-700">
+                          Iniciou conversa
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 text-sm font-medium text-slate-500">
                       {lead.lead.whatsapp} ·{" "}

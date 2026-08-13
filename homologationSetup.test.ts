@@ -108,6 +108,7 @@ describe("deploy funcional da homologacao", () => {
     expect(script).toContain(
       "functions:validateSmilePhoto,functions:analyzeSmilePhoto",
     );
+    expect(script).toContain("functions:recordPatientConversionAction");
     expect(script).toContain("functions:artifacts:setpolicy");
     expect(script).toContain("--days 7");
     expect(script).not.toContain(

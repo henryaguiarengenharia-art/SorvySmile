@@ -469,20 +469,41 @@ const LandingView = ({
   <main>
     <section className="mx-auto max-w-6xl px-6 py-20 text-center">
       <div className="mx-auto mb-7 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-700">
-        <Sparkles className="h-4 w-4" /> Triagem informativa com IA · gratuita
+        <Sparkles className="h-4 w-4" /> Uma descoberta sobre o seu sorriso · gratuita
       </div>
       <h1 className="mx-auto max-w-4xl text-5xl font-black leading-[0.95] tracking-tighter md:text-8xl">
-        Conheça melhor o seu{" "}
-        <span className="text-blue-600">Sorriso</span> em poucos segundos.
+        Descubra novos detalhes do seu <span className="text-blue-600">sorriso.</span>
       </h1>
       <p className="mx-auto mt-7 max-w-2xl text-lg font-medium leading-relaxed text-slate-500">
-        Tire uma foto guiada, receba uma leitura inicial de aspectos visuais
-        aparentes e chegue à próxima conversa com mais clareza.
+        Tire uma foto guiada, receba seu Mapa do Sorriso e chegue à conversa
+        com o dentista sabendo quais pontos deseja explorar.
       </p>
       {profile && (
-        <p className="mt-4 text-sm font-bold text-slate-400">
-          Experiência oferecida por {profile.name}
-        </p>
+        <div className="mx-auto mt-7 max-w-xl rounded-[2rem] border border-blue-100 bg-white p-5 text-left shadow-sm">
+          <div className="flex items-start gap-4">
+            <span className="rounded-2xl bg-blue-50 p-3 text-blue-600">
+              <Smile className="h-6 w-6" />
+            </span>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">
+                Experiência oferecida por
+              </p>
+              <p className="mt-1 text-lg font-black">{profile.name}</p>
+              {(profile.specialty || profile.city) && (
+                <p className="mt-1 text-xs font-bold text-slate-400">
+                  {[profile.specialty, profile.city, profile.state]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              )}
+              {profile.bio && (
+                <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
+                  {profile.bio}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
       <button
         disabled={loading || !profile}
@@ -494,7 +515,7 @@ const LandingView = ({
         ) : (
           <Smile className="h-5 w-5" />
         )}
-        Iniciar Minha Triagem <ArrowRight className="h-5 w-5" />
+        Quero conhecer meu sorriso <ArrowRight className="h-5 w-5" />
       </button>
       {!loading && !profile && (
         <p className="mx-auto mt-3 max-w-md text-xs font-bold text-amber-700">
@@ -531,25 +552,25 @@ const LandingView = ({
               number: "01",
               icon: "📸",
               title: "Foto guiada",
-              text: "Use o guia para posicionar o sorriso com boa luz.",
+              text: "A câmera orienta posição, distância e iluminação.",
             },
             {
               number: "02",
               icon: "✨",
-              title: "Leitura inicial",
-              text: "A IA observa aspectos visuais aparentes da foto.",
+              title: "Primeira descoberta",
+              text: "Veja os primeiros destaques antes de informar seus dados.",
             },
             {
               number: "03",
               icon: "📊",
-              title: "Preview parcial",
-              text: "Veja os primeiros indicadores antes de informar seus dados.",
+              title: "Mapa do Sorriso",
+              text: "Receba pontos para conversar em uma avaliação.",
             },
             {
               number: "04",
               icon: "📋",
-              title: "Relatório completo",
-              text: "Autorize o envio e escolha como falar com o profissional.",
+              title: "Próximo passo",
+              text: "Escolha iniciar a conversa ou receber o contato.",
             },
           ].map((item) => (
             <article
@@ -955,10 +976,12 @@ const LegalView = ({
             <LegalSection title="2. Dados e finalidades">
               Processamos a fotografia do sorriso, confirmações de
               consentimento, nome, WhatsApp, resultado visual, dados técnicos
-              de segurança e informações da conta profissional. A foto serve
-              apenas para validar e gerar a leitura solicitada; nome e WhatsApp
-              permitem compartilhar o resultado com o profissional do link e
-              realizar o contato autorizado.
+              de segurança, escolhas de contato e informações da conta
+              profissional. A orientação de enquadramento da câmera acontece
+              localmente no aparelho, sem gravar os quadros do vídeo. A foto
+              confirmada serve apenas para validar e gerar a leitura solicitada;
+              nome e WhatsApp permitem compartilhar o resultado com o
+              profissional do link e realizar o contato autorizado.
             </LegalSection>
             <LegalSection title="3. Consentimento e maioridade">
               A foto pode revelar dado de saúde e, por isso, só é processada
@@ -975,9 +998,10 @@ const LegalView = ({
             <LegalSection title="5. Armazenamento e retenção">
               A Sorvy não grava a fotografia no Firestore, Storage ou painel.
               A sessão de triagem expira em 30 minutos. O registro do lead,
-              resultado e consentimentos é mantido por até 12 meses, salvo
-              obrigação legal ou pedido de exclusão aplicável. Logs técnicos
-              do provedor podem seguir os prazos de segurança contratados.
+              resultado, consentimentos e escolhas do próximo passo é mantido
+              por até 12 meses, salvo obrigação legal ou pedido de exclusão
+              aplicável. Logs técnicos do provedor podem seguir os prazos de
+              segurança contratados.
             </LegalSection>
             <LegalSection title="6. Direitos do titular">
               O titular pode pedir confirmação, acesso, correção, informação,

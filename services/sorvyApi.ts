@@ -307,6 +307,21 @@ export async function saveLead(input: {
   }
 }
 
+export async function recordPatientConversionAction(
+  sessionId: string,
+  action: "whatsapp_opened" | "contact_requested",
+): Promise<void> {
+  const callable = httpsCallable<
+    { sessionId: string; action: typeof action },
+    { ok: true }
+  >(functions, "recordPatientConversionAction");
+  try {
+    await callable({ sessionId, action });
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
 export async function loginWorkspace(
   email: string,
   password: string,

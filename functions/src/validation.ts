@@ -39,6 +39,11 @@ export const captureLeadSchema = z.object({
   consentVersion: z.literal(CONSENT_VERSION),
 });
 
+export const patientConversionActionSchema = z.object({
+  sessionId: z.string().min(10).max(160),
+  action: z.enum(["whatsapp_opened", "contact_requested"]),
+});
+
 export const checkoutSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().toLowerCase().email().max(160),
