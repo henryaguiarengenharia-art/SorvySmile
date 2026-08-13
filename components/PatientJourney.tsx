@@ -31,6 +31,14 @@ import {
   recordPatientConversionAction,
 } from "../services/sorvyApi";
 import { preparePhotoFile } from "../services/photoFile";
+import {
+  overallVisualIndex,
+  reportHeadline,
+  visualIndexHeadline,
+  visualIndexSummary,
+  visualMetricLabel,
+  visualMetricLevel,
+} from "../services/smilePresentation";
 
 const GuidedCamera = React.lazy(() =>
   import("./GuidedCamera").then((module) => ({
@@ -166,7 +174,7 @@ export const PatientJourney = ({
       return;
     }
     if (!contactConsent || !privacyConsent) {
-      setError("Confirme as duas autorizações para compartilhar o resultado.");
+      setError("Confirme a autorização para liberar e compartilhar o resultado.");
       return;
     }
 
@@ -201,8 +209,9 @@ export const PatientJourney = ({
     const message = [
       `Olá! Concluí minha triagem visual na Sorvy Smile pelo link de ${profile.name}.`,
       `Meu nome é ${lead.name}.`,
-      `Índice visual de harmonia: ${scores.harmonyIndex}/100.`,
-      "Gostaria de conversar sobre uma avaliação presencial.",
+      `Índice visual geral: ${overallVisualIndex(scores)}/100.`,
+      `Foco sugerido: ${scores.intentCategory || "avaliação integral do sorriso"}.`,
+      "Gostaria de agendar uma avaliação presencial para entender as possibilidades de cuidado.",
     ].join("\n");
     window.open(
       `https://wa.me/${number}?text=${encodeURIComponent(message)}`,
@@ -285,6 +294,7 @@ export const PatientJourney = ({
       )}
       {stage === "contact" && scores && (
         <ContactStep
+          scores={scores}
           lead={lead}
           setLead={setLead}
           contactConsent={contactConsent}
@@ -591,41 +601,26 @@ const AnalyzingStep = () => {
 };
 
 const metricPresentation = (value: number) => {
-  if (value >= 72) {
-    return {
-      label: "Em destaque",
+  const level = visualMetricLevel(value);
+  const colors = {
+    strength: {
       badgeClass: "bg-emerald-50 text-emerald-700",
       barClass: "bg-emerald-500",
-    };
-  }
-  if (value >= 48) {
-    return {
-      label: "Equilíbrio visual",
+    },
+    opportunity: {
       badgeClass: "bg-blue-50 text-blue-700",
       barClass: "bg-blue-600",
-    };
-  }
-  return {
-    label: "Vale explorar",
-    badgeClass: "bg-amber-50 text-amber-700",
-    barClass: "bg-amber-500",
-  };
-};
-
-const overallVisualIndex = (scores: SmileScores): number => Math.round(
-  (
-    scores.harmonyIndex
-    + scores.brightnessIndex
-    + scores.technicalInsights.symmetry
-    + scores.technicalInsights.alignment
-    + scores.technicalInsights.reflectivity
-  ) / 5,
-);
-
-const visualIndexHeadline = (value: number): string => {
-  if (value >= 72) return "Seu sorriso apresenta equilíbrio visual em destaque";
-  if (value >= 48) return "Seu sorriso tem uma boa base visual para explorar";
-  return "Seu sorriso revela pontos interessantes para explorar";
+    },
+    attention: {
+      badgeClass: "bg-amber-50 text-amber-800",
+      barClass: "bg-amber-500",
+    },
+    evaluation: {
+      badgeClass: "bg-red-50 text-red-700",
+      barClass: "bg-red-500",
+    },
+  }[level];
+  return { label: visualMetricLabel(value), ...colors };
 };
 
 const visualTone = (scores: SmileScores): string =>
@@ -641,6 +636,11 @@ const PreviewStep = ({
   onContinue: () => void;
 }) => {
   const visualIndex = overallVisualIndex(scores);
+  const insightClass = visualMetricLevel(visualIndex) === "evaluation"
+    ? "bg-red-600 shadow-red-100"
+    : visualMetricLevel(visualIndex) === "attention"
+      ? "bg-amber-500 shadow-amber-100"
+      : "bg-blue-600 shadow-blue-100";
   return (
     <main className="mx-auto max-w-3xl px-6 py-9">
       <JourneyProgress current={1} />
@@ -651,10 +651,10 @@ const PreviewStep = ({
         <p className="mt-7 text-[10px] font-black uppercase tracking-widest text-blue-600">
           Sem dados pessoais
         </p>
-        <h1 className="mt-2 text-4xl font-black">Seus primeiros destaques</h1>
+        <h1 className="mt-2 text-4xl font-black">O que seu sorriso revela</h1>
         <p className="mx-auto mt-3 max-w-xl text-sm font-medium leading-relaxed text-slate-500">
-          Uma leitura visual rápida para você chegar à conversa com o dentista
-          sabendo o que deseja explorar.
+          Veja o principal ponto identificado e chegue à avaliação sabendo o que
+          precisa ser compreendido.
         </p>
       </div>
       <section className="mt-8 overflow-hidden rounded-[2.5rem] border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-amber-50 p-6 shadow-sm sm:p-8">
@@ -671,8 +671,7 @@ const PreviewStep = ({
               {visualIndexHeadline(visualIndex)}
             </h2>
             <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500">
-              Combina características aparentes de harmonia, organização,
-              luminosidade e resposta à luz.
+              {visualIndexSummary(visualIndex)}
             </p>
           </div>
         </div>
@@ -693,9 +692,9 @@ const PreviewStep = ({
         )}
         {fullReport && (
           <PreviewMetric
-            label="Tom visual"
+            label="Referência VITA"
             value={visualTone(scores)}
-            note="Estimativa"
+            note="Estimada"
           />
         )}
         <PreviewMetric
@@ -705,36 +704,31 @@ const PreviewStep = ({
         />
       </div>
 
-      <section className="mt-5 rounded-[2rem] bg-blue-600 p-7 text-white shadow-xl shadow-blue-100">
+      <section className={`mt-5 rounded-[2rem] p-7 text-white shadow-xl ${insightClass}`}>
         <Sparkles className="h-7 w-7 text-blue-200" />
         <p className="mt-4 text-[10px] font-black uppercase tracking-widest text-blue-100">
-          Insight visual detectado
+          Principal achado visual
         </p>
         <p className="mt-2 text-lg font-black leading-snug">{scores.benchmarkText}</p>
       </section>
 
       <p className="mt-4 text-center text-[10px] font-bold leading-relaxed text-slate-400">
-        Indicadores aproximados de percepção visual. Não representam diagnóstico
-        nem medição clínica de cor.
+        Leitura visual aproximada. A causa dos achados e a referência VITA exata
+        precisam ser confirmadas em avaliação presencial.
       </p>
       <div className="mt-7 rounded-[2rem] bg-slate-900 p-8 text-center text-white">
         <LockKeyhole className="mx-auto h-8 w-8 text-blue-400" />
         <h2 className="mt-4 text-2xl font-black">Seu Mapa do Sorriso está pronto</h2>
         <p className="mx-auto mt-2 max-w-md text-sm font-medium text-white/50">
           {fullReport
-            ? "Receba seus destaques, pontos para conversar e um próximo passo claro para sua avaliação."
-            : "Salve sua descoberta e receba o principal ponto para conversar em uma avaliação."}
+            ? "A leitura encontrou outros pontos que podem fazer diferença no seu sorriso. Desbloqueie para entender o que priorizar e levar à avaliação."
+            : "Desbloqueie o principal ponto que merece ser levado à sua avaliação."}
         </p>
-        <div className="mx-auto mt-5 max-w-sm space-y-2 text-left text-xs font-bold text-white/75">
-          <p className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Leitura visual detalhada</p>
-          <p className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Perguntas para levar ao dentista</p>
-          <p className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-400" /> Próximo passo recomendado</p>
-        </div>
         <button
           onClick={onContinue}
           className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-7 py-4 text-xs font-black uppercase tracking-widest"
         >
-          Receber meu Mapa do Sorriso
+          Desbloquear meu Mapa do Sorriso
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
@@ -770,6 +764,7 @@ const PreviewMetric = ({
 };
 
 const ContactStep = ({
+  scores,
   lead,
   setLead,
   contactConsent,
@@ -781,6 +776,7 @@ const ContactStep = ({
   onSubmit,
   onBack,
 }: {
+  scores: SmileScores;
   lead: { name: string; whatsapp: string };
   setLead: (lead: { name: string; whatsapp: string }) => void;
   contactConsent: boolean;
@@ -791,7 +787,15 @@ const ContactStep = ({
   profile: PublicProfessionalProfile;
   onSubmit: (event: React.FormEvent) => void;
   onBack: () => void;
-}) => (
+}) => {
+  const visualIndex = overallVisualIndex(scores);
+  const consentChecked = contactConsent && privacyConsent;
+  const setCombinedConsent = (value: boolean) => {
+    setContactConsent(value);
+    setPrivacyConsent(value);
+  };
+
+  return (
   <main className="mx-auto max-w-xl px-6 py-9">
     <button onClick={onBack} className="mb-6 flex items-center gap-2 text-sm font-black text-slate-500">
       <ChevronLeft className="h-4 w-4" /> Voltar à descoberta
@@ -808,15 +812,11 @@ const ContactStep = ({
         <p className="mt-4 text-[10px] font-black uppercase tracking-widest text-blue-600">
           Último passo
         </p>
-        <h1 className="mt-2 text-3xl font-black">Receba seu Mapa do Sorriso</h1>
+        <h1 className="mt-2 text-3xl font-black">{reportHeadline(visualIndex)}</h1>
         <p className="mt-2 text-sm font-medium text-slate-500">
-          Precisamos somente do seu nome e WhatsApp. Sem CPF, email ou endereço.
+          Informe somente seu nome e WhatsApp para liberar o mapa e permitir que{" "}
+          {profile.name} ajude você a entender os próximos passos.
         </p>
-      </div>
-      <div className="space-y-2 rounded-2xl bg-blue-50 p-5 text-xs font-bold text-blue-900">
-        <p className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-600" /> Seus destaques visuais</p>
-        <p className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-600" /> Pontos para conversar na avaliação</p>
-        <p className="flex items-center gap-2"><Check className="h-4 w-4 text-emerald-600" /> Acesso direto a {profile.name}</p>
       </div>
       <label className="block space-y-2">
         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
@@ -845,32 +845,27 @@ const ContactStep = ({
           className="w-full rounded-2xl border-2 border-slate-100 bg-slate-50 p-4 font-bold outline-none focus:border-blue-500"
         />
       </label>
-      <div className="space-y-3">
-        <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-slate-50 p-4">
-          <input
-            type="checkbox"
-            checked={privacyConsent}
-            onChange={(event) => setPrivacyConsent(event.target.checked)}
-            className="mt-0.5 h-5 w-5"
-          />
-          <span className="text-xs font-bold leading-relaxed text-slate-600">
-            Autorizo o compartilhamento do meu nome, WhatsApp e resultado desta
-            triagem com {profile.name}.
-          </span>
-        </label>
-        <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-slate-50 p-4">
-          <input
-            type="checkbox"
-            checked={contactConsent}
-            onChange={(event) => setContactConsent(event.target.checked)}
-            className="mt-0.5 h-5 w-5"
-          />
-          <span className="text-xs font-bold leading-relaxed text-slate-600">
-            Autorizo {profile.name} a entrar em contato comigo pelo WhatsApp para
-            conversar sobre avaliação e agendamento.
-          </span>
-        </label>
-      </div>
+      <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-slate-50 p-4">
+        <input
+          type="checkbox"
+          checked={consentChecked}
+          onChange={(event) => setCombinedConsent(event.target.checked)}
+          className="mt-0.5 h-5 w-5"
+        />
+        <span className="text-xs font-bold leading-relaxed text-slate-600">
+          Autorizo o compartilhamento do meu nome, WhatsApp e mapa com {profile.name},
+          que poderá falar comigo pelo WhatsApp sobre avaliação e agendamento. Li a{" "}
+          <a
+            href="/privacidade"
+            target="_blank"
+            rel="noreferrer"
+            className="text-blue-600 underline"
+          >
+            Política de Privacidade
+          </a>
+          .
+        </span>
+      </label>
       <button
         disabled={busy}
         className="flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 py-5 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50"
@@ -880,14 +875,15 @@ const ContactStep = ({
         ) : (
           <LockKeyhole className="h-5 w-5" />
         )}
-        Receber meu Mapa do Sorriso
+        Liberar meu mapa e receber orientação
       </button>
       <p className="text-center text-[10px] font-bold leading-relaxed text-slate-400">
-        Você escolhe na próxima tela se quer iniciar a conversa ou receber o contato.
+        Na próxima tela você escolhe se prefere iniciar a conversa ou receber o contato.
       </p>
     </form>
   </main>
-);
+  );
+};
 
 const ReportStep = ({
   scores,
@@ -908,6 +904,7 @@ const ReportStep = ({
   const [requestingContact, setRequestingContact] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const visualIndex = overallVisualIndex(scores);
+  const attentionLevel = visualMetricLevel(visualIndex);
   const reportMetrics = profile.plan === "lite"
     ? [
         ["Harmonia do sorriso", scores.harmonyIndex],
@@ -952,7 +949,7 @@ const ReportStep = ({
           </div>
           <h1 className="mt-7 text-4xl font-black">Seu Mapa do Sorriso</h1>
           <p className="mt-2 text-sm font-medium text-white/70">
-            {leadName}, agora você já sabe quais pontos deseja explorar.
+            {leadName}, {reportHeadline(visualIndex).toLowerCase()}.
           </p>
           <p className="mt-1 text-xs font-medium text-white/50">
             Oferecido por {profile.name}
@@ -976,16 +973,18 @@ const ReportStep = ({
             </div>
             <div className="rounded-[1.75rem] bg-blue-50 p-5">
               <p className="text-[9px] font-black uppercase tracking-widest text-blue-500">
-                Experiência principal
+                Especialidade indicada
               </p>
-              <p className="mt-2 text-lg font-black text-slate-900">Estética do sorriso</p>
+              <p className="mt-2 text-lg font-black text-slate-900">
+                {scores.recommendedSpecialty || "Avaliação odontológica geral"}
+              </p>
             </div>
             <div className="rounded-[1.75rem] bg-amber-50 p-5">
               <p className="text-[9px] font-black uppercase tracking-widest text-amber-600">
-                Foco da conversa
+                Foco do cuidado
               </p>
               <p className="mt-2 text-lg font-black text-slate-900">
-                Explorar possibilidades
+                {scores.intentCategory || "Avaliação integral do sorriso"}
               </p>
             </div>
           </div>
@@ -996,12 +995,13 @@ const ReportStep = ({
                 <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">
                   Seu painel visual
                 </p>
-                <h2 className="mt-1 text-2xl font-black">O que se destacou no sorriso</h2>
+                <h2 className="mt-1 text-2xl font-black">O que precisa ser compreendido</h2>
               </div>
               <div className="hidden items-center gap-3 text-[8px] font-black uppercase tracking-wider text-slate-400 sm:flex">
-                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-500" /> Destaque</span>
-                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-600" /> Equilíbrio</span>
-                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-500" /> Explorar</span>
+                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-500" /> Ponto forte</span>
+                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-600" /> Pode evoluir</span>
+                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-amber-500" /> Atenção</span>
+                <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-red-500" /> Avaliação</span>
               </div>
             </div>
             <div className="mt-5 space-y-5">
@@ -1014,17 +1014,23 @@ const ReportStep = ({
           <div className="grid gap-3 sm:grid-cols-[0.8fr_1.2fr]">
             <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50 p-5">
               <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-                Tom visual estimado
+                Referência VITA estimada
               </p>
               <p className="mt-2 text-2xl font-black capitalize">{visualTone(scores)}</p>
               <p className="mt-2 text-[10px] font-medium leading-relaxed text-slate-400">
-                Não equivale à escala clínica VITA; luz e câmera alteram a percepção.
+                A faixa exata precisa ser confirmada presencialmente; luz e câmera alteram a percepção.
               </p>
             </div>
-            <div className="rounded-[1.75rem] bg-blue-600 p-6 text-white">
+            <div className={`rounded-[1.75rem] p-6 text-white ${
+              attentionLevel === "evaluation"
+                ? "bg-red-600"
+                : attentionLevel === "attention"
+                  ? "bg-amber-500"
+                  : "bg-blue-600"
+            }`}>
               <Sparkles className="h-6 w-6 text-blue-200" />
               <p className="mt-4 text-[9px] font-black uppercase tracking-widest text-blue-100">
-                Insight visual detectado
+                Principal achado visual
               </p>
               <p className="mt-2 text-base font-black leading-snug">{scores.benchmarkText}</p>
             </div>
@@ -1032,9 +1038,9 @@ const ReportStep = ({
 
           <section>
             <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">
-              Leve para a conversa
+              Entenda antes da consulta
             </p>
-            <h2 className="mt-1 text-2xl font-black">Pontos que merecem ser explorados</h2>
+            <h2 className="mt-1 text-2xl font-black">Pontos que merecem avaliação</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               {scores.observations
                 .slice(0, profile.plan === "lite" ? 1 : undefined)
@@ -1054,7 +1060,7 @@ const ReportStep = ({
 
           <div className="rounded-[1.75rem] border border-blue-100 bg-blue-50 p-5">
             <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">
-              Próximo passo sugerido
+              Recomendação da inteligência artificial
             </p>
             <p className="mt-2 text-sm font-bold leading-relaxed text-slate-700">
               {scores.recommendation}
@@ -1062,8 +1068,8 @@ const ReportStep = ({
           </div>
 
           <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-[10px] font-medium leading-relaxed text-slate-500">
-            Leitura visual informativa: não diagnostica, não indica urgência e
-            não define tratamento. Decisões clínicas exigem avaliação presencial.
+            Esta leitura não confirma diagnóstico nem define tratamento. Se houver
+            dor, inchaço, sangramento ou trauma, procure atendimento odontológico.
           </div>
 
           {actionError && (
@@ -1079,7 +1085,7 @@ const ReportStep = ({
                 onClick={onContact}
                 className="flex w-full items-center justify-center gap-3 rounded-2xl bg-emerald-600 py-5 text-xs font-black uppercase tracking-widest text-white hover:bg-emerald-700"
               >
-                Conversar com {profile.name} no WhatsApp
+                Quero avaliar como melhorar meu sorriso
                 <ExternalLink className="h-5 w-5" />
               </button>
               <button
@@ -1089,7 +1095,7 @@ const ReportStep = ({
                 className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 bg-white py-4 text-xs font-black uppercase tracking-widest text-slate-600 hover:border-blue-200 hover:text-blue-600 disabled:opacity-60"
               >
                 {requestingContact && <LoaderCircle className="h-4 w-4 animate-spin" />}
-                {contactRequested ? "Pedido de contato enviado" : "Prefiro receber o contato"}
+                {contactRequested ? "Pedido de contato enviado" : `Prefiro que ${profile.name} fale comigo`}
               </button>
               {contactRequested && (
                 <p className="rounded-2xl bg-emerald-50 p-4 text-center text-xs font-bold text-emerald-800">

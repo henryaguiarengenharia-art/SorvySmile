@@ -11,6 +11,10 @@ const cameraSource = readFileSync(
   "utf8",
 );
 const functionsSource = readFileSync("functions/src/index.ts", "utf8");
+const presentationSource = readFileSync(
+  new URL("./services/smilePresentation.ts", import.meta.url),
+  "utf8",
+);
 
 describe("paridade do produto Sorvy Smile", () => {
   it("mantém a página inicial orientada à triagem do paciente", () => {
@@ -47,27 +51,30 @@ describe("paridade do produto Sorvy Smile", () => {
       journeySource.indexOf('setStage("contact")'),
     );
     expect(journeySource).toContain("Sem dados pessoais");
-    expect(journeySource).toContain("Insight visual detectado");
+    expect(journeySource).toContain("Principal achado visual");
     expect(journeySource).toContain("Harmonia do sorriso");
     expect(journeySource).toContain("Refletividade");
-    expect(journeySource).toContain("Tom visual estimado");
+    expect(journeySource).toContain("Referência VITA estimada");
     expect(journeySource).toContain("Brilho geral");
     expect(journeySource).toContain("WhatsApp com DDD");
   });
 
   it("mantém as duas CTAs finais e registra a escolha do paciente", () => {
-    expect(journeySource).toContain("no WhatsApp");
-    expect(journeySource).toContain("Prefiro receber o contato");
+    expect(journeySource).toContain("Quero avaliar como melhorar meu sorriso");
+    expect(journeySource).toContain("Prefiro que ${profile.name} fale comigo");
     expect(journeySource).toContain("recordPatientConversionAction");
     expect(functionsSource).toContain("contactRequestedAtMs");
     expect(functionsSource).toContain("patientOpenedWhatsAppAtMs");
   });
 
-  it("mantém linguagem informativa e não diagnóstica", () => {
+  it("mantém linguagem objetiva sem transformar imagem em diagnóstico", () => {
     expect(appSource).toContain(
       "Triagem informativa. Não substitui consulta com cirurgião-dentista.",
     );
     expect(journeySource).toContain("Não é diagnóstico");
-    expect(journeySource).toContain("não indica urgência");
+    expect(journeySource).toContain("não confirma diagnóstico nem define tratamento");
+    expect(presentationSource).toContain("Alterações visuais importantes");
+    expect(journeySource).toContain("Especialidade indicada");
+    expect(journeySource).toContain("Foco do cuidado");
   });
 });

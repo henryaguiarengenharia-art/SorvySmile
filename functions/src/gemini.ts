@@ -19,6 +19,8 @@ const scoreSchema = z.object({
   }),
   observations: z.array(z.string().trim().min(3).max(180)).min(2).max(4),
   recommendation: z.string().trim().min(3).max(280),
+  intentCategory: z.string().trim().min(3).max(100),
+  recommendedSpecialty: z.string().trim().min(3).max(100),
 });
 
 export type PhotoValidationResult = z.infer<typeof photoValidationSchema>;
@@ -45,6 +47,34 @@ export interface AiFailureDetails {
   message: string;
   status: number | null;
   code: string | null;
+}
+
+export function normalizeSmileAnalysisResult(value: unknown): SmileAnalysisResult {
+  const result = scoreSchema.parse(value);
+  const harmonyIndex = Math.round(result.harmonyIndex);
+  const brightnessIndex = Math.round(result.brightnessIndex);
+  const symmetry = Math.round(result.technicalInsights.symmetry);
+  const alignment = Math.round(result.technicalInsights.alignment);
+  const reflectivity = Math.round(result.technicalInsights.reflectivity);
+  const overallIndex = Math.round(
+    (harmonyIndex + brightnessIndex + symmetry + alignment + reflectivity) / 5,
+  );
+  return {
+    harmonyIndex,
+    brightnessIndex,
+    vitaShade: `Tom visual: ${result.visualTone}`,
+    status: visualStatusFor(overallIndex),
+    benchmarkText: result.benchmarkText,
+    technicalInsights: {
+      symmetry,
+      alignment,
+      reflectivity,
+    },
+    observations: result.observations,
+    recommendation: result.recommendation,
+    intentCategory: result.intentCategory,
+    recommendedSpecialty: result.recommendedSpecialty,
+  };
 }
 
 export function describeAiFailure(error: unknown): AiFailureDetails {
@@ -161,16 +191,23 @@ export async function analyzePhotoWithGemini(
       imagePart(imageBase64, mimeType),
       {
         text: [
-          "Analise apenas características visuais aparentes do sorriso para uma experiência educativa de estética odontológica.",
-          "Produza índices aproximados de 0 a 100 para harmonia visual, brilho aparente, simetria, alinhamento aparente e refletividade.",
+          "Analise com rigor e objetividade as características visuais aparentes do sorriso para uma triagem odontológica informativa.",
+          "Seu papel é retratar o que está visível e conduzir a pessoa a uma avaliação presencial; não suavize alterações relevantes com expressões vagas como 'pontos interessantes', 'explorar possibilidades' ou 'está tudo bem'.",
+          "Produza índices aproximados de 0 a 100 para harmonia visual, brilho aparente, simetria, alinhamento aparente e refletividade: 100 representa condição visual muito favorável e 0 representa alterações visuais muito marcantes.",
+          "Calibre os índices de forma coerente entre si: alterações extensas, áreas muito escurecidas, perda aparente de estrutura, fraturas aparentes ou grande desorganização não podem receber notas medianas ou altas.",
           "visualTone deve ser uma descrição simples como claro, intermediário ou escuro; não informe escala VITA, porque uma foto sem calibração não permite medição clínica.",
-          "Não classifique urgência ou prioridade; o aplicativo calculará uma faixa visual a partir do índice de harmonia.",
-          "Não diagnostique cárie, doença, dor, urgência, especialidade, prognóstico, custo, ticket ou prazo de tratamento.",
-          "A recomendação deve sempre sugerir avaliação presencial por cirurgião-dentista para qualquer decisão clínica.",
-          "benchmarkText deve ter uma frase curta, atraente e fácil de entender sobre o principal padrão visual aparente.",
-          "Cada observação deve ser curta, explicar um aspecto visível em linguagem comum e servir como ponto para conversar com o dentista.",
-          "Não use jargões, nomes de tratamentos, prescrição ou tom alarmista.",
-          "Escreva em português do Brasil, com linguagem acolhedora, objetiva e sem promessas.",
+          "Não confirme diagnóstico, doença, dor, prognóstico, custo ou prazo de tratamento a partir da imagem.",
+          "Você pode e deve nomear achados visuais com precisão, usando qualificadores quando necessário: áreas escurecidas, manchas aparentes, restaurações aparentes, desgaste aparente, fratura ou perda aparente de estrutura, desalinhamento, assimetria e alteração aparente do contorno gengival.",
+          "Nunca afirme 'cárie', 'infecção' ou outra doença como diagnóstico confirmado; nesses casos recomende investigar presencialmente as alterações visíveis.",
+          "benchmarkText deve identificar em uma frase direta o principal achado visual e por que ele merece avaliação. Evite elogios genéricos que ocultem o achado principal.",
+          "Cada observação deve ser curta, concreta, ordenada da mais relevante para a menos relevante e servir como ponto para conversar com o dentista.",
+          "recommendation deve começar com 'Sugerimos uma avaliação' e indicar de forma objetiva o que precisa ser investigado ou aprimorado. Em alterações marcantes, use 'avaliação odontológica prioritária'; prioridade de avaliação não significa diagnóstico de urgência.",
+          "recommendedSpecialty deve indicar a principal área sugerida entre Estética odontológica, Dentística restauradora, Ortodontia, Periodontia, Reabilitação oral ou Avaliação odontológica geral. Não invente especialidade quando a imagem não permitir direcionamento seguro.",
+          "intentCategory deve informar um foco concreto do cuidado, como Restaurações e estrutura dental, Alinhamento e harmonia, Cor e luminosidade, Gengiva e contorno ou Avaliação integral do sorriso. Não use 'Explorar possibilidades'.",
+          "Não prescreva tratamento. Pode mencionar restaurações, alinhamento, clareamento ou cuidado gengival apenas como tema a ser avaliado, nunca como tratamento já definido.",
+          "Exemplo moderado: 'O alinhamento dos dentes anteriores é o principal ponto que pode limitar a harmonia do sorriso e merece avaliação estética.'",
+          "Exemplo marcante: 'Áreas muito escurecidas e perda aparente de estrutura em vários dentes exigem investigação odontológica prioritária.'",
+          "Escreva em português do Brasil, com linguagem clara, firme, persuasiva, sem alarmismo e sem promessas.",
           "Responda somente JSON com todos os campos solicitados.",
         ].join(" "),
       },
@@ -197,6 +234,8 @@ export async function analyzePhotoWithGemini(
         items: { type: Type.STRING },
       },
       recommendation: { type: Type.STRING },
+      intentCategory: { type: Type.STRING },
+      recommendedSpecialty: { type: Type.STRING },
     },
     required: [
       "harmonyIndex",
@@ -206,6 +245,8 @@ export async function analyzePhotoWithGemini(
       "technicalInsights",
       "observations",
       "recommendation",
+      "intentCategory",
+      "recommendedSpecialty",
     ],
   };
   let response;
@@ -228,22 +269,5 @@ export async function analyzePhotoWithGemini(
     });
   }
 
-  const result = scoreSchema.parse(parseJson(response.text));
-  const harmonyIndex = Math.round(result.harmonyIndex);
-  return {
-    harmonyIndex,
-    brightnessIndex: Math.round(result.brightnessIndex),
-    vitaShade: `Tom visual: ${result.visualTone}`,
-    status: visualStatusFor(harmonyIndex),
-    benchmarkText: result.benchmarkText,
-    technicalInsights: {
-      symmetry: Math.round(result.technicalInsights.symmetry),
-      alignment: Math.round(result.technicalInsights.alignment),
-      reflectivity: Math.round(result.technicalInsights.reflectivity),
-    },
-    observations: result.observations,
-    recommendation: result.recommendation,
-    intentCategory: "Avaliação estética",
-    recommendedSpecialty: "Cirurgião-dentista",
-  };
+  return normalizeSmileAnalysisResult(parseJson(response.text));
 }
