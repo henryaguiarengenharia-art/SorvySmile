@@ -248,13 +248,13 @@ done
 
 printf 'Publicando o primeiro lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:setAccountStatus,functions:createTeamMember \
+  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember \
   --project "$PROJECT_ID" \
   --non-interactive
 
 printf 'Publicando o segundo lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
+  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:expireProfessionalTrials,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
   --project "$PROJECT_ID" \
   --non-interactive
 
