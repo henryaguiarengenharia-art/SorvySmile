@@ -92,6 +92,44 @@ export const professionalStatusSchema = z.object({
   isActive: z.boolean(),
 });
 
+const optionalProfileFields = {
+  name: z.string().trim().min(2).max(120).optional(),
+  specialty: z.string().trim().max(100).optional(),
+  whatsapp: phoneSchema.optional(),
+  city: z.string().trim().min(2).max(80).optional(),
+  state: z.string().trim().toUpperCase().length(2).optional(),
+  bio: z.string().trim().max(400).optional(),
+  bioLink: z.string().trim().max(250).optional(),
+  standardMessage: z.string().trim().max(500).optional(),
+  templates: z.array(z.string().trim().min(1).max(500)).max(10).optional(),
+  teamTag: z.string().trim().max(80).optional(),
+  isOnDuty: z.boolean().optional(),
+};
+
+export const hqProfessionalPatchSchema = z.object({
+  accountId: z.string().min(3).max(160),
+  professionalId: z.string().min(3).max(160),
+  ...optionalProfileFields,
+}).refine((value) => Object.keys(value).some((key) =>
+  !["accountId", "professionalId"].includes(key)
+  && value[key as keyof typeof value] !== undefined,
+), "Informe pelo menos um campo para atualizar.");
+
+export const professionalArchiveSchema = z.object({
+  accountId: z.string().min(3).max(160),
+  professionalId: z.string().min(3).max(160),
+  confirmation: z.literal("ARQUIVAR"),
+  reason: z.string().trim().max(240).optional().default(""),
+});
+export const professionalRestoreSchema = z.object({
+  accountId: z.string().min(3).max(160),
+  professionalId: z.string().min(3).max(160),
+});
+export const professionalTrialSchema = z.object({
+  accountId: z.string().min(3).max(160),
+  professionalId: z.string().min(3).max(160),
+});
+
 export function slugify(value: string): string {
   return value
     .normalize("NFD")

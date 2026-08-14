@@ -38,6 +38,12 @@ export interface PlanConfig {
 }
 
 export type AccountStatus = 'active' | 'pending' | 'overdue' | 'paused';
+export type ProfessionalStatus =
+  | 'active'
+  | 'trial'
+  | 'subscriber'
+  | 'inactive'
+  | 'archived';
 export type AccountRisk = 'ok' | 'attention' | 'critical';
 
 export interface BillingAccount {
@@ -53,7 +59,12 @@ export interface BillingAccount {
   requestedPlan?: PlanTier;
   activatedAt?: number;
   activatedBy?: string;
+  trialStatus?: 'not_started' | 'active' | 'expired' | 'converted';
+  trialStartedAt?: number;
   trialUntil?: number;
+  subscriptionStatus?: 'pending' | 'trial' | 'active' | 'overdue' | 'paused';
+  archivedAt?: number;
+  archivedBy?: string;
   overrideUntil?: number;
   checkoutName?: string;
   checkoutEmail?: string;
@@ -135,6 +146,7 @@ export interface DentistRecord {
   role: UserRole;
   billingAccountId: string;
   isActive: boolean;
+  status?: ProfessionalStatus;
   createdAt: number;
   specialty?: string;
   city?: string;
@@ -147,6 +159,12 @@ export interface DentistRecord {
   teamTag?: string;
   isOnDuty?: boolean;
   profileImage?: string;
+  trialStartedAt?: number;
+  trialEndsAt?: number;
+  archivedAt?: number;
+  archivedBy?: string;
+  isDemo?: boolean;
+  isProtected?: boolean;
 }
 
 export interface PublicProfessionalProfile {
@@ -162,6 +180,7 @@ export interface PublicProfessionalProfile {
   bio?: string;
   plan: PlanTier;
   active: boolean;
+  status?: ProfessionalStatus;
 }
 
 export interface WorkspaceUser {

@@ -107,5 +107,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /adminAuditLogs/{logId} {
+      allow read, write: if false;
+    }
+
+    match /subscriptionHistory/{historyId} {
+      allow read, write: if false;
+    }
+
   }
 }

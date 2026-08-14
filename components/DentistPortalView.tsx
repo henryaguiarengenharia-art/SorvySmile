@@ -43,7 +43,7 @@ interface DentistPortalViewProps {
   onDeleteLead: (id: string) => Promise<void>;
 }
 
-type PortalTab = "dashboard" | "leads" | "profile";
+type PortalTab = "dashboard" | "leads" | "post" | "profile";
 
 const formatPhone = (value: string): string => {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -342,6 +342,16 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
         </div>
       )}
 
+      {professional.status === "trial" && professional.trialEndsAt && (
+        <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-bold text-amber-900">
+          <Clock className="h-5 w-5 shrink-0" />
+          Seu período de demonstração termina em {new Date(professional.trialEndsAt).toLocaleDateString("pt-BR")}. Aproveite para configurar seu perfil e conversar com seus leads.
+        </div>
+      )}
+      {professional.status === "inactive" && (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm font-bold text-slate-700">O acesso está pausado. Fale com a administração para reativar sua conta.</div>
+      )}
+
       <nav className="flex flex-wrap gap-2">
         <TabButton
           active={tab === "dashboard"}
@@ -358,8 +368,14 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
         <TabButton
           active={tab === "profile"}
           icon={<Settings className="h-4 w-4" />}
-          label="Perfil"
+          label="Configurações"
           onClick={() => setTab("profile")}
+        />
+        <TabButton
+          active={tab === "post"}
+          icon={<Instagram className="h-4 w-4" />}
+          label="Post do Dia"
+          onClick={() => setTab("post")}
         />
       </nav>
 
@@ -608,6 +624,23 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {tab === "post" && (
+        <section className="grid gap-6 lg:grid-cols-[1fr_.8fr]">
+          <article className="rounded-[2rem] bg-blue-600 p-8 text-white">
+            <Instagram className="h-7 w-7" />
+            <p className="mt-6 text-[10px] font-black uppercase tracking-widest text-blue-100">Post do Dia</p>
+            <h2 className="mt-2 text-3xl font-black">Seu próximo conteúdo para atrair conversas</h2>
+            <p className="mt-4 text-sm font-medium leading-relaxed text-blue-50">“Um sorriso saudável começa com uma avaliação que olha para você por inteiro. Faça seu mapa do sorriso e converse comigo sobre os próximos passos.”</p>
+            <button onClick={() => navigator.clipboard?.writeText("Um sorriso saudável começa com uma avaliação que olha para você por inteiro. Faça seu mapa do sorriso e converse comigo sobre os próximos passos.")} className="mt-7 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-xs font-black uppercase tracking-widest text-blue-700"><Copy className="h-4 w-4" /> Copiar legenda</button>
+          </article>
+          <article className="rounded-[2rem] border border-slate-100 bg-white p-8">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">CTA sugerida</p>
+            <p className="mt-4 text-lg font-black text-slate-900">“Envie uma mensagem e descubra o que seu sorriso pode melhorar.”</p>
+            <p className="mt-4 text-sm font-medium leading-relaxed text-slate-500">Use o link público do seu perfil nas redes sociais: {publicUrl}</p>
+          </article>
         </section>
       )}
 

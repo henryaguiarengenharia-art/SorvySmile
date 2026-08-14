@@ -20,6 +20,7 @@ import {
 } from "./types";
 import {
   assignLead,
+  archiveProfessional,
   changeAccountStatus,
   createTeamMember,
   deleteLeadRecord,
@@ -29,8 +30,11 @@ import {
   requestPasswordReset,
   registerPendingSubscription,
   restoreWorkspaceSession,
+  restoreProfessional,
   saveProfessionalProfile,
+  saveProfessionalProfileAsHq,
   setTeamMemberStatus,
+  startProfessionalTrial,
   subscribeWorkspace,
   updateLeadCrm,
   WorkspaceData,
@@ -415,6 +419,7 @@ const App: React.FC = () => {
           <React.Suspense fallback={<DashboardLoading />}>
             <HQDashboardView
               leadRecords={workspace.leads}
+              professionals={workspace.professionals}
               billingAccounts={workspace.accounts}
               usageByAccount={workspace.usageByAccount}
               planConfigs={PLAN_CONFIGS}
@@ -425,6 +430,10 @@ const App: React.FC = () => {
                 })
               }
               onOpenWhatsApp={openWhatsApp}
+              onStartTrial={startProfessionalTrial}
+              onUpdateProfessional={saveProfessionalProfileAsHq}
+              onArchiveProfessional={archiveProfessional}
+              onRestoreProfessional={restoreProfessional}
             />
           </React.Suspense>
         </DashboardShell>

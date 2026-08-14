@@ -28,6 +28,8 @@ export function pendingSubscriptionFields(
     paymentProvider: "infinitepay_link" as const,
     paymentStatus: "awaiting_receipt" as const,
     paymentRequestedAtMs: now,
+    trialStatus: "not_started" as const,
+    trialEligible: true,
     checkoutName: input.name,
     checkoutEmail: input.email,
     checkoutWhatsapp: input.whatsapp,

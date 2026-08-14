@@ -2,10 +2,14 @@ import React, { useMemo, useState } from "react";
 import {
   CheckCircle2,
   CreditCard,
+  Archive,
+  Edit3,
   LoaderCircle,
   MessageCircle,
   Search,
   ShieldCheck,
+  RotateCcw,
+  PlayCircle,
   UserRoundCheck,
   Users,
   X,
@@ -13,6 +17,7 @@ import {
 import {
   AccountStatus,
   BillingAccount,
+  DentistRecord,
   LeadRecord,
   PlanConfig,
   PlanTier,
@@ -30,6 +35,22 @@ interface HQDashboardViewProps {
     plan?: PlanTier,
   ) => Promise<void>;
   onOpenWhatsApp: (number: string, message: string) => void;
+  professionals: DentistRecord[];
+  onStartTrial: (accountId: string, professionalId: string) => Promise<void>;
+  onUpdateProfessional: (
+    accountId: string,
+    professionalId: string,
+    patch: Partial<DentistRecord>,
+  ) => Promise<void>;
+  onArchiveProfessional: (
+    accountId: string,
+    professionalId: string,
+    reason: string,
+  ) => Promise<void>;
+  onRestoreProfessional: (
+    accountId: string,
+    professionalId: string,
+  ) => Promise<void>;
 }
 
 const statusCopy: Record<
@@ -61,6 +82,11 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   planConfigs,
   onUpdateBilling,
   onOpenWhatsApp,
+  professionals,
+  onStartTrial,
+  onUpdateProfessional,
+  onArchiveProfessional,
+  onRestoreProfessional,
 }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<AccountStatus | "all">(
@@ -70,6 +96,9 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   const [selectedPlan, setSelectedPlan] = useState<PlanTier>("pro");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [selectedProfessional, setSelectedProfessional] = useState<DentistRecord | null>(null);
+  const [professionalName, setProfessionalName] = useState("");
+  const [professionalSpecialty, setProfessionalSpecialty] = useState("");
 
   const accounts = useMemo(
     () =>
@@ -163,6 +192,31 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
     onOpenWhatsApp(account.checkoutWhatsapp ?? "", message);
   };
 
+  const editProfessional = (professional: DentistRecord): void => {
+    setSelectedProfessional(professional);
+    setProfessionalName(professional.name);
+    setProfessionalSpecialty(professional.specialty ?? "");
+    setNotice(null);
+  };
+
+  const saveProfessional = async (): Promise<void> => {
+    if (!selectedProfessional) return;
+    setBusyId(selectedProfessional.id);
+    try {
+      await onUpdateProfessional(
+        selectedProfessional.billingAccountId,
+        selectedProfessional.id,
+        { name: professionalName.trim(), specialty: professionalSpecialty.trim() },
+      );
+      setNotice("Cadastro do profissional atualizado.");
+      setSelectedProfessional(null);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Não foi possível salvar.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <main className="mx-auto max-w-7xl space-y-8 px-5 py-10">
       <header>
@@ -209,6 +263,40 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
             maximumFractionDigits: 0,
           })}
         />
+      </section>
+
+      <section className="overflow-hidden rounded-[2rem] border border-slate-100 bg-white">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 p-6">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Rede e profissionais</p>
+            <h2 className="mt-1 text-xl font-black">Acesso, trial e histórico</h2>
+          </div>
+          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{professionals.length} cadastro(s)</span>
+        </header>
+        <div className="divide-y divide-slate-100">
+          {professionals.map((professional) => {
+            const status = professional.status ?? (professional.isActive ? "active" : "inactive");
+            const account = billingAccounts[professional.billingAccountId];
+            const canTrial = status !== "trial" && status !== "subscriber" && status !== "archived" && !professional.isProtected && !professional.isDemo;
+            return (
+              <article key={professional.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-black">{professional.name || "Profissional sem nome"}</p>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-black uppercase text-slate-600">{status}</span>
+                  </div>
+                  <p className="mt-1 text-xs font-medium text-slate-500">{professional.specialty || "Especialidade não informada"} · {account?.accountName || professional.billingAccountId}</p>
+                  {status === "trial" && professional.trialEndsAt && <p className="mt-1 text-xs font-bold text-amber-700">Trial até {new Date(professional.trialEndsAt).toLocaleDateString("pt-BR")}</p>}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => editProfessional(professional)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700"><Edit3 className="h-4 w-4" /> Editar</button>
+                  {canTrial && <button disabled={busyId === professional.id} onClick={async () => { setBusyId(professional.id); try { await onStartTrial(professional.billingAccountId, professional.id); setNotice("Trial de 7 dias iniciado."); } catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível iniciar o trial."); } finally { setBusyId(null); } }} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50"><PlayCircle className="h-4 w-4" /> Iniciar trial</button>}
+                  {status === "archived" ? <button onClick={async () => { setBusyId(professional.id); try { await onRestoreProfessional(professional.billingAccountId, professional.id); setNotice("Profissional restaurado."); } catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível restaurar."); } finally { setBusyId(null); } }} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white"><RotateCcw className="h-4 w-4" /> Restaurar</button> : <button onClick={async () => { if (!window.confirm(`Arquivar ${professional.name || "este profissional"}? Os leads serão preservados.`)) return; setBusyId(professional.id); try { await onArchiveProfessional(professional.billingAccountId, professional.id, "arquivamento administrativo"); setNotice("Profissional arquivado; histórico preservado."); } catch (error) { setNotice(error instanceof Error ? error.message : "Não foi possível arquivar."); } finally { setBusyId(null); } }} className="inline-flex items-center gap-2 rounded-xl border border-amber-200 px-3 py-2 text-xs font-black text-amber-700"><Archive className="h-4 w-4" /> Arquivar</button>}
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </section>
 
       <section className="overflow-hidden rounded-[2rem] border border-slate-100 bg-white">
@@ -393,6 +481,20 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
               )}
               Confirmar pagamento e ativar
             </button>
+          </section>
+        </div>
+      )}
+
+      {selectedProfessional && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/60 p-5 backdrop-blur-sm">
+          <section className="relative w-full max-w-md rounded-[2rem] bg-white p-8 shadow-2xl">
+            <button onClick={() => setSelectedProfessional(null)} className="absolute right-5 top-5 rounded-xl p-2 text-slate-400 hover:bg-slate-100" aria-label="Fechar"><X className="h-5 w-5" /></button>
+            <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Cadastro seguro</p>
+            <h2 className="mt-2 text-2xl font-black">Editar profissional</h2>
+            <p className="mt-2 text-xs font-medium text-slate-500">A edição usa o accountId e professionalId selecionados. Leads e histórico permanecem intactos.</p>
+            <label className="mt-6 block"><span className="mb-2 block text-[9px] font-black uppercase tracking-widest text-slate-400">Nome</span><input value={professionalName} onChange={(event) => setProfessionalName(event.target.value)} className="input" /></label>
+            <label className="mt-4 block"><span className="mb-2 block text-[9px] font-black uppercase tracking-widest text-slate-400">Especialidade</span><input value={professionalSpecialty} onChange={(event) => setProfessionalSpecialty(event.target.value)} className="input" /></label>
+            <button disabled={busyId === selectedProfessional.id} onClick={() => void saveProfessional()} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-4 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50">{busyId === selectedProfessional.id && <LoaderCircle className="h-4 w-4 animate-spin" />} Salvar alterações</button>
           </section>
         </div>
       )}

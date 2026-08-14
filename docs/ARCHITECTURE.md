@@ -92,3 +92,19 @@ restrita para ativar, pausar ou marcar inadimplência.
 - criação do usuário HQ;
 - credenciais e WhatsApp do cliente piloto Network;
 - teste das regras no emulador com Java 21+.
+
+## Operação HQ, trial e arquivamento
+
+- Toda alteração administrativa recebe `accountId` e `professionalId` explícitos;
+  o UID do administrador nunca é usado como alvo do cliente.
+- O trial do profissional dura sete dias e fica persistido em
+  `trialStartedAtMs`, `trialEndsAtMs` e `trialStatus`. A tarefa
+  `expireProfessionalTrials` desativa acessos vencidos e o perfil público sem
+  apagar leads.
+- Arquivar é reversível: marca `status: archived`, desativa o acesso e preserva
+  leads, sessões de conversa, pagamentos e histórico. Restaurar recompõe o
+  estado anterior quando a conta ainda está ativa.
+- Ações de HQ geram documentos em `adminAuditLogs` e `subscriptionHistory`.
+  Essas coleções são somente servidor; não há escrita direta pelo navegador.
+- O painel do dentista separa Visão geral, Leads, Post do Dia e Configurações.
+  O Post do Dia é material de conversão e não altera a jornada de triagem.

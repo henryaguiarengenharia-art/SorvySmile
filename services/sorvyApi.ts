@@ -113,6 +113,12 @@ function mapAccount(id: string, data: DocumentData): BillingAccount {
     accountName: data.accountName ?? "",
     requestedPlan: normalizeTier(data.requestedPlan ?? tier),
     activatedAt: data.activatedAtMs,
+    trialStatus: data.trialStatus ?? "not_started",
+    trialStartedAt: data.trialStartedAtMs,
+    trialUntil: data.trialEndsAtMs,
+    subscriptionStatus: data.subscriptionStatus,
+    archivedAt: data.archivedAtMs,
+    archivedBy: data.archivedBy,
     checkoutName: data.checkoutName ?? data.accountName,
     checkoutEmail: data.checkoutEmail,
     checkoutWhatsapp: data.checkoutWhatsapp,
@@ -143,6 +149,13 @@ function mapProfessional(id: string, data: DocumentData): DentistRecord {
     teamTag: data.teamTag ?? "Dentista",
     isOnDuty: data.isOnDuty !== false,
     profileImage: data.profileImage ?? "",
+    status: data.status ?? (data.isActive === true ? "active" : "inactive"),
+    trialStartedAt: data.trialStartedAtMs,
+    trialEndsAt: data.trialEndsAtMs,
+    archivedAt: data.archivedAtMs,
+    archivedBy: data.archivedBy,
+    isDemo: data.isDemo === true,
+    isProtected: data.isProtected === true,
   };
 }
 
@@ -205,6 +218,7 @@ export async function getPublicProfile(
       bio: snap.data().bio ?? "",
       plan: normalizeTier(snap.data().plan),
       active: true,
+      status: snap.data().status ?? "active",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -458,6 +472,68 @@ export async function saveProfessionalProfile(
     standardMessage: patch.standardMessage ?? "",
     templates: patch.templates ?? [],
   });
+}
+
+export async function saveProfessionalProfileAsHq(
+  accountId: string,
+  professionalId: string,
+  patch: Partial<DentistRecord>,
+): Promise<void> {
+  const callable = httpsCallable<Record<string, unknown>, { ok: true }>(
+    functions,
+    "updateProfessionalByHq",
+  );
+  try {
+    await callable({ accountId, professionalId, ...patch });
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
+export async function startProfessionalTrial(
+  accountId: string,
+  professionalId: string,
+): Promise<void> {
+  const callable = httpsCallable<Record<string, string>, { ok: true }>(
+    functions,
+    "startProfessionalTrial",
+  );
+  try {
+    await callable({ accountId, professionalId });
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
+export async function archiveProfessional(
+  accountId: string,
+  professionalId: string,
+  reason: string,
+): Promise<void> {
+  const callable = httpsCallable<Record<string, string>, { ok: true }>(
+    functions,
+    "archiveProfessional",
+  );
+  try {
+    await callable({ accountId, professionalId, reason, confirmation: "ARQUIVAR" });
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
+export async function restoreProfessional(
+  accountId: string,
+  professionalId: string,
+): Promise<void> {
+  const callable = httpsCallable<Record<string, string>, { ok: true }>(
+    functions,
+    "restoreProfessional",
+  );
+  try {
+    await callable({ accountId, professionalId });
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
 }
 
 export async function deleteLeadRecord(id: string): Promise<void> {

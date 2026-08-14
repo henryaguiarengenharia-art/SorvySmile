@@ -36,14 +36,24 @@ import {
 } from "./plans.js";
 import { pendingSubscriptionFields } from "./subscriptions.js";
 import {
+  canStartTrial,
+  startTrialFields,
+  trialStatusAt,
+  TRIAL_DURATION_MS,
+} from "./lifecycle.js";
+import {
   accountStatusSchema,
   captureLeadSchema,
   checkoutSchema,
+  hqProfessionalPatchSchema,
   imageSchema,
   leadAssignmentSchema,
   leadIdSchema,
   patientConversionActionSchema,
   professionalStatusSchema,
+  professionalArchiveSchema,
+  professionalRestoreSchema,
+  professionalTrialSchema,
   profilePatchSchema,
   slugify,
   startTriageSchema,
@@ -104,6 +114,14 @@ interface AccountRecord {
   plan: PlanTier | "elite";
   status: "pending" | "active" | "overdue" | "paused";
   slug: string;
+  ownerType?: "dentist" | "clinic";
+  trialStatus?: "not_started" | "active" | "expired" | "converted";
+  trialStartedAtMs?: number;
+  trialEndsAtMs?: number;
+  trialUntil?: number;
+  trialEligible?: boolean;
+  subscriptionStatus?: string;
+  statusBeforeArchive?: string;
 }
 
 interface UserRecord {
@@ -112,6 +130,36 @@ interface UserRecord {
   professionalId?: string;
   slug?: string;
   status?: string;
+}
+
+interface ProfessionalRecord {
+  id?: string;
+  accountId?: string;
+  ownerUid?: string;
+  name?: string;
+  email?: string;
+  whatsapp?: string;
+  specialty?: string;
+  city?: string;
+  state?: string;
+  bio?: string;
+  bioLink?: string;
+  standardMessage?: string;
+  templates?: string[];
+  teamTag?: string;
+  isOnDuty?: boolean;
+  publicSlug?: string;
+  isActive?: boolean;
+  status?: "active" | "trial" | "subscriber" | "inactive" | "archived";
+  trialStatus?: "not_started" | "active" | "expired" | "converted";
+  trialStartedAtMs?: number;
+  trialEndsAtMs?: number;
+  trialUntil?: number;
+  archivedAtMs?: number;
+  archivedBy?: string;
+  statusBeforeArchive?: string;
+  isDemo?: boolean;
+  isProtected?: boolean;
 }
 
 interface ParseSuccess<T> {
@@ -185,6 +233,65 @@ async function requireClinicManager(uid: string): Promise<
     );
   }
   return { ...user, accountId: user.accountId };
+}
+
+type AdminAuditAction =
+  | "account_status_changed"
+  | "professional_profile_updated"
+  | "professional_trial_started"
+  | "professional_archived"
+  | "professional_restored";
+
+type FirestoreWriter = { set: (...args: any[]) => unknown };
+
+function addAdminAudit(writer: FirestoreWriter, input: {
+  actorUid: string;
+  action: AdminAuditAction;
+  accountId: string;
+  professionalId?: string | null;
+  details?: Record<string, unknown>;
+  now: number;
+}): void {
+  writer.set(db.collection("adminAuditLogs").doc(), {
+    actorUid: input.actorUid,
+    action: input.action,
+    accountId: input.accountId,
+    professionalId: input.professionalId ?? null,
+    details: input.details ?? {},
+    createdAtMs: input.now,
+  });
+}
+
+function addSubscriptionHistory(writer: FirestoreWriter, input: {
+  actorUid: string;
+  accountId: string;
+  professionalId?: string | null;
+  fromStatus?: string | null;
+  toStatus: string;
+  reason?: string;
+  now: number;
+}): void {
+  writer.set(db.collection("subscriptionHistory").doc(), {
+    actorUid: input.actorUid,
+    accountId: input.accountId,
+    professionalId: input.professionalId ?? null,
+    fromStatus: input.fromStatus ?? null,
+    toStatus: input.toStatus,
+    reason: input.reason ?? "",
+    createdAtMs: input.now,
+  });
+}
+
+function assertAdminTarget(
+  accountId: string,
+  professionalId: string,
+  account: FirebaseFirestore.DocumentData,
+  professional: FirebaseFirestore.DocumentData,
+): void {
+  if (professional.accountId !== accountId) {
+    throw new HttpsError("permission-denied", "O profissional não pertence à conta selecionada.");
+  }
+  if (professional.isDemo === true || professional.isProtected === true) return;
 }
 
 function validateSession(session: SessionRecord, uid: string): void {
@@ -939,7 +1046,7 @@ export const updateProfessionalProfile = onCall(
 
     const professionalRef = db.doc(`professionals/${user.professionalId}`);
     const professionalSnap = await professionalRef.get();
-    const professional = professionalSnap.data();
+    const professional = (professionalSnap.data() ?? {}) as ProfessionalRecord;
     const now = Date.now();
     const patch = {
       ...input,
@@ -970,6 +1077,162 @@ export const updateProfessionalProfile = onCall(
   },
 );
 
+export const updateProfessionalByHq = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    await requireHq(uid);
+    const input = parseInput(hqProfessionalPatchSchema, request.data);
+    const [accountSnap, professionalSnap] = await Promise.all([
+      db.doc(`accounts/${input.accountId}`).get(),
+      db.doc(`professionals/${input.professionalId}`).get(),
+    ]);
+    if (!accountSnap.exists || !professionalSnap.exists) {
+      throw new HttpsError("not-found", "Cliente ou profissional não encontrado.");
+    }
+    const account = accountSnap.data() as AccountRecord;
+    const current = professionalSnap.data() as ProfessionalRecord;
+    assertAdminTarget(input.accountId, input.professionalId, account, current);
+    const now = Date.now();
+    const fields = ["name", "specialty", "whatsapp", "city", "state", "bio", "bioLink", "standardMessage", "templates", "teamTag", "isOnDuty"] as const;
+    const patch: Record<string, unknown> = { updatedAtMs: now };
+    for (const field of fields) if (input[field] !== undefined) patch[field] = input[field];
+    const batch = db.batch();
+    batch.set(db.doc(`professionals/${input.professionalId}`), patch, { merge: true });
+    const slug = String(current.publicSlug ?? account.slug ?? "");
+    if (slug) {
+      batch.set(db.doc(`publicProfiles/${slug}`), {
+        accountId: input.accountId,
+        professionalId: input.professionalId,
+        slug,
+        name: String(patch.name ?? current.name ?? ""),
+        whatsapp: String(patch.whatsapp ?? current.whatsapp ?? ""),
+        specialty: String(patch.specialty ?? current.specialty ?? ""),
+        city: String(patch.city ?? current.city ?? ""),
+        state: String(patch.state ?? current.state ?? ""),
+        bio: String(patch.bio ?? current.bio ?? ""),
+        plan: normalizePlan(account.plan),
+        ownerType: account.ownerType === "clinic" ? "clinic" : "dentist",
+        status: current.status ?? "subscriber",
+        active: current.isActive !== false && current.status !== "archived",
+        updatedAtMs: now,
+      }, { merge: true });
+    }
+    addAdminAudit(batch, {
+      actorUid: uid,
+      action: "professional_profile_updated",
+      accountId: input.accountId,
+      professionalId: input.professionalId,
+      details: { fields: Object.keys(patch).filter((field) => field !== "updatedAtMs") },
+      now,
+    });
+    await batch.commit();
+    return { ok: true };
+  },
+);
+
+export const startProfessionalTrial = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    await requireHq(uid);
+    const input = parseInput(professionalTrialSchema, request.data);
+    const [accountSnap, professionalSnap] = await Promise.all([
+      db.doc(`accounts/${input.accountId}`).get(),
+      db.doc(`professionals/${input.professionalId}`).get(),
+    ]);
+    if (!accountSnap.exists || !professionalSnap.exists) {
+      throw new HttpsError("not-found", "Cliente ou profissional não encontrado.");
+    }
+    const account = accountSnap.data() as AccountRecord;
+    const professional = professionalSnap.data() as ProfessionalRecord;
+    assertAdminTarget(input.accountId, input.professionalId, account, professional);
+    if (professional.isProtected === true || professional.isDemo === true || !canStartTrial(professional) || !canStartTrial(account)) {
+      throw new HttpsError("already-exists", "Este profissional já utilizou o trial ou está protegido.");
+    }
+    if (professional.status === "archived") throw new HttpsError("failed-precondition", "Restaure o profissional antes de iniciar um trial.");
+    const now = Date.now();
+    const trial = startTrialFields(now);
+    const batch = db.batch();
+    batch.set(db.doc(`professionals/${input.professionalId}`), { status: "trial", isActive: true, ...trial, updatedAtMs: now }, { merge: true });
+    if (account.professionalId === input.professionalId || account.ownerType !== "clinic") {
+      batch.set(db.doc(`accounts/${input.accountId}`), { status: "active", isActive: true, subscriptionStatus: "trial", trialEligible: false, ...trial, updatedAtMs: now }, { merge: true });
+    }
+    if (professional.ownerUid) batch.set(db.doc(`users/${professional.ownerUid}`), { status: "active", lifecycleStatus: "trial", updatedAtMs: now }, { merge: true });
+    const slug = String(professional.publicSlug ?? account.slug ?? "");
+    if (slug) batch.set(db.doc(`publicProfiles/${slug}`), { active: true, status: "trial", updatedAtMs: now }, { merge: true });
+    addAdminAudit(batch, { actorUid: uid, action: "professional_trial_started", accountId: input.accountId, professionalId: input.professionalId, details: { trialEndsAtMs: trial.trialEndsAtMs }, now });
+    addSubscriptionHistory(batch, { actorUid: uid, accountId: input.accountId, professionalId: input.professionalId, fromStatus: account.status, toStatus: "trial", reason: "trial de 7 dias", now });
+    await batch.commit();
+    if (professional.ownerUid) await auth.setCustomUserClaims(professional.ownerUid, { role: account.ownerType === "clinic" ? "professional" : "professional", accountId: input.accountId, professionalId: input.professionalId, accountStatus: "active", professionalStatus: "trial" });
+    return { ok: true, trialStartedAtMs: trial.trialStartedAtMs, trialEndsAtMs: trial.trialEndsAtMs, durationMs: TRIAL_DURATION_MS };
+  },
+);
+
+export const archiveProfessional = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    await requireHq(uid);
+    const input = parseInput(professionalArchiveSchema, request.data);
+    const [accountSnap, professionalSnap] = await Promise.all([
+      db.doc(`accounts/${input.accountId}`).get(),
+      db.doc(`professionals/${input.professionalId}`).get(),
+    ]);
+    if (!accountSnap.exists || !professionalSnap.exists) throw new HttpsError("not-found", "Cliente ou profissional não encontrado.");
+    const account = accountSnap.data() as AccountRecord;
+    const professional = professionalSnap.data() as ProfessionalRecord;
+    assertAdminTarget(input.accountId, input.professionalId, account, professional);
+    if (professional.isProtected === true || professional.isDemo === true) throw new HttpsError("failed-precondition", "Este profissional protegido não pode ser arquivado.");
+    if (professional.status === "archived") return { ok: true, alreadyArchived: true };
+    const now = Date.now();
+    const batch = db.batch();
+    batch.set(db.doc(`professionals/${input.professionalId}`), { status: "archived", isActive: false, statusBeforeArchive: professional.status ?? "active", archivedAtMs: now, archivedBy: uid, archiveReason: input.reason, updatedAtMs: now }, { merge: true });
+    if (professional.ownerUid) batch.set(db.doc(`users/${professional.ownerUid}`), { status: "paused", lifecycleStatus: "archived", updatedAtMs: now }, { merge: true });
+    const slug = String(professional.publicSlug ?? account.slug ?? "");
+    if (slug) batch.set(db.doc(`publicProfiles/${slug}`), { active: false, status: "archived", archivedAtMs: now, updatedAtMs: now }, { merge: true });
+    if (account.professionalId === input.professionalId && account.ownerType !== "clinic") batch.set(db.doc(`accounts/${input.accountId}`), { statusBeforeArchive: account.status, status: "paused", isActive: false, subscriptionStatus: "paused", updatedAtMs: now }, { merge: true });
+    addAdminAudit(batch, { actorUid: uid, action: "professional_archived", accountId: input.accountId, professionalId: input.professionalId, details: { reason: input.reason }, now });
+    addSubscriptionHistory(batch, { actorUid: uid, accountId: input.accountId, professionalId: input.professionalId, fromStatus: professional.status ?? account.status, toStatus: "archived", reason: input.reason || "arquivamento administrativo", now });
+    await batch.commit();
+    if (professional.ownerUid) await auth.updateUser(professional.ownerUid, { disabled: true });
+    return { ok: true, archivedAtMs: now };
+  },
+);
+
+export const restoreProfessional = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    await requireHq(uid);
+    const input = parseInput(professionalRestoreSchema, request.data);
+    const [accountSnap, professionalSnap] = await Promise.all([
+      db.doc(`accounts/${input.accountId}`).get(),
+      db.doc(`professionals/${input.professionalId}`).get(),
+    ]);
+    if (!accountSnap.exists || !professionalSnap.exists) throw new HttpsError("not-found", "Cliente ou profissional não encontrado.");
+    const account = accountSnap.data() as AccountRecord;
+    const professional = professionalSnap.data() as ProfessionalRecord;
+    assertAdminTarget(input.accountId, input.professionalId, account, professional);
+    if (professional.status !== "archived") return { ok: true, alreadyActive: true };
+    const now = Date.now();
+    const previous = String(professional.statusBeforeArchive ?? "active");
+    const trialStatus = trialStatusAt({ ...professional, status: previous as ProfessionalRecord["status"] }, now);
+    const canAccess = account.status === "active" && previous !== "inactive" && trialStatus !== "expired";
+    const status = canAccess ? (previous === "trial" ? "trial" : previous === "subscriber" ? "subscriber" : "active") : "inactive";
+    const batch = db.batch();
+    batch.set(db.doc(`professionals/${input.professionalId}`), { status, isActive: canAccess, archivedAtMs: null, archivedBy: null, updatedAtMs: now }, { merge: true });
+    if (professional.ownerUid) batch.set(db.doc(`users/${professional.ownerUid}`), { status: canAccess ? "active" : "paused", lifecycleStatus: status, updatedAtMs: now }, { merge: true });
+    const slug = String(professional.publicSlug ?? account.slug ?? "");
+    if (slug) batch.set(db.doc(`publicProfiles/${slug}`), { active: canAccess, status, archivedAtMs: null, updatedAtMs: now }, { merge: true });
+    addAdminAudit(batch, { actorUid: uid, action: "professional_restored", accountId: input.accountId, professionalId: input.professionalId, details: { status }, now });
+    addSubscriptionHistory(batch, { actorUid: uid, accountId: input.accountId, professionalId: input.professionalId, fromStatus: "archived", toStatus: status, reason: "restauração administrativa", now });
+    await batch.commit();
+    if (professional.ownerUid) await auth.updateUser(professional.ownerUid, { disabled: !canAccess });
+    return { ok: true, status, isActive: canAccess };
+  },
+);
+
 export const setAccountStatus = onCall(
   {
     enforceAppCheck: ENFORCE_APP_CHECK,
@@ -994,7 +1257,14 @@ export const setAccountStatus = onCall(
       `professionals/${account.professionalId}`,
     );
     const professionalSnap = await professionalRef.get();
-    const professional = professionalSnap.data();
+    const professional = (professionalSnap.data() ?? {}) as ProfessionalRecord;
+    const startsTrial = active
+      && account.trialEligible === true
+      && canStartTrial(account)
+      && canStartTrial(professional);
+    const trial = startsTrial ? startTrialFields(now) : null;
+    const wasTrial = professional.status === "trial" || account.trialStatus === "active";
+    const nextProfessionalStatus = startsTrial ? "trial" : active ? "subscriber" : "inactive";
 
     const batch = db.batch();
     batch.update(accountRef, {
@@ -1007,6 +1277,10 @@ export const setAccountStatus = onCall(
       extraSeatPrice: PLANS[plan].extraSeatPrice,
       status: input.status,
       isActive: active,
+      subscriptionStatus: startsTrial ? "trial" : active ? "active" : input.status,
+      trialStatus: startsTrial ? "active" : wasTrial && active ? "converted" : account.trialStatus ?? "not_started",
+      trialEligible: startsTrial ? false : account.trialEligible ?? false,
+      ...(trial ?? {}),
       activatedAtMs: active
         ? Number(accountSnap.data()?.activatedAtMs ?? now)
         : accountSnap.data()?.activatedAtMs ?? null,
@@ -1047,6 +1321,9 @@ export const setAccountStatus = onCall(
       {
         plan,
         isActive: active,
+        status: nextProfessionalStatus,
+        trialStatus: startsTrial ? "active" : wasTrial && active ? "converted" : professional.trialStatus ?? "not_started",
+        ...(trial ?? {}),
         updatedAtMs: now,
       },
       { merge: true },
@@ -1065,17 +1342,36 @@ export const setAccountStatus = onCall(
         bio: professional?.bio ?? "",
         plan,
         ownerType: plan === "network" ? "clinic" : "dentist",
+        status: nextProfessionalStatus,
         active,
         updatedAtMs: now,
       },
       { merge: true },
     );
+    addAdminAudit(batch, {
+      actorUid: uid,
+      action: "account_status_changed",
+      accountId: input.accountId,
+      professionalId: account.professionalId,
+      details: { fromStatus: account.status, toStatus: input.status, plan },
+      now,
+    });
+    addSubscriptionHistory(batch, {
+      actorUid: uid,
+      accountId: input.accountId,
+      professionalId: account.professionalId,
+      fromStatus: account.subscriptionStatus ?? account.status,
+      toStatus: startsTrial ? "trial" : active ? "subscriber" : input.status,
+      reason: "alteração administrativa de assinatura",
+      now,
+    });
     await batch.commit();
     await auth.setCustomUserClaims(account.ownerUid, {
       role: accessRole,
       accountId: input.accountId,
       professionalId: account.professionalId,
       accountStatus: input.status,
+      professionalStatus: nextProfessionalStatus,
     });
     return { ok: true };
   },
@@ -1126,6 +1422,7 @@ export const createTeamMember = onCall(
     const slugBase = slugify(input.name) || "dentista";
     const slug = `${slugBase}-${firebaseUser.uid.slice(0, 6).toLowerCase()}`;
     const now = Date.now();
+    const trial = startTrialFields(now);
     const batch = db.batch();
     batch.set(db.doc(`users/${firebaseUser.uid}`), {
       uid: firebaseUser.uid,
@@ -1135,6 +1432,7 @@ export const createTeamMember = onCall(
       professionalId,
       slug,
       status: "active",
+      lifecycleStatus: "trial",
       createdAtMs: now,
       updatedAtMs: now,
     });
@@ -1151,6 +1449,8 @@ export const createTeamMember = onCall(
       plan: "network",
       role: "dentist",
       isActive: true,
+      status: "trial",
+      ...trial,
       createdAt: now,
       createdAtMs: now,
       updatedAtMs: now,
@@ -1165,6 +1465,7 @@ export const createTeamMember = onCall(
       specialty: input.specialty,
       plan: "network",
       active: true,
+      status: "trial",
       createdAtMs: now,
       updatedAtMs: now,
     });
@@ -1176,12 +1477,30 @@ export const createTeamMember = onCall(
       },
       { merge: true },
     );
+    addAdminAudit(batch, {
+      actorUid: managerUid,
+      action: "professional_trial_started",
+      accountId: manager.accountId,
+      professionalId,
+      details: { trialEndsAtMs: trial.trialEndsAtMs, source: "team_member" },
+      now,
+    });
+    addSubscriptionHistory(batch, {
+      actorUid: managerUid,
+      accountId: manager.accountId,
+      professionalId,
+      fromStatus: "not_started",
+      toStatus: "trial",
+      reason: "trial inicial do membro da rede",
+      now,
+    });
     try {
       await auth.setCustomUserClaims(firebaseUser.uid, {
         role: "professional",
         accountId: manager.accountId,
         professionalId,
         accountStatus: "active",
+        professionalStatus: "trial",
       });
       await batch.commit();
     } catch (error) {
@@ -1242,6 +1561,9 @@ export const setTeamMemberStatus = onCall(
     const batch = db.batch();
     batch.update(professionalRef, {
       isActive: input.isActive,
+      status: input.isActive
+        ? (professionalSnap.data()?.status === "trial" ? "trial" : "subscriber")
+        : "inactive",
       updatedAtMs: now,
     });
     if (memberUid) {
@@ -1256,8 +1578,14 @@ export const setTeamMemberStatus = onCall(
     }
     if (slug) {
       batch.set(
-        db.doc(`publicProfiles/${slug}`),
-        { active: input.isActive, updatedAtMs: now },
+      db.doc(`publicProfiles/${slug}`),
+        {
+          active: input.isActive,
+          status: input.isActive
+            ? (professionalSnap.data()?.status === "trial" ? "trial" : "subscriber")
+            : "inactive",
+          updatedAtMs: now,
+        },
         { merge: true },
       );
     }
@@ -1345,6 +1673,50 @@ export const deleteLead = onCall(
     }
     await leadSnap.ref.delete();
     return { ok: true };
+  },
+);
+
+export const expireProfessionalTrials = onSchedule(
+  {
+    schedule: "every day 03:15",
+    timeZone: "America/Sao_Paulo",
+  },
+  async () => {
+    const now = Date.now();
+    const snapshot = await db
+      .collection("professionals")
+      .where("status", "==", "trial")
+      .where("trialEndsAtMs", "<", now)
+      .limit(500)
+      .get();
+    for (const document of snapshot.docs) {
+      const professional = document.data() as ProfessionalRecord;
+      const batch = db.batch();
+      batch.set(document.ref, {
+        status: "inactive",
+        isActive: false,
+        trialStatus: "expired",
+        updatedAtMs: now,
+      }, { merge: true });
+      if (professional.ownerUid) {
+        batch.set(db.doc(`users/${professional.ownerUid}`), {
+          status: "paused",
+          lifecycleStatus: "inactive",
+          updatedAtMs: now,
+        }, { merge: true });
+      }
+      if (professional.publicSlug) {
+        batch.set(db.doc(`publicProfiles/${professional.publicSlug}`), {
+          active: false,
+          status: "inactive",
+          updatedAtMs: now,
+        }, { merge: true });
+      }
+      await batch.commit();
+      if (professional.ownerUid) {
+        await auth.updateUser(professional.ownerUid, { disabled: true }).catch(() => undefined);
+      }
+    }
   },
 );
 
