@@ -277,7 +277,10 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
           {professionals.map((professional) => {
             const status = professional.status ?? (professional.isActive ? "active" : "inactive");
             const account = billingAccounts[professional.billingAccountId];
-            const canTrial = status !== "trial" && status !== "subscriber" && status !== "archived" && !professional.isProtected && !professional.isDemo;
+            const canTrial = status === "inactive"
+              && professional.isActive !== true
+              && !professional.isProtected
+              && !professional.isDemo;
             return (
               <article key={professional.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
                 <div>

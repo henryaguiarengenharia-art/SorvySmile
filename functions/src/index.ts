@@ -121,6 +121,7 @@ interface AccountRecord {
   trialUntil?: number;
   trialEligible?: boolean;
   subscriptionStatus?: string;
+  paymentStatus?: string;
   statusBeforeArchive?: string;
 }
 
@@ -1147,6 +1148,22 @@ export const startProfessionalTrial = onCall(
     const account = accountSnap.data() as AccountRecord;
     const professional = professionalSnap.data() as ProfessionalRecord;
     assertAdminTarget(input.accountId, input.professionalId, account, professional);
+    const isAccountOwner = account.professionalId === input.professionalId
+      || account.ownerType !== "clinic";
+    const alreadyHasAccess = professional.isActive === true
+      || ["active", "trial", "subscriber"].includes(professional.status ?? "");
+    const ownerHasPaidSubscription = isAccountOwner
+      && (
+        account.status === "active"
+        || account.subscriptionStatus === "active"
+        || account.paymentStatus === "confirmed"
+      );
+    if (alreadyHasAccess || ownerHasPaidSubscription) {
+      throw new HttpsError(
+        "failed-precondition",
+        "O trial só pode ser iniciado para um profissional inativo e sem assinatura ativa.",
+      );
+    }
     if (professional.isProtected === true || professional.isDemo === true || !canStartTrial(professional) || !canStartTrial(account)) {
       throw new HttpsError("already-exists", "Este profissional já utilizou o trial ou está protegido.");
     }
