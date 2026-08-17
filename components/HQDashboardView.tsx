@@ -56,6 +56,7 @@ interface HQDashboardViewProps {
     accountId: string,
     professionalId: string,
   ) => Promise<void>;
+  onViewProfessionalDashboard: (professionalId: string) => void;
 }
 
 const statusCopy: Record<
@@ -92,6 +93,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   onUpdateProfessional,
   onArchiveProfessional,
   onRestoreProfessional,
+  onViewProfessionalDashboard,
 }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<AccountStatus | "all">(
@@ -319,8 +321,10 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
         </article>
         <article className="rounded-[2rem] bg-slate-950 p-6 text-white">
           <p className="text-[10px] font-black uppercase tracking-widest text-blue-300">Pulso do mês</p>
-          <p className="mt-4 text-4xl font-black">{stats.monthLeads}</p>
-          <p className="mt-1 text-sm font-bold text-slate-300">leads recebidos no mês</p>
+          <div className="mt-4 grid grid-cols-2 gap-4">
+            <div><p className="text-4xl font-black">{stats.monthLeads}</p><p className="mt-1 text-xs font-bold text-slate-300">leads no mês</p></div>
+            <div><p className="text-4xl font-black">{leadRecords.length}</p><p className="mt-1 text-xs font-bold text-slate-300">leads gerais</p></div>
+          </div>
           <div className="mt-6 border-t border-white/10 pt-4"><p className="text-2xl font-black">{stats.pending}</p><p className="text-xs font-bold text-slate-400">pagamentos aguardando conferência</p></div>
         </article>
       </section>
@@ -369,7 +373,11 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
               const status = account.status ?? "pending";
               const usage = usageByAccount[account.id]?.[month] ?? 0;
               const limit = planConfigs[account.tier].baseMonthlyLeadLimit;
-              const professionalLeads = leadRecords.filter((lead) => lead.professionalId === professional.id);
+              const professionalLeads = leadRecords.filter((lead) => {
+                const assignedProfessionalId = lead.professionalId ?? lead.dentistId;
+                if (assignedProfessionalId) return assignedProfessionalId === professional.id;
+                return account.ownerType === "dentist" && lead.accountId === account.id;
+              });
               const conversions = professionalLeads.filter((lead) => lead.status === "closed").length;
               return (
                 <article
@@ -428,6 +436,17 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
         const account = billingAccounts[professional.billingAccountId];
         if (!account) return null;
         const status = professional.status ?? (professional.isActive ? "active" : "inactive");
+        const professionalLeads = leadRecords.filter((lead) => {
+          const assignedProfessionalId = lead.professionalId ?? lead.dentistId;
+          if (assignedProfessionalId) return assignedProfessionalId === professional.id;
+          return account.ownerType === "dentist" && lead.accountId === account.id;
+        });
+        const leadCounts = {
+          new: professionalLeads.filter((lead) => lead.status === "new").length,
+          inChat: professionalLeads.filter((lead) => lead.status === "in_chat").length,
+          scheduled: professionalLeads.filter((lead) => lead.status === "scheduled").length,
+          closed: professionalLeads.filter((lead) => lead.status === "closed").length,
+        };
         const canTrial = status === "inactive" && professional.isActive !== true && !professional.isProtected && !professional.isDemo;
         const run = async (action: () => Promise<void>, success: string): Promise<void> => {
           setBusyId(professional.id);
@@ -453,12 +472,23 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
               </div>
 
               <div className="mt-7 rounded-2xl border border-slate-100 p-5">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Contato e vitrine</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Leads gerais do profissional</p>
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <Info label="Total" value={String(professionalLeads.length)} />
+                  <Info label="Novos" value={String(leadCounts.new)} />
+                  <Info label="Em conversa" value={String(leadCounts.inChat)} />
+                  <Info label="Agendados" value={String(leadCounts.scheduled)} />
+                  <Info label="Convertidos" value={String(leadCounts.closed)} />
+                </div>
+              </div>
+
+              <div className="mt-7 rounded-2xl border border-slate-100 p-5">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Acesso e suporte</p>
                 <p className="mt-3 text-sm font-bold">{professional.email || account.checkoutEmail || "Email não informado"}</p>
                 <p className="mt-1 text-sm font-bold text-slate-500">{professional.whatsapp || account.checkoutWhatsapp || "WhatsApp não informado"}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button onClick={() => contactAccount(account)} className="inline-flex items-center gap-2 rounded-xl border border-emerald-100 px-3 py-2 text-xs font-black text-emerald-700"><MessageCircle className="h-4 w-4" /> WhatsApp</button>
-                  {professional.publicSlug && <button onClick={() => window.open(`${window.location.origin}/p/${professional.publicSlug}`, "_blank", "noopener,noreferrer")} className="inline-flex items-center gap-2 rounded-xl border border-blue-100 px-3 py-2 text-xs font-black text-blue-700"><Eye className="h-4 w-4" /> Ver vitrine</button>}
+                  <button onClick={() => { setManagedProfessional(null); onViewProfessionalDashboard(professional.id); }} className="inline-flex items-center gap-2 rounded-xl border border-blue-100 px-3 py-2 text-xs font-black text-blue-700"><Eye className="h-4 w-4" /> Ver painel do profissional</button>
                 </div>
               </div>
 
