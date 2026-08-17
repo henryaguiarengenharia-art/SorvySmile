@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
+  ArrowLeft,
   Check,
   CheckCircle2,
   CreditCard,
@@ -115,6 +116,7 @@ const App: React.FC = () => {
   const [selectedPlan, setSelectedPlan] = useState<PlanTier>("pro");
   const [pendingRegistration, setPendingRegistration] =
     useState<PendingRegistration | null>(null);
+  const [hqPreviewProfessionalId, setHqPreviewProfessionalId] = useState<string | null>(null);
 
   const slug = useMemo(resolveSlug, []);
 
@@ -214,6 +216,7 @@ const App: React.FC = () => {
     workspaceUnsubscribe.current = null;
     setWorkspace(null);
     setWorkspaceUser(null);
+    setHqPreviewProfessionalId(null);
     await logoutWorkspace();
     setView("landing");
   };
@@ -232,6 +235,23 @@ const App: React.FC = () => {
   }, []);
   const currentUsage = workspaceUser?.accountId
     ? workspace?.usageByAccount[workspaceUser.accountId]?.[currentMonth] ?? 0
+    : 0;
+
+  const hqPreviewProfessional = hqPreviewProfessionalId
+    ? workspace?.professionals.find((item) => item.id === hqPreviewProfessionalId)
+    : undefined;
+  const hqPreviewAccount = hqPreviewProfessional
+    ? workspace?.accounts[hqPreviewProfessional.billingAccountId]
+    : undefined;
+  const hqPreviewLeads = hqPreviewProfessional && hqPreviewAccount
+    ? (workspace?.leads ?? []).filter((lead) => {
+        const assignedProfessionalId = lead.professionalId ?? lead.dentistId;
+        if (assignedProfessionalId) return assignedProfessionalId === hqPreviewProfessional.id;
+        return hqPreviewAccount.ownerType === "dentist" && lead.accountId === hqPreviewAccount.id;
+      })
+    : [];
+  const hqPreviewUsage = hqPreviewAccount
+    ? workspace?.usageByAccount[hqPreviewAccount.id]?.[currentMonth] ?? 0
     : 0;
 
   const showPublicNav = ![
@@ -414,7 +434,29 @@ const App: React.FC = () => {
         </DashboardShell>
       )}
 
-      {view === "hq-dashboard" && workspace && (
+      {view === "hq-dashboard" && workspace && hqPreviewProfessional && hqPreviewAccount && (
+        <DashboardShell title={`HQ · ${hqPreviewProfessional.name}`} onLogout={handleLogout}>
+          <div className="mx-auto max-w-7xl px-5 pt-6">
+            <button onClick={() => setHqPreviewProfessionalId(null)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-slate-700 hover:bg-slate-100">
+              <ArrowLeft className="h-4 w-4" /> Voltar à administração Sorvy
+            </button>
+          </div>
+          <React.Suspense fallback={<DashboardLoading />}>
+            <DentistPortalView
+              leadRecords={hqPreviewLeads}
+              professional={hqPreviewProfessional}
+              planConfig={PLAN_CONFIGS[hqPreviewAccount.tier]}
+              currentUsage={hqPreviewUsage}
+              readOnly
+              onUpdateLead={async () => undefined}
+              onUpdateProfessional={async () => undefined}
+              onDeleteLead={async () => undefined}
+            />
+          </React.Suspense>
+        </DashboardShell>
+      )}
+
+      {view === "hq-dashboard" && workspace && !hqPreviewProfessional && (
         <DashboardShell title="Administração Sorvy" onLogout={handleLogout}>
           <React.Suspense fallback={<DashboardLoading />}>
             <HQDashboardView
@@ -434,6 +476,7 @@ const App: React.FC = () => {
               onUpdateProfessional={saveProfessionalProfileAsHq}
               onArchiveProfessional={archiveProfessional}
               onRestoreProfessional={restoreProfessional}
+              onViewProfessionalDashboard={setHqPreviewProfessionalId}
             />
           </React.Suspense>
         </DashboardShell>
