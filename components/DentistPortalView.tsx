@@ -41,6 +41,7 @@ interface DentistPortalViewProps {
     patch: Partial<DentistRecord>,
   ) => Promise<void>;
   onDeleteLead: (id: string) => Promise<void>;
+  readOnly?: boolean;
 }
 
 type PortalTab = "dashboard" | "leads" | "post" | "profile";
@@ -81,6 +82,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   onUpdateLead,
   onUpdateProfessional,
   onDeleteLead,
+  readOnly = false,
 }) => {
   const [tab, setTab] = useState<PortalTab>("dashboard");
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null);
@@ -187,6 +189,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
     id: string,
     patch: Partial<LeadRecord>,
   ): Promise<void> => {
+    if (readOnly) return;
     setBusyLeadId(id);
     setNotice(null);
     try {
@@ -201,6 +204,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   };
 
   const openWhatsApp = async (lead: LeadRecord): Promise<void> => {
+    if (readOnly) return;
     const message = standardMessage
       .replaceAll("[NOME]", lead.lead.name)
       .replaceAll("[SCORE]", String(lead.scores?.harmonyIndex ?? ""))
@@ -248,6 +252,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   };
 
   const deleteLead = async (lead: LeadRecord): Promise<void> => {
+    if (readOnly) return;
     if (
       !window.confirm(
         `Excluir definitivamente o lead de ${lead.lead.name}? Esta ação não pode ser desfeita.`,
@@ -270,6 +275,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   };
 
   const saveProfile = async (): Promise<void> => {
+    if (readOnly) return;
     if (city.trim().length < 2 || state.trim().length !== 2) {
       setNotice("Informe cidade e UF para salvar o perfil.");
       return;
@@ -339,6 +345,13 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       {notice && (
         <div className="rounded-2xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm font-bold text-blue-800">
           {notice}
+        </div>
+      )}
+
+      {readOnly && (
+        <div className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-bold text-blue-900">
+          <Eye className="h-5 w-5 shrink-0" />
+          Visualização administrativa da HQ. Você está vendo o painel deste profissional em modo somente leitura.
         </div>
       )}
 
@@ -439,12 +452,12 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                     Aguardando desde{" "}
                     {new Date(priorityLead.createdAt).toLocaleString("pt-BR")}
                   </p>
-                  <button
+                  {!readOnly && <button
                     onClick={() => void openWhatsApp(priorityLead)}
                     className="mt-5 flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black uppercase tracking-widest text-white"
                   >
                     <Phone className="h-4 w-4" /> Abrir WhatsApp
-                  </button>
+                  </button>}
                 </>
               ) : (
                 <p className="mt-3 text-sm font-medium text-slate-500">
@@ -586,7 +599,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                   <div className="flex flex-wrap items-center gap-2">
                     <select
                       value={lead.status}
-                      disabled={busyLeadId === lead.id}
+                      disabled={readOnly || busyLeadId === lead.id}
                       onChange={(event) =>
                         void changeStatus(
                           lead,
@@ -610,12 +623,12 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                       icon={<Eye className="h-4 w-4" />}
                       onClick={() => setSelectedLead(lead)}
                     />
-                    <IconButton
+                    {!readOnly && <IconButton
                       label="Abrir WhatsApp"
                       icon={<Phone className="h-4 w-4" />}
                       onClick={() => void openWhatsApp(lead)}
                       green
-                    />
+                    />}
                     {busyLeadId === lead.id && (
                       <LoaderCircle className="h-5 w-5 animate-spin text-blue-600" />
                     )}
@@ -661,6 +674,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             <Field label="WhatsApp">
               <input
                 value={whatsapp}
+                disabled={readOnly}
                 onChange={(event) => setWhatsapp(formatPhone(event.target.value))}
                 className="input"
               />
@@ -675,6 +689,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             <Field label="Cidade">
               <input
                 value={city}
+                disabled={readOnly}
                 onChange={(event) => setCity(event.target.value)}
                 className="input"
               />
@@ -682,6 +697,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             <Field label="UF">
               <input
                 value={state}
+                disabled={readOnly}
                 maxLength={2}
                 onChange={(event) =>
                   setState(event.target.value.toUpperCase().slice(0, 2))
@@ -693,6 +709,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
           <Field label="Apresentação curta">
             <textarea
               value={bio}
+              disabled={readOnly}
               maxLength={400}
               onChange={(event) => setBio(event.target.value)}
               rows={4}
@@ -702,6 +719,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
           <Field label="Mensagem padrão do WhatsApp">
             <textarea
               value={standardMessage}
+              disabled={readOnly}
               maxLength={500}
               onChange={(event) => setStandardMessage(event.target.value)}
               rows={4}
@@ -715,13 +733,14 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             <Field label="Templates adicionais — um por linha">
               <textarea
                 value={templatesText}
+                disabled={readOnly}
                 onChange={(event) => setTemplatesText(event.target.value)}
                 rows={6}
                 className="input resize-none"
               />
             </Field>
           )}
-          <button
+          {!readOnly && <button
             disabled={savingProfile}
             onClick={() => void saveProfile()}
             className="flex w-full items-center justify-center gap-3 rounded-2xl bg-slate-900 py-5 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50"
@@ -732,7 +751,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
               <Save className="h-5 w-5" />
             )}
             Salvar perfil
-          </button>
+          </button>}
         </section>
       )}
 
@@ -809,7 +828,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                   </p>
                 </>
               )}
-              <div className="grid gap-3 sm:grid-cols-2">
+              {!readOnly ? <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   onClick={() => void openWhatsApp(selectedLead)}
                   className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 py-4 text-xs font-black uppercase tracking-widest text-white"
@@ -823,7 +842,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                 >
                   <Trash2 className="h-4 w-4" /> Excluir dados
                 </button>
-              </div>
+              </div> : <p className="rounded-xl bg-blue-50 p-4 text-center text-xs font-black uppercase tracking-widest text-blue-700">Ações de contato e exclusão bloqueadas na visualização HQ</p>}
             </div>
           )}
         </Modal>
