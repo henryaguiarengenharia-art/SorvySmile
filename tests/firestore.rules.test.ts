@@ -106,6 +106,29 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
           scores: { harmonyIndex: 60 },
           expiresAtMs: Date.now() + 86_400_000,
         }),
+        setDoc(doc(db, "publicSlugAliases", "antigo"), {
+          targetSlug: "ativo",
+        }),
+        setDoc(doc(db, "dailyPosts", "publicado"), {
+          title: "Post publicado",
+          status: "published",
+        }),
+        setDoc(doc(db, "dailyPosts", "rascunho"), {
+          title: "Rascunho",
+          status: "draft",
+        }),
+        setDoc(doc(db, "adminAuditLogs", "audit_a"), {
+          accountId: "acc_a",
+          action: "account_status_changed",
+        }),
+        setDoc(doc(db, "subscriptionHistory", "history_a"), {
+          accountId: "acc_a",
+          toStatus: "active",
+        }),
+        setDoc(doc(db, "assistantUsage", "user_a_2026-08-17"), {
+          uid: "user_a",
+          count: 1,
+        }),
       ]);
     });
   });
@@ -208,8 +231,14 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
     );
     await assertFails(
       updateDoc(doc(professional, "professionals", "pro_a"), {
-        plan: "network",
+        profileImage: "javascript:alert(1)",
         updatedAtMs: 124,
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(professional, "professionals", "pro_a"), {
+        plan: "network",
+        updatedAtMs: 125,
       }),
     );
   });
@@ -218,5 +247,36 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
     const hq = environment.authenticatedContext("hq").firestore();
     await assertSucceeds(getDoc(doc(hq, "accounts", "acc_b")));
     await assertSucceeds(getDoc(doc(hq, "leads", "lead_b")));
+  });
+
+  it("preserva links antigos sem permitir escrita direta de aliases", async () => {
+    const anonymous = environment.unauthenticatedContext().firestore();
+    const hq = environment.authenticatedContext("hq").firestore();
+    await assertSucceeds(getDoc(doc(anonymous, "publicSlugAliases", "antigo")));
+    await assertFails(
+      setDoc(doc(hq, "publicSlugAliases", "manual"), { targetSlug: "ativo" }),
+    );
+  });
+
+  it("entrega somente o Post do Dia publicado aos assinantes", async () => {
+    const professional = environment.authenticatedContext("user_a").firestore();
+    const hq = environment.authenticatedContext("hq").firestore();
+    await assertSucceeds(getDoc(doc(professional, "dailyPosts", "publicado")));
+    await assertFails(getDoc(doc(professional, "dailyPosts", "rascunho")));
+    await assertSucceeds(getDoc(doc(hq, "dailyPosts", "rascunho")));
+    await assertFails(
+      updateDoc(doc(hq, "dailyPosts", "publicado"), { title: "Alterado direto" }),
+    );
+  });
+
+  it("restringe auditoria ao HQ e bloqueia dados internos do assistente", async () => {
+    const professional = environment.authenticatedContext("user_a").firestore();
+    const hq = environment.authenticatedContext("hq").firestore();
+    await assertFails(getDoc(doc(professional, "adminAuditLogs", "audit_a")));
+    await assertFails(getDoc(doc(professional, "subscriptionHistory", "history_a")));
+    await assertSucceeds(getDoc(doc(hq, "adminAuditLogs", "audit_a")));
+    await assertSucceeds(getDoc(doc(hq, "subscriptionHistory", "history_a")));
+    await assertFails(getDoc(doc(professional, "assistantUsage", "user_a_2026-08-17")));
+    await assertFails(getDoc(doc(hq, "assistantUsage", "user_a_2026-08-17")));
   });
 });

@@ -21,13 +21,20 @@ import {
 } from "lucide-react";
 import {
   AccountStatus,
+  AdminAuditLog,
   BillingAccount,
   DentistRecord,
+  DailyPost,
+  DailyPostStatus,
   LeadRecord,
   PlanConfig,
   PlanTier,
+  SubscriptionHistoryEvent,
 } from "../types";
 import { planName } from "../planCatalog";
+import { DailyPostManager } from "./DailyPostManager";
+import { PeriodFilter } from "./PeriodFilter";
+import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
 
 interface HQDashboardViewProps {
   leadRecords: LeadRecord[];
@@ -57,6 +64,10 @@ interface HQDashboardViewProps {
     professionalId: string,
   ) => Promise<void>;
   onViewProfessionalDashboard: (professionalId: string) => void;
+  dailyPosts: DailyPost[];
+  adminAuditLogs: AdminAuditLog[];
+  subscriptionHistory: SubscriptionHistoryEvent[];
+  onManageDailyPost: (input: { postId?: string; title: string; caption: string; cta: string; imageUrl?: string; status: DailyPostStatus; publishAtMs?: number | null; expiresAtMs?: number | null }) => Promise<unknown>;
 }
 
 const statusCopy: Record<
@@ -94,6 +105,10 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   onArchiveProfessional,
   onRestoreProfessional,
   onViewProfessionalDashboard,
+  dailyPosts,
+  adminAuditLogs,
+  subscriptionHistory,
+  onManageDailyPost,
 }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<AccountStatus | "all">(
@@ -107,6 +122,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   const [managedProfessional, setManagedProfessional] = useState<DentistRecord | null>(null);
   const [professionalName, setProfessionalName] = useState("");
   const [professionalSpecialty, setProfessionalSpecialty] = useState("");
+  const [metricPeriod, setMetricPeriod] = useState<MetricPeriod>(30);
 
   const month = useMemo(() => {
     const now = new Date();
@@ -115,6 +131,10 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
       "0",
     )}`;
   }, []);
+  const metricLeads = useMemo(
+    () => filterLeadsByPeriod(leadRecords, metricPeriod),
+    [leadRecords, metricPeriod],
+  );
 
   const stats = useMemo(() => {
     const all = Object.values(billingAccounts);
@@ -126,7 +146,10 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
     const trials = all.filter((account) =>
       account.subscriptionStatus === "trial" || account.trialStatus === "active"
     );
-    const converted = leadRecords.filter((lead) => lead.status === "closed").length;
+    const terminal = metricLeads.filter(
+      (lead) => lead.status === "closed" || lead.status === "lost",
+    );
+    const converted = terminal.filter((lead) => lead.status === "closed").length;
     const atRisk = all.filter((account) =>
       account.status === "overdue"
       || account.status === "paused"
@@ -145,7 +168,8 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
         (sum, account) => sum + planConfigs[account.tier].price * 12,
         0,
       ),
-      conversion: leadRecords.length > 0 ? Math.round((converted / leadRecords.length) * 100) : 0,
+      conversion: terminal.length > 0 ? Math.round((converted / terminal.length) * 100) : 0,
+      periodLeads: metricLeads.length,
       monthLeads: leadRecords.filter((lead) => {
         const created = new Date(lead.createdAt);
         return (
@@ -154,7 +178,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
         );
       }).length,
     };
-  }, [billingAccounts, leadRecords, planConfigs]);
+  }, [billingAccounts, leadRecords, metricLeads, planConfigs]);
 
   const alerts = useMemo<Array<{ account: BillingAccount; tone: "critical" | "attention"; text: string }>>(() => {
     const now = Date.now();
@@ -271,6 +295,14 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
         </div>
       )}
 
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Período da performance</p>
+          <p className="mt-1 text-sm font-bold text-slate-600">{stats.periodLeads} no período · {leadRecords.length} no geral</p>
+        </div>
+        <PeriodFilter value={metricPeriod} onChange={setMetricPeriod} />
+      </div>
+
       <section className="grid grid-cols-2 gap-4 xl:grid-cols-6">
         <Kpi
           icon={<UserRoundCheck className="h-5 w-5" />}
@@ -294,7 +326,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
         />
         <Kpi
           icon={<BarChart3 className="h-5 w-5" />}
-          label="Conversão de leads"
+          label="Conversão no período"
           value={`${stats.conversion}%`}
         />
         <Kpi
@@ -357,7 +389,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
         </header>
 
         <div className="hidden grid-cols-[1.4fr_.7fr_.7fr_.7fr_auto] gap-4 border-b border-slate-100 px-6 py-3 text-[9px] font-black uppercase tracking-widest text-slate-400 xl:grid">
-          <span>Profissional</span><span>Plano e acesso</span><span>Performance</span><span>Renovação</span><span>Ação</span>
+          <span>Profissional</span><span>Plano e acesso</span><span>Performance no período</span><span>Renovação</span><span>Ação</span>
         </div>
         {visibleProfessionals.length === 0 ? (
           <div className="p-12 text-center">
@@ -373,7 +405,14 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
               const status = account.status ?? "pending";
               const usage = usageByAccount[account.id]?.[month] ?? 0;
               const limit = planConfigs[account.tier].baseMonthlyLeadLimit;
-              const professionalLeads = leadRecords.filter((lead) => {
+              const isClinicManager = account.ownerType === "clinic"
+                && (
+                  account.ownerProfessionalId === professional.id
+                  || (!account.ownerProfessionalId
+                    && professional.teamTag?.toLowerCase().includes("admin"))
+                );
+              const professionalLeads = metricLeads.filter((lead) => {
+                if (isClinicManager) return lead.accountId === account.id;
                 const assignedProfessionalId = lead.professionalId ?? lead.dentistId;
                 if (assignedProfessionalId) return assignedProfessionalId === professional.id;
                 return account.ownerType === "dentist" && lead.accountId === account.id;
@@ -431,12 +470,24 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
         )}
       </section>
 
+      <section className="space-y-4">
+        <div><p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Conteúdo para a rede</p><h2 className="mt-1 text-2xl font-black">Post do Dia</h2></div>
+        <DailyPostManager posts={dailyPosts} onSave={onManageDailyPost} />
+      </section>
+
       {managedProfessional && (() => {
         const professional = managedProfessional;
         const account = billingAccounts[professional.billingAccountId];
         if (!account) return null;
         const status = professional.status ?? (professional.isActive ? "active" : "inactive");
+        const isClinicManager = account.ownerType === "clinic"
+          && (
+            account.ownerProfessionalId === professional.id
+            || (!account.ownerProfessionalId
+              && professional.teamTag?.toLowerCase().includes("admin"))
+          );
         const professionalLeads = leadRecords.filter((lead) => {
+          if (isClinicManager) return lead.accountId === account.id;
           const assignedProfessionalId = lead.professionalId ?? lead.dentistId;
           if (assignedProfessionalId) return assignedProfessionalId === professional.id;
           return account.ownerType === "dentist" && lead.accountId === account.id;
@@ -447,6 +498,10 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
           scheduled: professionalLeads.filter((lead) => lead.status === "scheduled").length,
           closed: professionalLeads.filter((lead) => lead.status === "closed").length,
         };
+        const history = [
+          ...adminAuditLogs.filter((item) => item.accountId === account.id && (!item.professionalId || item.professionalId === professional.id)).map((item) => ({ id: `audit-${item.id}`, label: item.action.replaceAll("_", " "), detail: "Ação administrativa", createdAt: item.createdAt })),
+          ...subscriptionHistory.filter((item) => item.accountId === account.id && (!item.professionalId || item.professionalId === professional.id)).map((item) => ({ id: `subscription-${item.id}`, label: `${item.fromStatus ?? "início"} → ${item.toStatus}`, detail: item.reason || "Assinatura", createdAt: item.createdAt })),
+        ].sort((a, b) => b.createdAt - a.createdAt).slice(0, 12);
         const canTrial = status === "inactive" && professional.isActive !== true && !professional.isProtected && !professional.isDemo;
         const run = async (action: () => Promise<void>, success: string): Promise<void> => {
           setBusyId(professional.id);
@@ -488,7 +543,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
                 <p className="mt-1 text-sm font-bold text-slate-500">{professional.whatsapp || account.checkoutWhatsapp || "WhatsApp não informado"}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button onClick={() => contactAccount(account)} className="inline-flex items-center gap-2 rounded-xl border border-emerald-100 px-3 py-2 text-xs font-black text-emerald-700"><MessageCircle className="h-4 w-4" /> WhatsApp</button>
-                  <button onClick={() => { setManagedProfessional(null); onViewProfessionalDashboard(professional.id); }} className="inline-flex items-center gap-2 rounded-xl border border-blue-100 px-3 py-2 text-xs font-black text-blue-700"><Eye className="h-4 w-4" /> Ver painel do profissional</button>
+                  <button onClick={() => { setManagedProfessional(null); onViewProfessionalDashboard(professional.id); }} className="inline-flex items-center gap-2 rounded-xl border border-blue-100 px-3 py-2 text-xs font-black text-blue-700"><Eye className="h-4 w-4" /> {isClinicManager ? "Ver gestão da clínica" : "Ver painel do profissional"}</button>
                 </div>
               </div>
 
@@ -504,6 +559,10 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
                 ) : (
                   <button disabled={busyId === professional.id || professional.isProtected || professional.isDemo} onClick={() => { if (window.confirm(`Arquivar ${professional.name}? Os leads e o histórico serão preservados.`)) void run(() => onArchiveProfessional(account.id, professional.id, "arquivamento administrativo"), "Profissional arquivado; histórico preservado."); }} className="action-button text-amber-700 disabled:opacity-40"><Archive className="h-4 w-4" /> Arquivar profissional</button>
                 )}
+              </div>
+              <div className="mt-7 rounded-2xl border border-slate-100 p-5">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Histórico administrativo</p>
+                <div className="mt-4 space-y-3">{history.map((item) => <div key={item.id} className="rounded-xl bg-slate-50 p-4"><p className="text-sm font-black capitalize">{item.label}</p><p className="mt-1 text-xs font-medium text-slate-500">{item.detail} · {new Date(item.createdAt).toLocaleString("pt-BR")}</p></div>)}{history.length === 0 && <p className="text-sm font-bold text-slate-400">Nenhum evento registrado.</p>}</div>
               </div>
             </aside>
           </div>

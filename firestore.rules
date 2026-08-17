@@ -34,6 +34,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /publicSlugAliases/{slug} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    match /dailyPosts/{postId} {
+      allow read: if isHq() || (signedIn() && resource.data.status == 'published');
+      allow write: if false;
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isHq());
       allow write: if false;
@@ -108,10 +118,20 @@ service cloud.firestore {
     }
 
     match /adminAuditLogs/{logId} {
-      allow read, write: if false;
+      allow read: if isHq();
+      allow write: if false;
     }
 
     match /subscriptionHistory/{historyId} {
+      allow read: if isHq();
+      allow write: if false;
+    }
+
+    match /assistantUsage/{usageId} {
+      allow read, write: if false;
+    }
+
+    match /assistantAudit/{auditId} {
       allow read, write: if false;
     }
 

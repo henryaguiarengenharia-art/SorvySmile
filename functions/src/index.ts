@@ -22,6 +22,7 @@ import {
   describeAiFailure,
   validatePhotoWithGemini,
 } from "./gemini.js";
+import { generateBusinessAssistant, scopeBusinessLeads } from "./assistant.js";
 import {
   ANALYSIS_CACHE_TTL_MS,
   analysisCacheId,
@@ -43,8 +44,10 @@ import {
 } from "./lifecycle.js";
 import {
   accountStatusSchema,
+  assistantRequestSchema,
   captureLeadSchema,
   checkoutSchema,
+  dailyPostSchema,
   hqProfessionalPatchSchema,
   imageSchema,
   leadAssignmentSchema,
@@ -53,12 +56,14 @@ import {
   professionalStatusSchema,
   professionalArchiveSchema,
   professionalRestoreSchema,
+  professionalSlugSchema,
   professionalTrialSchema,
   profilePatchSchema,
   slugify,
   startTriageSchema,
   teamMemberSchema,
 } from "./validation.js";
+import { assertSlugAllowed } from "./slug.js";
 
 if (getApps().length === 0) initializeApp();
 
@@ -145,6 +150,7 @@ interface ProfessionalRecord {
   state?: string;
   bio?: string;
   bioLink?: string;
+  profileImage?: string;
   standardMessage?: string;
   templates?: string[];
   teamTag?: string;
@@ -241,7 +247,10 @@ type AdminAuditAction =
   | "professional_profile_updated"
   | "professional_trial_started"
   | "professional_archived"
-  | "professional_restored";
+  | "professional_restored"
+  | "professional_slug_changed"
+  | "daily_post_updated"
+  | "assistant_requested";
 
 type FirestoreWriter = { set: (...args: any[]) => unknown };
 
@@ -311,6 +320,25 @@ function imageHash(imageBase64: string): string {
   return createHash("sha256").update(imageBase64).digest("hex");
 }
 
+async function resolvePublicProfileSlug(slug: string): Promise<{
+  slug: string;
+  snapshot: FirebaseFirestore.DocumentSnapshot;
+}> {
+  let currentSlug = slug;
+  const visited = new Set<string>();
+  for (let depth = 0; depth < 10; depth += 1) {
+    if (visited.has(currentSlug)) break;
+    visited.add(currentSlug);
+    const profile = await db.doc(`publicProfiles/${currentSlug}`).get();
+    if (profile.exists) return { slug: currentSlug, snapshot: profile };
+    const alias = await db.doc(`publicSlugAliases/${currentSlug}`).get();
+    const target = String(alias.data()?.targetSlug ?? "");
+    if (!alias.exists || !target || target === currentSlug) break;
+    currentSlug = target;
+  }
+  return { slug: currentSlug, snapshot: await db.doc(`publicProfiles/${currentSlug}`).get() };
+}
+
 async function releasePhotoValidationAttempt(
   accountId: string,
   sessionId: string,
@@ -358,7 +386,8 @@ export const startTriage = onCall(
   async (request) => {
     const uid = requireUid(request);
     const input = parseInput(startTriageSchema, request.data);
-    const profileSnap = await db.doc(`publicProfiles/${input.slug}`).get();
+    const resolvedProfile = await resolvePublicProfileSlug(input.slug);
+    const profileSnap = resolvedProfile.snapshot;
     if (!profileSnap.exists || profileSnap.data()?.active !== true) {
       throw new HttpsError("not-found", "Este link de triagem não está ativo.");
     }
@@ -383,7 +412,7 @@ export const startTriage = onCall(
       accountId: profile.accountId,
       professionalId:
         profile.ownerType === "clinic" ? null : profile.professionalId ?? null,
-      slug: input.slug,
+      slug: resolvedProfile.slug,
       state: "started",
       photoConsent: true,
       adultAndOwnershipConfirmed: true,
@@ -1067,6 +1096,7 @@ export const updateProfessionalProfile = onCall(
         city: input.city,
         state: input.state,
         bio: input.bio,
+        profileImage: input.profileImage,
         plan: normalizePlan(accountSnap.data()?.plan),
         active: true,
         updatedAtMs: now,
@@ -1095,7 +1125,7 @@ export const updateProfessionalByHq = onCall(
     const current = professionalSnap.data() as ProfessionalRecord;
     assertAdminTarget(input.accountId, input.professionalId, account, current);
     const now = Date.now();
-    const fields = ["name", "specialty", "whatsapp", "city", "state", "bio", "bioLink", "standardMessage", "templates", "teamTag", "isOnDuty"] as const;
+    const fields = ["name", "specialty", "whatsapp", "city", "state", "bio", "bioLink", "standardMessage", "templates", "teamTag", "isOnDuty", "profileImage"] as const;
     const patch: Record<string, unknown> = { updatedAtMs: now };
     for (const field of fields) if (input[field] !== undefined) patch[field] = input[field];
     const batch = db.batch();
@@ -1112,6 +1142,7 @@ export const updateProfessionalByHq = onCall(
         city: String(patch.city ?? current.city ?? ""),
         state: String(patch.state ?? current.state ?? ""),
         bio: String(patch.bio ?? current.bio ?? ""),
+        profileImage: String(patch.profileImage ?? current.profileImage ?? ""),
         plan: normalizePlan(account.plan),
         ownerType: account.ownerType === "clinic" ? "clinic" : "dentist",
         status: current.status ?? "subscriber",
@@ -1391,6 +1422,254 @@ export const setAccountStatus = onCall(
       professionalStatus: nextProfessionalStatus,
     });
     return { ok: true };
+  },
+);
+
+export const updateProfessionalSlug = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(professionalSlugSchema, request.data);
+    try { assertSlugAllowed(input.slug); } catch (error) {
+      throw new HttpsError("invalid-argument", error instanceof Error ? error.message : "Endereço inválido.");
+    }
+    const user = await readUser(uid);
+    const isHqUser = user.role === "hq";
+    const accountId = isHqUser ? input.accountId : user.accountId;
+    const professionalId = isHqUser ? input.professionalId : user.professionalId;
+    if (!accountId || !professionalId) {
+      throw new HttpsError("invalid-argument", "Cliente e profissional são obrigatórios.");
+    }
+    const accountRef = db.doc(`accounts/${accountId}`);
+    const professionalRef = db.doc(`professionals/${professionalId}`);
+    const [accountSnap, professionalSnap] = await Promise.all([accountRef.get(), professionalRef.get()]);
+    if (!accountSnap.exists || !professionalSnap.exists || professionalSnap.data()?.accountId !== accountId) {
+      throw new HttpsError("not-found", "Profissional não encontrado.");
+    }
+    if (!isHqUser && user.professionalId !== professionalId) {
+      throw new HttpsError("permission-denied", "Você não pode alterar este endereço.");
+    }
+    const currentSlug = String(professionalSnap.data()?.publicSlug ?? accountSnap.data()?.slug ?? "");
+    if (currentSlug === input.slug) return { ok: true, slug: input.slug };
+    const now = Date.now();
+    const newProfileRef = db.doc(`publicProfiles/${input.slug}`);
+    const newAliasRef = db.doc(`publicSlugAliases/${input.slug}`);
+    const currentProfileRef = currentSlug
+      ? db.doc(`publicProfiles/${currentSlug}`)
+      : null;
+    await db.runTransaction(async (transaction) => {
+      const [newProfile, newAlias] = await Promise.all([
+        transaction.get(newProfileRef),
+        transaction.get(newAliasRef),
+      ]);
+      const currentProfile = currentProfileRef
+        ? await transaction.get(currentProfileRef)
+        : null;
+      if (newProfile.exists || newAlias.exists) {
+        throw new HttpsError("already-exists", "Este link público já está em uso.");
+      }
+      const profileData = currentProfile?.data() ?? {
+        accountId,
+        professionalId,
+        name: professionalSnap.data()?.name ?? "",
+        whatsapp: professionalSnap.data()?.whatsapp ?? "",
+        specialty: professionalSnap.data()?.specialty ?? "",
+        city: professionalSnap.data()?.city ?? "",
+        state: professionalSnap.data()?.state ?? "",
+        bio: professionalSnap.data()?.bio ?? "",
+        profileImage: professionalSnap.data()?.profileImage ?? "",
+        plan: accountSnap.data()?.plan,
+        ownerType: accountSnap.data()?.ownerType === "clinic" ? "clinic" : "dentist",
+        active: professionalSnap.data()?.isActive === true,
+      };
+      transaction.set(newProfileRef, { ...profileData, slug: input.slug, updatedAtMs: now });
+      if (currentProfile?.exists && currentProfileRef) transaction.delete(currentProfileRef);
+      if (currentSlug) transaction.set(db.doc(`publicSlugAliases/${currentSlug}`), {
+        sourceSlug: currentSlug,
+        targetSlug: input.slug,
+        createdAtMs: now,
+        updatedAtMs: now,
+      });
+      transaction.set(professionalRef, { publicSlug: input.slug, updatedAtMs: now }, { merge: true });
+      const ownerUid = String(professionalSnap.data()?.ownerUid ?? "");
+      if (ownerUid) transaction.set(db.doc(`users/${ownerUid}`), { slug: input.slug, updatedAtMs: now }, { merge: true });
+      if (accountSnap.data()?.professionalId === professionalId) {
+        transaction.set(accountRef, { slug: input.slug, updatedAtMs: now }, { merge: true });
+      }
+      addAdminAudit(transaction, {
+        actorUid: uid,
+        action: "professional_slug_changed",
+        accountId,
+        professionalId,
+        details: { fromSlug: currentSlug, toSlug: input.slug },
+        now,
+      });
+    });
+    return { ok: true, slug: input.slug, previousSlug: currentSlug };
+  },
+);
+
+export const manageDailyPost = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    await requireHq(uid);
+    const input = parseInput(dailyPostSchema, request.data);
+    const now = Date.now();
+    if (input.expiresAtMs && input.expiresAtMs <= now) {
+      throw new HttpsError("invalid-argument", "A expiração precisa estar no futuro.");
+    }
+    const postRef = input.postId
+      ? db.doc(`dailyPosts/${input.postId}`)
+      : db.collection("dailyPosts").doc();
+    const publishAtMs = input.publishAtMs ?? now;
+    const status = input.status === "scheduled" && publishAtMs <= now
+      ? "published"
+      : input.status;
+    const batch = db.batch();
+    if (status === "published") {
+      const current = await db.collection("dailyPosts").where("status", "==", "published").limit(20).get();
+      current.docs.filter((item) => item.id !== postRef.id).forEach((item) => batch.set(item.ref, { status: "inactive", updatedAtMs: now }, { merge: true }));
+    }
+    const existing = await postRef.get();
+    batch.set(postRef, {
+      title: input.title,
+      caption: input.caption,
+      cta: input.cta,
+      imageUrl: input.imageUrl,
+      status,
+      publishAtMs,
+      expiresAtMs: input.expiresAtMs ?? null,
+      publishedAtMs: status === "published" ? now : existing.data()?.publishedAtMs ?? null,
+      createdAtMs: existing.data()?.createdAtMs ?? now,
+      createdBy: existing.data()?.createdBy ?? uid,
+      updatedAtMs: now,
+      updatedBy: uid,
+    }, { merge: true });
+    addAdminAudit(batch, {
+      actorUid: uid,
+      action: "daily_post_updated",
+      accountId: "_sorvy",
+      details: { postId: postRef.id, status },
+      now,
+    });
+    await batch.commit();
+    return { ok: true, postId: postRef.id, status };
+  },
+);
+
+export const askBusinessAssistant = onCall(
+  {
+    enforceAppCheck: ENFORCE_APP_CHECK,
+    secrets: [GEMINI_API_KEY],
+    timeoutSeconds: 60,
+    memory: "512MiB",
+  },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(assistantRequestSchema, request.data);
+    const user = await readUser(uid);
+    const accountId = user.role === "hq" ? input.accountId : user.accountId;
+    if (!accountId) throw new HttpsError("invalid-argument", "Selecione uma conta.");
+    const accountSnap = await db.doc(`accounts/${accountId}`).get();
+    if (!accountSnap.exists || normalizePlan(accountSnap.data()?.plan) !== "network") {
+      throw new HttpsError("failed-precondition", "As assistentes de IA estão disponíveis no plano Network.");
+    }
+    if (user.role !== "hq" && user.accountId !== accountId) {
+      throw new HttpsError("permission-denied", "Conta inválida.");
+    }
+    if (user.role !== "hq" && accountSnap.data()?.status !== "active") {
+      throw new HttpsError("failed-precondition", "A conta precisa estar ativa para usar as assistentes.");
+    }
+    if (user.role === "professional") {
+      const professional = user.professionalId
+        ? await db.doc(`professionals/${user.professionalId}`).get()
+        : null;
+      if (!professional?.exists || professional.data()?.isActive !== true) {
+        throw new HttpsError("permission-denied", "O acesso profissional está inativo.");
+      }
+    }
+    const day = new Date().toISOString().slice(0, 10);
+    const usageRef = db.doc(`assistantUsage/${uid}_${day}`);
+    await db.runTransaction(async (transaction) => {
+      const usage = await transaction.get(usageRef);
+      const requests = Number(usage.data()?.requests ?? 0);
+      if (requests >= 40) throw new HttpsError("resource-exhausted", "O limite diário da assistente foi atingido.");
+      transaction.set(usageRef, { uid, accountId, day, requests: requests + 1, updatedAtMs: Date.now() }, { merge: true });
+    });
+
+    const [leadSnapshot, professionalSnapshot] = await Promise.all([
+      db.collection("leads")
+        .where("accountId", "==", accountId)
+        .orderBy("createdAtMs", "desc")
+        .limit(500)
+        .get(),
+      db.collection("professionals").where("accountId", "==", accountId).limit(100).get(),
+    ]);
+    const accountLeads: Array<{ id: string } & FirebaseFirestore.DocumentData> = leadSnapshot.docs.map(
+      (item) => ({ id: item.id, ...item.data() }),
+    );
+    const leads = scopeBusinessLeads(accountLeads, user.role, user.professionalId);
+    const terminal = leads.filter((lead) => lead.status === "closed" || lead.status === "lost");
+    const contacted = leads.filter((lead) => Number(lead.firstContactAt ?? 0) > 0);
+    const averageResponseMinutes = contacted.length
+      ? Math.round(contacted.reduce(
+          (sum, lead) => sum + Math.max(
+            0,
+            Number(lead.firstContactAt) - Number(lead.createdAtMs ?? lead.createdAt),
+          ),
+          0,
+        ) / contacted.length / 60_000)
+      : 0;
+    const context: Record<string, unknown> = {
+      account: { plan: "network", status: accountSnap.data()?.status },
+      scope: {
+        recordsConsidered: leads.length,
+        limitedToLatestAccountRecords: leadSnapshot.size === 500,
+      },
+      totals: {
+        leads: leads.length,
+        new: leads.filter((lead) => lead.status === "new").length,
+        inChat: leads.filter((lead) => lead.status === "in_chat").length,
+        scheduled: leads.filter((lead) => lead.status === "scheduled").length,
+        converted: leads.filter((lead) => lead.status === "closed").length,
+        conversionPercent: terminal.length ? Math.round((leads.filter((lead) => lead.status === "closed").length / terminal.length) * 100) : 0,
+        contactRequests: leads.filter((lead) => Boolean(lead.contactRequestedAtMs)).length,
+        averageResponseMinutes,
+        professionals: user.role === "professional" ? 1 : professionalSnapshot.size,
+      },
+    };
+    if (input.mode === "conversion") {
+      const lead = leads.find((item) => item.id === input.leadId);
+      if (!lead) throw new HttpsError("not-found", "Lead não encontrado nesta conta.");
+      context.selectedLead = {
+        status: lead.status,
+        ageHours: Math.max(0, Math.round((Date.now() - Number(lead.createdAtMs ?? lead.createdAt)) / 3_600_000)),
+        contactRequested: Boolean(lead.contactRequestedAtMs),
+        whatsappOpened: Boolean(lead.patientOpenedWhatsAppAtMs),
+        intentCategory: lead.intentCategory ?? lead.scores?.intentCategory ?? "",
+        recommendedSpecialty: lead.recommendedSpecialty ?? lead.scores?.recommendedSpecialty ?? "",
+        visualStatus: lead.scores?.status ?? "",
+      };
+    }
+    try {
+      const result = await generateBusinessAssistant(
+        GEMINI_API_KEY.value(),
+        GEMINI_MODEL.value(),
+        input.mode,
+        context,
+        input.question,
+      );
+      const now = Date.now();
+      const batch = db.batch();
+      addAdminAudit(batch, { actorUid: uid, action: "assistant_requested", accountId, details: { mode: input.mode }, now });
+      batch.set(db.collection("assistantAudit").doc(), { uid, accountId, mode: input.mode, createdAtMs: now });
+      await batch.commit();
+      return { ...result, generatedAt: now };
+    } catch (error) {
+      console.error("Falha na assistente operacional", describeAiFailure(error));
+      throw new HttpsError("internal", "A assistente está temporariamente indisponível. Tente novamente.");
+    }
   },
 );
 
@@ -1690,6 +1969,36 @@ export const deleteLead = onCall(
     }
     await leadSnap.ref.delete();
     return { ok: true };
+  },
+);
+
+export const publishScheduledDailyPosts = onSchedule(
+  {
+    schedule: "every 15 minutes",
+    timeZone: "America/Sao_Paulo",
+  },
+  async () => {
+    const now = Date.now();
+    const [scheduled, expired] = await Promise.all([
+      db.collection("dailyPosts").where("status", "==", "scheduled").where("publishAtMs", "<=", now).limit(20).get(),
+      db.collection("dailyPosts").where("status", "==", "published").where("expiresAtMs", "<=", now).limit(20).get(),
+    ]);
+    if (!expired.empty) {
+      const batch = db.batch();
+      expired.docs.forEach((item) => batch.set(item.ref, { status: "inactive", updatedAtMs: now }, { merge: true }));
+      await batch.commit();
+    }
+    const next = scheduled.docs.sort((a, b) => Number(a.data().publishAtMs) - Number(b.data().publishAtMs)).at(-1);
+    if (!next) return;
+    const current = await db.collection("dailyPosts").where("status", "==", "published").limit(20).get();
+    const batch = db.batch();
+    current.docs.forEach((item) => batch.set(item.ref, { status: "inactive", updatedAtMs: now }, { merge: true }));
+    scheduled.docs.forEach((item) => batch.set(item.ref, {
+      status: item.id === next.id ? "published" : "inactive",
+      publishedAtMs: item.id === next.id ? now : null,
+      updatedAtMs: now,
+    }, { merge: true }));
+    await batch.commit();
   },
 );
 

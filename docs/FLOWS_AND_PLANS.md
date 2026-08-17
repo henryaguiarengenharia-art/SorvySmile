@@ -30,7 +30,9 @@ lead sem destino. Em homologação, o slug piloto pode ser definido por ambiente
 3. inicia a conversa pelo WhatsApp;
 4. registra status, primeiro contato e agendamento;
 5. edita cidade, UF, bio e mensagens permitidas pelo plano;
-6. exclui um lead quando solicitado pelo titular.
+6. altera com segurança o slug e a foto exibidos na vitrine;
+7. consulta o Post do Dia e indicadores de 7/30/90 dias ou gerais;
+8. exclui um lead quando solicitado pelo titular.
 
 O Lite recebe funil simples. Pro e Network recebem CRM completo,
 templates, alertas e agendamento. O Post do Dia permanece como apoio prático do
@@ -63,6 +65,7 @@ volume que justifique essa complexidade.
 | CRM, templates e agendamento | não | sim | sim |
 | Gestão e atribuição de equipe | não | não | sim |
 | KPIs por dentista (7/30/90 dias) | não | não | sim |
+| Assistentes operacionais de Gestão e Conversão | não | não | sim |
 | Acessos incluídos | 1 | 1 | 2 |
 | Acesso adicional | — | — | R$ 79 |
 
@@ -75,7 +78,7 @@ o valor legado `elite` são normalizados para `network`.
 - escolha ou ranking de profissionais;
 - distribuição automática ou aleatória de leads;
 - gamificação competitiva;
-- atendimento autônomo por IA;
+- atendimento autônomo por IA (as assistentes implementadas são apoio humano revisável);
 - ativação automática por webhook.
 
 O painel Network permite atribuição manual e auditável dentro da própria clínica.

@@ -12,7 +12,9 @@ import {
   doc,
   DocumentData,
   getDoc,
+  limit,
   onSnapshot,
+  orderBy,
   query,
   Unsubscribe,
   updateDoc,
@@ -21,11 +23,16 @@ import {
 import { httpsCallable } from "firebase/functions";
 import {
   BillingAccount,
+  AdminAuditLog,
+  AssistantMode,
+  AssistantResponse,
+  DailyPost,
   DentistRecord,
   LeadRecord,
   PhotoValidation,
   PlanTier,
   PublicProfessionalProfile,
+  SubscriptionHistoryEvent,
   SmileScores,
   WorkspaceUser,
 } from "../types";
@@ -45,6 +52,9 @@ export interface WorkspaceData {
   professionals: DentistRecord[];
   accounts: Record<string, BillingAccount>;
   usageByAccount: Record<string, Record<string, number>>;
+  dailyPosts: DailyPost[];
+  adminAuditLogs: AdminAuditLog[];
+  subscriptionHistory: SubscriptionHistoryEvent[];
 }
 
 interface CheckoutData {
@@ -103,6 +113,7 @@ function mapAccount(id: string, data: DocumentData): BillingAccount {
   const tier = normalizeTier(data.plan ?? data.tier);
   return {
     id,
+    ownerProfessionalId: data.professionalId,
     ownerType: data.ownerType === "clinic" ? "clinic" : "dentist",
     tier,
     isActive: data.status === "active",
@@ -173,6 +184,22 @@ function mapLead(id: string, data: DocumentData): LeadRecord {
   };
 }
 
+function mapDailyPost(id: string, data: DocumentData): DailyPost {
+  return {
+    id,
+    title: data.title ?? "",
+    caption: data.caption ?? "",
+    cta: data.cta ?? "",
+    imageUrl: data.imageUrl ?? "",
+    status: data.status ?? "draft",
+    publishAt: data.publishAtMs,
+    expiresAt: data.expiresAtMs,
+    publishedAt: data.publishedAtMs,
+    createdAt: Number(data.createdAtMs ?? Date.now()),
+    updatedAt: Number(data.updatedAtMs ?? Date.now()),
+  };
+}
+
 async function currentWorkspaceUser(user: User): Promise<WorkspaceUser> {
   const snap = await getDoc(doc(db, "users", user.uid));
   if (!snap.exists()) throw new Error("Seu perfil ainda não foi criado.");
@@ -203,10 +230,20 @@ export async function getPublicProfile(
 ): Promise<PublicProfessionalProfile | null> {
   assertConfigured();
   try {
-    const snap = await getDoc(doc(db, "publicProfiles", slug));
+    let resolvedSlug = slug;
+    const visited = new Set<string>();
+    for (let depth = 0; depth < 10; depth += 1) {
+      if (visited.has(resolvedSlug)) break;
+      visited.add(resolvedSlug);
+      const alias = await getDoc(doc(db, "publicSlugAliases", resolvedSlug));
+      const target = String(alias.data()?.targetSlug ?? "");
+      if (!alias.exists() || !target || target === resolvedSlug) break;
+      resolvedSlug = target;
+    }
+    const snap = await getDoc(doc(db, "publicProfiles", resolvedSlug));
     if (!snap.exists() || snap.data().active !== true) return null;
     return {
-      slug,
+      slug: resolvedSlug,
       accountId: snap.data().accountId,
       professionalId: snap.data().professionalId ?? null,
       ownerType: snap.data().ownerType === "clinic" ? "clinic" : "dentist",
@@ -219,6 +256,7 @@ export async function getPublicProfile(
       plan: normalizeTier(snap.data().plan),
       active: true,
       status: snap.data().status ?? "active",
+      profileImage: snap.data().profileImage ?? "",
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -471,6 +509,7 @@ export async function saveProfessionalProfile(
     bioLink: patch.bioLink ?? "",
     standardMessage: patch.standardMessage ?? "",
     templates: patch.templates ?? [],
+    profileImage: patch.profileImage ?? "",
   });
 }
 
@@ -534,6 +573,48 @@ export async function restoreProfessional(
   } catch (error) {
     throw new Error(errorMessage(error));
   }
+}
+
+export async function updateProfessionalSlug(input: {
+  slug: string;
+  accountId?: string;
+  professionalId?: string;
+}): Promise<string> {
+  const callable = httpsCallable<typeof input, { ok: true; slug: string }>(
+    functions,
+    "updateProfessionalSlug",
+  );
+  try { return (await callable(input)).data.slug; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function manageDailyPost(input: {
+  postId?: string;
+  title: string;
+  caption: string;
+  cta: string;
+  imageUrl?: string;
+  status: DailyPost["status"];
+  publishAtMs?: number | null;
+  expiresAtMs?: number | null;
+}): Promise<{ postId: string; status: DailyPost["status"] }> {
+  const callable = httpsCallable<typeof input, { ok: true; postId: string; status: DailyPost["status"] }>(
+    functions,
+    "manageDailyPost",
+  );
+  try { return (await callable(input)).data; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function askBusinessAssistant(input: {
+  mode: AssistantMode;
+  question: string;
+  accountId?: string;
+  leadId?: string;
+}): Promise<AssistantResponse> {
+  const callable = httpsCallable<typeof input, AssistantResponse>(functions, "askBusinessAssistant");
+  try { return (await callable(input)).data; }
+  catch (error) { throw new Error(errorMessage(error)); }
 }
 
 export async function deleteLeadRecord(id: string): Promise<void> {
@@ -620,6 +701,9 @@ export async function subscribeWorkspace(
     professionals: [],
     accounts: {},
     usageByAccount: {},
+    dailyPosts: [],
+    adminAuditLogs: [],
+    subscriptionHistory: [],
   };
   const emit = () => onChange({
     ...state,
@@ -627,9 +711,22 @@ export async function subscribeWorkspace(
     professionals: [...state.professionals],
     accounts: { ...state.accounts },
     usageByAccount: { ...state.usageByAccount },
+    dailyPosts: [...state.dailyPosts],
+    adminAuditLogs: [...state.adminAuditLogs],
+    subscriptionHistory: [...state.subscriptionHistory],
   });
   const handleError = (error: unknown) => onError(errorMessage(error));
   const subscriptions: Unsubscribe[] = [];
+
+  const dailyPostQuery = user.role === "hq"
+    ? collection(db, "dailyPosts")
+    : query(collection(db, "dailyPosts"), where("status", "==", "published"));
+  subscriptions.push(onSnapshot(dailyPostQuery, (snapshot) => {
+    state.dailyPosts = snapshot.docs
+      .map((item) => mapDailyPost(item.id, item.data()))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+    emit();
+  }, handleError));
 
   const leadQuery = user.role === "hq"
     ? collection(db, "leads")
@@ -674,6 +771,31 @@ export async function subscribeWorkspace(
   }
 
   if (user.role === "hq") {
+    subscriptions.push(onSnapshot(query(collection(db, "adminAuditLogs"), orderBy("createdAtMs", "desc"), limit(300)), (snapshot) => {
+      state.adminAuditLogs = snapshot.docs.map((item) => ({
+        id: item.id,
+        actorUid: String(item.data().actorUid ?? ""),
+        action: String(item.data().action ?? ""),
+        accountId: String(item.data().accountId ?? ""),
+        professionalId: item.data().professionalId ?? null,
+        details: item.data().details ?? {},
+        createdAt: Number(item.data().createdAtMs ?? 0),
+      })).sort((a, b) => b.createdAt - a.createdAt);
+      emit();
+    }, handleError));
+    subscriptions.push(onSnapshot(query(collection(db, "subscriptionHistory"), orderBy("createdAtMs", "desc"), limit(300)), (snapshot) => {
+      state.subscriptionHistory = snapshot.docs.map((item) => ({
+        id: item.id,
+        actorUid: String(item.data().actorUid ?? ""),
+        accountId: String(item.data().accountId ?? ""),
+        professionalId: item.data().professionalId ?? null,
+        fromStatus: item.data().fromStatus ?? null,
+        toStatus: String(item.data().toStatus ?? ""),
+        reason: String(item.data().reason ?? ""),
+        createdAt: Number(item.data().createdAtMs ?? 0),
+      })).sort((a, b) => b.createdAt - a.createdAt);
+      emit();
+    }, handleError));
     subscriptions.push(onSnapshot(collection(db, "accounts"), (snapshot) => {
       state.accounts = Object.fromEntries(
         snapshot.docs.map((item) => [item.id, mapAccount(item.id, item.data())]),

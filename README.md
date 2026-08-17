@@ -22,7 +22,9 @@ de triagem quando o link possui um responsável ativo.
 - preview antes da captura de nome e WhatsApp;
 - relatório informativo e CTAs de agendamento ou pedido de contato;
 - destino sempre definido pelo dono do link, sem marketplace público;
-- portal individual do dentista e painel consolidado da clínica no Network.
+- portal individual do dentista e painel consolidado da clínica no Network;
+- Post do Dia administrado pela HQ, filtros de 7/30/90 dias e visão geral;
+- assistentes operacionais de Gestão e Conversão no Network, sem diagnóstico.
 
 | Plano | Mensalidade | Triagens/mês | Principal evolução |
 |---|---:|---:|---|
@@ -87,7 +89,7 @@ npm run test:rules
 
 Somente a configuração pública do aplicativo Firebase e os links públicos de
 pagamento entram no Vite. A chave da Gemini API fica exclusivamente no Secret
-Manager e é disponibilizada somente às duas Functions de IA.
+Manager e é disponibilizada somente às Functions de IA.
 
 ## Homologação sem Replit
 

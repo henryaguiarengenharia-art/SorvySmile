@@ -21,12 +21,18 @@ import {
   X,
 } from "lucide-react";
 import {
+  AssistantResponse,
+  DailyPost,
   DentistRecord,
   LeadRecord,
   LeadStatus,
   PlanConfig,
 } from "../types";
 import { planName } from "../planCatalog";
+import { AIAssistantPanel } from "./AIAssistantPanel";
+import { DailyPostCard } from "./DailyPostCard";
+import { PeriodFilter } from "./PeriodFilter";
+import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
 
 interface DentistPortalViewProps {
   leadRecords: LeadRecord[];
@@ -42,9 +48,12 @@ interface DentistPortalViewProps {
   ) => Promise<void>;
   onDeleteLead: (id: string) => Promise<void>;
   readOnly?: boolean;
+  dailyPost?: DailyPost | null;
+  onUpdateSlug?: (slug: string) => Promise<string>;
+  onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string }) => Promise<AssistantResponse>;
 }
 
-type PortalTab = "dashboard" | "leads" | "post" | "profile";
+type PortalTab = "dashboard" | "leads" | "post" | "profile" | "assistant";
 
 const formatPhone = (value: string): string => {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -83,6 +92,9 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   onUpdateProfessional,
   onDeleteLead,
   readOnly = false,
+  dailyPost,
+  onUpdateSlug,
+  onAskAssistant,
 }) => {
   const [tab, setTab] = useState<PortalTab>("dashboard");
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null);
@@ -92,6 +104,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   const [scheduleAt, setScheduleAt] = useState("");
   const [busyLeadId, setBusyLeadId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [metricPeriod, setMetricPeriod] = useState<MetricPeriod>(30);
 
   const [whatsapp, setWhatsapp] = useState(
     formatPhone(professional.whatsapp),
@@ -107,14 +120,20 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
     (professional.templates ?? []).join("\n"),
   );
   const [savingProfile, setSavingProfile] = useState(false);
+  const [publicSlug, setPublicSlug] = useState(professional.publicSlug ?? "");
+  const [profileImage, setProfileImage] = useState(professional.profileImage ?? "");
 
   const fullCrm = planConfig.features.funnelFull;
   const schedulingEnabled = planConfig.features.scheduling;
-  const publicUrl = `${window.location.origin}/p/${professional.publicSlug ?? ""}`;
+  const publicUrl = `${window.location.origin}/p/${publicSlug}`;
   const usageLimit = planConfig.baseMonthlyLeadLimit;
   const usagePercent = Math.min(
     100,
     Math.round((currentUsage / Math.max(1, usageLimit)) * 100),
+  );
+  const metricLeads = useMemo(
+    () => filterLeadsByPeriod(leadRecords, metricPeriod),
+    [leadRecords, metricPeriod],
   );
 
   const leads = useMemo(
@@ -139,16 +158,16 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
 
   const counts = useMemo(
     () => ({
-      new: leadRecords.filter((lead) => lead.status === "new").length,
-      in_chat: leadRecords.filter((lead) => lead.status === "in_chat").length,
-      scheduled: leadRecords.filter((lead) => lead.status === "scheduled").length,
-      closed: leadRecords.filter((lead) => lead.status === "closed").length,
+      new: metricLeads.filter((lead) => lead.status === "new").length,
+      in_chat: metricLeads.filter((lead) => lead.status === "in_chat").length,
+      scheduled: metricLeads.filter((lead) => lead.status === "scheduled").length,
+      closed: metricLeads.filter((lead) => lead.status === "closed").length,
     }),
-    [leadRecords],
+    [metricLeads],
   );
 
   const responseStats = useMemo(() => {
-    const responded = leadRecords.filter((lead) => lead.firstContactAt);
+    const responded = metricLeads.filter((lead) => lead.firstContactAt);
     const averageMinutes = responded.length
       ? Math.round(
           responded.reduce(
@@ -160,7 +179,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             / 60000,
         )
       : 0;
-    const terminal = leadRecords.filter(
+    const terminal = metricLeads.filter(
       (lead) => lead.status === "closed" || lead.status === "lost",
     );
     const conversion = terminal.length
@@ -171,7 +190,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
         )
       : 0;
     return { averageMinutes, conversion };
-  }, [leadRecords]);
+  }, [metricLeads]);
 
   const priorityLead = useMemo(
     () =>
@@ -296,7 +315,12 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
               .filter(Boolean)
               .slice(0, 10)
           : [],
+        profileImage,
       });
+      if (onUpdateSlug && publicSlug !== professional.publicSlug) {
+        const updatedSlug = await onUpdateSlug(publicSlug);
+        setPublicSlug(updatedSlug);
+      }
       setNotice("Perfil atualizado com sucesso.");
     } catch (error) {
       setNotice(
@@ -390,10 +414,20 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
           label="Post do Dia"
           onClick={() => setTab("post")}
         />
+        {planConfig.features.assistantPreview && onAskAssistant && !readOnly && <TabButton active={tab === "assistant"} icon={<Sparkles className="h-4 w-4" />} label="Assistentes IA" onClick={() => setTab("assistant")} />}
       </nav>
 
       {tab === "dashboard" && (
         <section className="space-y-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Métricas do período</p>
+              <p className="mt-1 text-sm font-bold text-slate-600">
+                {metricLeads.length} no período · {leadRecords.length} no geral
+              </p>
+            </div>
+            <PeriodFilter value={metricPeriod} onChange={setMetricPeriod} />
+          </div>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <Kpi label="Novos" value={counts.new} color="text-blue-600" />
             <Kpi
@@ -414,26 +448,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
           </div>
 
           <div className="grid gap-5 lg:grid-cols-3">
-            <article className="rounded-[2rem] bg-blue-600 p-7 text-white">
-              <Instagram className="h-6 w-6" />
-              <h2 className="mt-5 text-xl font-black">Post do dia</h2>
-              <p className="mt-3 text-sm font-medium leading-relaxed text-blue-50">
-                Cuidar do sorriso também começa com consciência. Faça sua
-                triagem visual pelo link da minha bio e converse comigo sobre o
-                próximo passo.
-              </p>
-              <button
-                onClick={() => {
-                  void navigator.clipboard.writeText(
-                    "Cuidar do sorriso também começa com consciência. Faça sua triagem visual pelo link da minha bio e converse comigo sobre o próximo passo.",
-                  );
-                  setNotice("Legenda copiada.");
-                }}
-                className="mt-6 flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-xs font-black uppercase tracking-widest text-blue-600"
-              >
-                <Copy className="h-4 w-4" /> Copiar
-              </button>
-            </article>
+            <DailyPostCard post={dailyPost} compact />
 
             <article className="rounded-[2rem] border border-slate-100 bg-white p-7">
               <Clock className="h-6 w-6 text-amber-500" />
@@ -641,21 +656,10 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       )}
 
       {tab === "post" && (
-        <section className="grid gap-6 lg:grid-cols-[1fr_.8fr]">
-          <article className="rounded-[2rem] bg-blue-600 p-8 text-white">
-            <Instagram className="h-7 w-7" />
-            <p className="mt-6 text-[10px] font-black uppercase tracking-widest text-blue-100">Post do Dia</p>
-            <h2 className="mt-2 text-3xl font-black">Seu próximo conteúdo para atrair conversas</h2>
-            <p className="mt-4 text-sm font-medium leading-relaxed text-blue-50">“Um sorriso saudável começa com uma avaliação que olha para você por inteiro. Faça seu mapa do sorriso e converse comigo sobre os próximos passos.”</p>
-            <button onClick={() => navigator.clipboard?.writeText("Um sorriso saudável começa com uma avaliação que olha para você por inteiro. Faça seu mapa do sorriso e converse comigo sobre os próximos passos.")} className="mt-7 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-xs font-black uppercase tracking-widest text-blue-700"><Copy className="h-4 w-4" /> Copiar legenda</button>
-          </article>
-          <article className="rounded-[2rem] border border-slate-100 bg-white p-8">
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">CTA sugerida</p>
-            <p className="mt-4 text-lg font-black text-slate-900">“Envie uma mensagem e descubra o que seu sorriso pode melhorar.”</p>
-            <p className="mt-4 text-sm font-medium leading-relaxed text-slate-500">Use o link público do seu perfil nas redes sociais: {publicUrl}</p>
-          </article>
-        </section>
+        <DailyPostCard post={dailyPost} />
       )}
+
+      {tab === "assistant" && planConfig.features.assistantPreview && onAskAssistant && <AIAssistantPanel leadRecords={leadRecords} onAsk={onAskAssistant} />}
 
       {tab === "profile" && (
         <section className="mx-auto max-w-3xl space-y-6 rounded-[2rem] border border-slate-100 bg-white p-7 md:p-9">
@@ -671,6 +675,12 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             </div>
           </div>
           <div className="grid gap-5 md:grid-cols-2">
+            <Field label="Link público">
+              <input value={publicSlug} disabled={readOnly} onChange={(event) => setPublicSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} className="input" />
+            </Field>
+            <Field label="URL https da foto">
+              <input value={profileImage} disabled={readOnly} onChange={(event) => setProfileImage(event.target.value)} className="input" />
+            </Field>
             <Field label="WhatsApp">
               <input
                 value={whatsapp}

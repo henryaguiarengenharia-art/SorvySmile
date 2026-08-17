@@ -48,6 +48,7 @@ export type AccountRisk = 'ok' | 'attention' | 'critical';
 
 export interface BillingAccount {
   id: string;
+  ownerProfessionalId?: string;
   ownerType?: 'dentist' | 'clinic';
   tier: PlanTier;
   isActive: boolean;
@@ -181,6 +182,54 @@ export interface PublicProfessionalProfile {
   plan: PlanTier;
   active: boolean;
   status?: ProfessionalStatus;
+  profileImage?: string;
+}
+
+export type DailyPostStatus = 'draft' | 'scheduled' | 'published' | 'inactive';
+
+export interface DailyPost {
+  id: string;
+  title: string;
+  caption: string;
+  cta: string;
+  imageUrl?: string;
+  status: DailyPostStatus;
+  publishAt?: number;
+  expiresAt?: number;
+  publishedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AdminAuditLog {
+  id: string;
+  actorUid: string;
+  action: string;
+  accountId: string;
+  professionalId?: string | null;
+  details: Record<string, unknown>;
+  createdAt: number;
+}
+
+export interface SubscriptionHistoryEvent {
+  id: string;
+  actorUid: string;
+  accountId: string;
+  professionalId?: string | null;
+  fromStatus?: string | null;
+  toStatus: string;
+  reason?: string;
+  createdAt: number;
+}
+
+export type AssistantMode = 'management' | 'conversion';
+
+export interface AssistantResponse {
+  headline: string;
+  answer: string;
+  actions: string[];
+  suggestedMessage?: string;
+  generatedAt: number;
 }
 
 export interface WorkspaceUser {

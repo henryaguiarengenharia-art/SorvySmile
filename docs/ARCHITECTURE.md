@@ -17,6 +17,8 @@
 | Coleção | Leitura do cliente | Escrita do cliente |
 |---|---|---|
 | `publicProfiles` | somente perfil ativo por slug | nenhuma |
+| `publicSlugAliases` | consulta pontual para preservar links antigos | nenhuma |
+| `dailyPosts` | HQ lê todos; assinante lê somente publicados | nenhuma |
 | `users` | próprio usuário ou HQ | nenhuma |
 | `accounts` | mesma conta ou HQ | nenhuma |
 | `professionals` | HQ; clínica da conta; dentista lê o próprio perfil | campos seguros e Functions de equipe |
@@ -24,6 +26,8 @@
 | `triageSessions` | nenhuma | nenhuma |
 | `usage` | mesma conta ou HQ | nenhuma |
 | `usageReservations` | nenhuma | nenhuma |
+| `adminAuditLogs` e `subscriptionHistory` | somente HQ | nenhuma |
+| `assistantUsage` e `assistantAudit` | nenhuma | nenhuma |
 
 Plano, cota, vínculo de conta, perfil público e status da assinatura são
 autoritativos no servidor.
@@ -62,6 +66,11 @@ A validação inicial da foto também possui teto mensal por conta: até três
 tentativas para cada triagem incluída no plano. Falhas do provedor devolvem a
 tentativa. A primeira produção limita a escala das Functions a cinco instâncias,
 com concorrência controlada, como proteção adicional de custo.
+
+As assistentes operacionais do Network têm limite de 40 solicitações por usuário
+por dia. O contexto enviado não inclui nome, telefone, email ou foto; um
+profissional individual recebe somente indicadores dos próprios leads, enquanto
+o gestor da clínica recebe os indicadores consolidados da conta.
 
 ## Consentimentos e retenção
 
@@ -105,6 +114,11 @@ restrita para ativar, pausar ou marcar inadimplência.
   leads, sessões de conversa, pagamentos e histórico. Restaurar recompõe o
   estado anterior quando a conta ainda está ativa.
 - Ações de HQ geram documentos em `adminAuditLogs` e `subscriptionHistory`.
-  Essas coleções são somente servidor; não há escrita direta pelo navegador.
-- O painel do dentista separa Visão geral, Leads, Post do Dia e Configurações.
-  O Post do Dia é material de conversão e não altera a jornada de triagem.
+  A HQ pode consultar o histórico, mas não há escrita direta pelo navegador.
+- A HQ cria, programa, publica e desativa o Post do Dia. Uma tarefa a cada 15
+  minutos efetiva publicações e expirações programadas.
+- Os painéis separam indicadores de 7, 30 e 90 dias da visão geral acumulada.
+- O painel Network oferece assistentes de Gestão e Conversão. Elas geram apoio
+  operacional revisável e não realizam atendimento, diagnóstico ou prescrição.
+- A alteração de slug é transacional e cria um alias público para que o endereço
+  anterior continue resolvendo para o perfil atual.

@@ -230,14 +230,14 @@ npx --no-install firebase deploy \
   --project "$PROJECT_ID" \
   --non-interactive
 
-printf 'Publicando as duas Functions de IA primeiro...\n'
+printf 'Publicando as Functions de IA primeiro...\n'
 npx --no-install firebase deploy \
-  --only functions:validateSmilePhoto,functions:analyzeSmilePhoto \
+  --only functions:validateSmilePhoto,functions:analyzeSmilePhoto,functions:askBusinessAssistant \
   --project "$PROJECT_ID" \
   --non-interactive
 
 printf 'Garantindo acesso HTTP às Functions callable de IA...\n'
-for service_name in validatesmilephoto analyzesmilephoto; do
+for service_name in validatesmilephoto analyzesmilephoto askbusinessassistant; do
   gcloud run services add-iam-policy-binding "$service_name" \
     --region southamerica-east1 \
     --project "$PROJECT_ID" \
@@ -248,13 +248,13 @@ done
 
 printf 'Publicando o primeiro lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember \
+  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:updateProfessionalSlug,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember,functions:manageDailyPost \
   --project "$PROJECT_ID" \
   --non-interactive
 
 printf 'Publicando o segundo lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:expireProfessionalTrials,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
+  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:publishScheduledDailyPosts,functions:expireProfessionalTrials,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
   --project "$PROJECT_ID" \
   --non-interactive
 

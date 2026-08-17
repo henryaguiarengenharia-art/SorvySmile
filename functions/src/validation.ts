@@ -9,6 +9,11 @@ const phoneSchema = z
   .transform((value) => value.replace(/\D/g, ""))
   .refine((value) => value.length >= 10 && value.length <= 15, "WhatsApp inválido.");
 
+const optionalHttpsUrl = z.string().trim().max(500).refine((value) => {
+  if (!value) return true;
+  try { return new URL(value).protocol === "https:"; } catch { return false; }
+}, "Use uma URL https válida.");
+
 export const slugSchema = z
   .string()
   .trim()
@@ -61,6 +66,7 @@ export const profilePatchSchema = z.object({
   bioLink: z.string().trim().max(250).optional().default(""),
   standardMessage: z.string().trim().max(500).optional().default(""),
   templates: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
+  profileImage: optionalHttpsUrl.optional().default(""),
 });
 
 export const accountStatusSchema = z.object({
@@ -104,6 +110,7 @@ const optionalProfileFields = {
   templates: z.array(z.string().trim().min(1).max(500)).max(10).optional(),
   teamTag: z.string().trim().max(80).optional(),
   isOnDuty: z.boolean().optional(),
+  profileImage: optionalHttpsUrl.optional(),
 };
 
 export const hqProfessionalPatchSchema = z.object({
@@ -128,6 +135,40 @@ export const professionalRestoreSchema = z.object({
 export const professionalTrialSchema = z.object({
   accountId: z.string().min(3).max(160),
   professionalId: z.string().min(3).max(160),
+});
+
+export const professionalSlugSchema = z.object({
+  accountId: z.string().min(3).max(160).optional(),
+  professionalId: z.string().min(3).max(160).optional(),
+  slug: slugSchema,
+});
+
+export const dailyPostSchema = z.object({
+  postId: z.string().min(3).max(160).optional(),
+  title: z.string().trim().min(3).max(120),
+  caption: z.string().trim().min(10).max(2200),
+  cta: z.string().trim().min(3).max(300),
+  imageUrl: optionalHttpsUrl.optional().default(""),
+  status: z.enum(["draft", "scheduled", "published", "inactive"]),
+  publishAtMs: z.number().int().positive().nullable().optional(),
+  expiresAtMs: z.number().int().positive().nullable().optional(),
+}).refine((value) => value.status !== "scheduled" || Boolean(value.publishAtMs), {
+  message: "Informe quando o conteúdo programado deve ser publicado.",
+}).refine((value) => !value.expiresAtMs || !value.publishAtMs || value.expiresAtMs > value.publishAtMs, {
+  message: "A expiração precisa ocorrer depois da publicação.",
+});
+
+export const assistantRequestSchema = z.object({
+  mode: z.enum(["management", "conversion"]),
+  accountId: z.string().min(3).max(160).optional(),
+  leadId: z.string().min(3).max(160).optional(),
+  question: z.string().trim().min(3).max(600).refine(
+    (value) => !/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(value)
+      && !/(?:\d[\s().+-]*){10,}/.test(value),
+    "Não inclua email ou telefone na pergunta.",
+  ),
+}).refine((value) => value.mode !== "conversion" || Boolean(value.leadId), {
+  message: "Selecione um lead para a assistente de conversão.",
 });
 
 export function slugify(value: string): string {

@@ -21,6 +21,7 @@ import {
 } from "./types";
 import {
   assignLead,
+  askBusinessAssistant,
   archiveProfessional,
   changeAccountStatus,
   createTeamMember,
@@ -28,6 +29,7 @@ import {
   getPublicProfile,
   loginWorkspace,
   logoutWorkspace,
+  manageDailyPost,
   requestPasswordReset,
   registerPendingSubscription,
   restoreWorkspaceSession,
@@ -38,6 +40,7 @@ import {
   startProfessionalTrial,
   subscribeWorkspace,
   updateLeadCrm,
+  updateProfessionalSlug,
   WorkspaceData,
 } from "./services/sorvyApi";
 import { isFirebaseConfigured } from "./services/firebaseClient";
@@ -243,8 +246,23 @@ const App: React.FC = () => {
   const hqPreviewAccount = hqPreviewProfessional
     ? workspace?.accounts[hqPreviewProfessional.billingAccountId]
     : undefined;
+  const hqPreviewIsClinicManager = Boolean(
+    hqPreviewProfessional
+    && hqPreviewAccount?.ownerType === "clinic"
+    && (
+      hqPreviewAccount.ownerProfessionalId === hqPreviewProfessional.id
+      || (!hqPreviewAccount.ownerProfessionalId
+        && hqPreviewProfessional.teamTag?.toLowerCase().includes("admin"))
+    ),
+  );
+  const hqPreviewProfessionals = hqPreviewAccount
+    ? (workspace?.professionals ?? []).filter(
+        (professional) => professional.billingAccountId === hqPreviewAccount.id,
+      )
+    : [];
   const hqPreviewLeads = hqPreviewProfessional && hqPreviewAccount
     ? (workspace?.leads ?? []).filter((lead) => {
+        if (hqPreviewIsClinicManager) return lead.accountId === hqPreviewAccount.id;
         const assignedProfessionalId = lead.professionalId ?? lead.dentistId;
         if (assignedProfessionalId) return assignedProfessionalId === hqPreviewProfessional.id;
         return hqPreviewAccount.ownerType === "dentist" && lead.accountId === hqPreviewAccount.id;
@@ -253,6 +271,9 @@ const App: React.FC = () => {
   const hqPreviewUsage = hqPreviewAccount
     ? workspace?.usageByAccount[hqPreviewAccount.id]?.[currentMonth] ?? 0
     : 0;
+  const currentDailyPost = workspace?.dailyPosts.find((post) =>
+    post.status === "published" && (!post.expiresAt || post.expiresAt > Date.now()),
+  ) ?? null;
 
   const showPublicNav = ![
     "patient",
@@ -378,6 +399,7 @@ const App: React.FC = () => {
               professional={currentProfessional}
               planConfig={PLAN_CONFIGS[currentAccount.tier]}
               currentUsage={currentUsage}
+              dailyPost={currentDailyPost}
               onUpdateLead={(id, patch) =>
                 updateLeadCrm(id, patch).catch((error: Error) => {
                   setPageError(error.message);
@@ -396,6 +418,8 @@ const App: React.FC = () => {
                   throw error;
                 })
               }
+              onUpdateSlug={(slug) => updateProfessionalSlug({ slug })}
+              onAskAssistant={(input) => askBusinessAssistant(input)}
             />
           </React.Suspense>
         </DashboardShell>
@@ -423,6 +447,9 @@ const App: React.FC = () => {
                   throw error;
                 })
               }
+              dailyPost={currentDailyPost}
+              onAskAssistant={(input) => askBusinessAssistant({ ...input, accountId: currentAccount.id })}
+              onUpdateSlug={(slug) => updateProfessionalSlug({ slug })}
               onUpdateLead={(id, patch) =>
                 updateLeadCrm(id, patch).catch((error: Error) => {
                   setPageError(error.message);
@@ -435,23 +462,42 @@ const App: React.FC = () => {
       )}
 
       {view === "hq-dashboard" && workspace && hqPreviewProfessional && hqPreviewAccount && (
-        <DashboardShell title={`HQ · ${hqPreviewProfessional.name}`} onLogout={handleLogout}>
+        <DashboardShell title={`HQ · ${hqPreviewIsClinicManager ? hqPreviewAccount.accountName || hqPreviewProfessional.name : hqPreviewProfessional.name}`} onLogout={handleLogout}>
           <div className="mx-auto max-w-7xl px-5 pt-6">
             <button onClick={() => setHqPreviewProfessionalId(null)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-slate-700 hover:bg-slate-100">
               <ArrowLeft className="h-4 w-4" /> Voltar à administração Sorvy
             </button>
           </div>
           <React.Suspense fallback={<DashboardLoading />}>
-            <DentistPortalView
-              leadRecords={hqPreviewLeads}
-              professional={hqPreviewProfessional}
-              planConfig={PLAN_CONFIGS[hqPreviewAccount.tier]}
-              currentUsage={hqPreviewUsage}
-              readOnly
-              onUpdateLead={async () => undefined}
-              onUpdateProfessional={async () => undefined}
-              onDeleteLead={async () => undefined}
-            />
+            {hqPreviewIsClinicManager ? (
+              <ClinicDashboardView
+                leadRecords={hqPreviewLeads}
+                professionals={hqPreviewProfessionals}
+                account={hqPreviewAccount}
+                currentUsage={hqPreviewUsage}
+                currentProfessionalId={hqPreviewAccount.ownerProfessionalId ?? hqPreviewProfessional.id}
+                managerProfessional={hqPreviewProfessional}
+                dailyPost={currentDailyPost}
+                readOnly
+                onAssignLead={async () => undefined}
+                onCreateProfessional={async () => undefined}
+                onToggleProfessional={async () => undefined}
+                onUpdateLead={async () => undefined}
+                onUpdateClinicProfile={async () => undefined}
+              />
+            ) : (
+              <DentistPortalView
+                leadRecords={hqPreviewLeads}
+                professional={hqPreviewProfessional}
+                planConfig={PLAN_CONFIGS[hqPreviewAccount.tier]}
+                currentUsage={hqPreviewUsage}
+                readOnly
+                dailyPost={currentDailyPost}
+                onUpdateLead={async () => undefined}
+                onUpdateProfessional={async () => undefined}
+                onDeleteLead={async () => undefined}
+              />
+            )}
           </React.Suspense>
         </DashboardShell>
       )}
@@ -477,6 +523,10 @@ const App: React.FC = () => {
               onArchiveProfessional={archiveProfessional}
               onRestoreProfessional={restoreProfessional}
               onViewProfessionalDashboard={setHqPreviewProfessionalId}
+              dailyPosts={workspace.dailyPosts}
+              adminAuditLogs={workspace.adminAuditLogs}
+              subscriptionHistory={workspace.subscriptionHistory}
+              onManageDailyPost={manageDailyPost}
             />
           </React.Suspense>
         </DashboardShell>
@@ -533,9 +583,18 @@ const LandingView = ({
       {profile && (
         <div className="mx-auto mt-7 max-w-xl rounded-[2rem] border border-blue-100 bg-white p-5 text-left shadow-sm">
           <div className="flex items-start gap-4">
-            <span className="rounded-2xl bg-blue-50 p-3 text-blue-600">
-              <Smile className="h-6 w-6" />
-            </span>
+            {profile.profileImage ? (
+              <img
+                src={profile.profileImage}
+                alt={`Foto de ${profile.name}`}
+                className="h-14 w-14 shrink-0 rounded-2xl object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span className="rounded-2xl bg-blue-50 p-3 text-blue-600">
+                <Smile className="h-6 w-6" />
+              </span>
+            )}
             <div>
               <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">
                 Experiência oferecida por

@@ -61,11 +61,11 @@ administrativa em arquivo `VITE_*`.
 O backend usa a Gemini Developer API, o mesmo caminho do aplicativo original.
 A chave nunca entra no frontend: ela fica no Secret Manager como
 `GEMINI_API_KEY` e é vinculada somente a `validateSmilePhoto` e
-`analyzeSmilePhoto`. O modelo estável padrão é `gemini-3.6-flash`, configurável
-por `GEMINI_MODEL`.
+`analyzeSmilePhoto` e `askBusinessAssistant`. O modelo estável padrão é
+`gemini-3.6-flash`, configurável por `GEMINI_MODEL`.
 
 Se apenas a leitura da foto estiver quebrada, repare e publique somente as duas
-Functions de IA:
+Functions responsáveis pela foto:
 
 ```bash
 npm run repair:gemini:hml

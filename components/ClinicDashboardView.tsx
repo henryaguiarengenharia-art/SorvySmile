@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Clipboard,
   Clock,
+  Eye,
   Link as LinkIcon,
   LoaderCircle,
   Phone,
@@ -16,10 +17,17 @@ import {
 } from "lucide-react";
 import {
   BillingAccount,
+  AssistantResponse,
+  DailyPost,
   DentistRecord,
   LeadRecord,
   LeadStatus,
 } from "../types";
+import { AIAssistantPanel } from "./AIAssistantPanel";
+import { DailyPostCard } from "./DailyPostCard";
+import { PeriodFilter } from "./PeriodFilter";
+import { PLAN_CONFIGS } from "../planCatalog";
+import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
 
 interface TeamMemberInput {
   name: string;
@@ -42,9 +50,13 @@ interface ClinicDashboardViewProps {
   onUpdateLead: (leadId: string, patch: Partial<LeadRecord>) => Promise<void>;
   managerProfessional?: DentistRecord;
   onUpdateClinicProfile: (patch: Partial<DentistRecord>) => Promise<void>;
+  dailyPost?: DailyPost | null;
+  onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string }) => Promise<AssistantResponse>;
+  onUpdateSlug?: (slug: string) => Promise<string>;
+  readOnly?: boolean;
 }
 
-type ClinicTab = "overview" | "leads" | "team" | "profile";
+type ClinicTab = "overview" | "leads" | "team" | "profile" | "post" | "assistant";
 
 const statusLabel: Record<LeadStatus, string> = {
   new: "Novo",
@@ -83,6 +95,10 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
   onUpdateLead,
   managerProfessional,
   onUpdateClinicProfile,
+  dailyPost,
+  onAskAssistant,
+  onUpdateSlug,
+  readOnly = false,
 }) => {
   const [tab, setTab] = useState<ClinicTab>("overview");
   const [search, setSearch] = useState("");
@@ -92,12 +108,15 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [metricPeriod, setMetricPeriod] = useState<MetricPeriod>(30);
   const [clinicProfile, setClinicProfile] = useState({
     whatsapp: managerProfessional?.whatsapp ?? "",
     city: managerProfessional?.city ?? "",
     state: managerProfessional?.state ?? "",
     bio: managerProfessional?.bio ?? "",
     standardMessage: managerProfessional?.standardMessage ?? "",
+    profileImage: managerProfessional?.profileImage ?? "",
+    publicSlug: managerProfessional?.publicSlug ?? "",
   });
 
   useEffect(() => {
@@ -108,11 +127,17 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
       state: managerProfessional.state ?? "",
       bio: managerProfessional.bio ?? "",
       standardMessage: managerProfessional.standardMessage ?? "",
+      profileImage: managerProfessional.profileImage ?? "",
+      publicSlug: managerProfessional.publicSlug ?? "",
     });
   }, [managerProfessional]);
 
   const activeProfessionals = professionals.filter((item) => item.isActive);
-  const unassigned = leadRecords.filter((lead) => !lead.professionalId);
+  const unassigned = leadRecords.filter((lead) => !(lead.professionalId ?? lead.dentistId));
+  const metricLeads = useMemo(
+    () => filterLeadsByPeriod(leadRecords, metricPeriod),
+    [leadRecords, metricPeriod],
+  );
   const now = Date.now();
   const backlog = leadRecords.filter(
     (lead) =>
@@ -120,10 +145,10 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
       && !lead.firstContactAt
       && now - lead.createdAt > 120 * 60 * 1000,
   );
-  const finished = leadRecords.filter(
+  const finished = metricLeads.filter(
     (lead) => lead.status === "closed" || lead.status === "lost",
   );
-  const converted = leadRecords.filter((lead) => lead.status === "closed");
+  const converted = metricLeads.filter((lead) => lead.status === "closed");
   const conversion = finished.length
     ? Math.round((converted.length / finished.length) * 100)
     : 0;
@@ -140,8 +165,8 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
 
   const teamMetrics = useMemo(
     () => professionals.map((professional) => {
-      const leads = leadRecords.filter(
-        (lead) => lead.professionalId === professional.id,
+      const leads = metricLeads.filter(
+        (lead) => (lead.professionalId ?? lead.dentistId) === professional.id,
       );
       const completed = leads.filter(
         (lead) => lead.status === "closed" || lead.status === "lost",
@@ -163,10 +188,11 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
         averageMinutes,
       };
     }),
-    [leadRecords, professionals],
+    [metricLeads, professionals],
   );
 
   const run = async (id: string, action: () => Promise<unknown>, success: string) => {
+    if (readOnly) return;
     setBusyId(id);
     setError(null);
     setNotice(null);
@@ -194,6 +220,7 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
   };
 
   const openWhatsApp = (lead: LeadRecord) => {
+    if (readOnly) return;
     const number = digits(lead.lead.whatsapp);
     if (!number) return;
     window.open(
@@ -244,21 +271,38 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
         </div>
       )}
 
+      {readOnly && (
+        <div className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-bold text-blue-900">
+          <Eye className="h-5 w-5 shrink-0" />
+          Visualização administrativa da HQ. Você está vendo a gestão desta clínica em modo somente leitura.
+        </div>
+      )}
+
       <nav className="flex flex-wrap gap-2">
         <Tab active={tab === "overview"} onClick={() => setTab("overview")} label="Visão geral" />
         <Tab active={tab === "leads"} onClick={() => setTab("leads")} label="Fila de leads" />
         <Tab active={tab === "team"} onClick={() => setTab("team")} label="Equipe" />
         <Tab active={tab === "profile"} onClick={() => setTab("profile")} label="Perfil da clínica" />
+        <Tab active={tab === "post"} onClick={() => setTab("post")} label="Post do Dia" />
+        {!readOnly && onAskAssistant && <Tab active={tab === "assistant"} onClick={() => setTab("assistant")} label="Assistentes IA" />}
       </nav>
 
       {tab === "overview" && (
         <>
-          <section className="grid grid-cols-2 gap-4 lg:grid-cols-5">
-            <Kpi label="Leads" value={leadRecords.length} icon={<Users />} />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Métricas da operação</p>
+              <p className="mt-1 text-sm font-bold text-slate-600">{metricLeads.length} no período · {leadRecords.length} no geral</p>
+            </div>
+            <PeriodFilter value={metricPeriod} onChange={setMetricPeriod} />
+          </div>
+          <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
+            <Kpi label="Leads no período" value={metricLeads.length} icon={<Users />} />
+            <Kpi label="Leads gerais" value={leadRecords.length} icon={<Users />} />
             <Kpi label="Sem responsável" value={unassigned.length} icon={<UserCheck />} warn={unassigned.length > 0} />
             <Kpi label="Backlog +2h" value={backlog.length} icon={<AlertTriangle />} warn={backlog.length > 0} />
             <Kpi label="Conversão" value={`${conversion}%`} icon={<CheckCircle2 />} />
-            <Kpi label="Uso mensal" value={`${currentUsage}/150`} icon={<Clock />} />
+            <Kpi label="Uso mensal" value={`${currentUsage}/${PLAN_CONFIGS[account.tier].baseMonthlyLeadLimit}`} icon={<Clock />} />
           </section>
           <section className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-4">
@@ -287,7 +331,7 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
                     <AssignmentSelect
                       lead={lead}
                       professionals={activeProfessionals}
-                      busy={busyId === lead.id}
+                      busy={readOnly || busyId === lead.id}
                       onChange={(professionalId) =>
                         run(lead.id, () => onAssignLead(lead.id, professionalId), "Lead atribuído.")
                       }
@@ -328,13 +372,13 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
                   <tr key={lead.id}>
                     <td className="p-4"><p className="font-black">{lead.lead.name}</p><p className="text-xs text-slate-400">{lead.lead.whatsapp}</p></td>
                     <td className="p-4 text-xs font-bold text-slate-500">{new Date(lead.createdAt).toLocaleString("pt-BR")}</td>
-                    <td className="p-4"><AssignmentSelect lead={lead} professionals={activeProfessionals} busy={busyId === lead.id} onChange={(professionalId) => run(lead.id, () => onAssignLead(lead.id, professionalId), "Lead atribuído.")} /></td>
+                    <td className="p-4"><AssignmentSelect lead={lead} professionals={activeProfessionals} busy={readOnly || busyId === lead.id} onChange={(professionalId) => run(lead.id, () => onAssignLead(lead.id, professionalId), "Lead atribuído.")} /></td>
                     <td className="p-4">
-                      <select value={lead.status} disabled={busyId === lead.id} onChange={(event) => run(lead.id, () => onUpdateLead(lead.id, { status: event.target.value as LeadStatus }), "Status atualizado.")} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black">
+                      <select value={lead.status} disabled={readOnly || busyId === lead.id} onChange={(event) => run(lead.id, () => onUpdateLead(lead.id, { status: event.target.value as LeadStatus }), "Status atualizado.")} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black">
                         {(Object.keys(statusLabel) as LeadStatus[]).map((status) => <option key={status} value={status}>{statusLabel[status]}</option>)}
                       </select>
                     </td>
-                    <td className="p-4 text-right"><button onClick={() => openWhatsApp(lead)} className="rounded-xl border border-emerald-100 p-3 text-emerald-600 hover:bg-emerald-50"><Phone className="h-4 w-4" /></button></td>
+                    <td className="p-4 text-right">{!readOnly && <button onClick={() => openWhatsApp(lead)} className="rounded-xl border border-emerald-100 p-3 text-emerald-600 hover:bg-emerald-50"><Phone className="h-4 w-4" /></button>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -352,9 +396,9 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
                 Cada profissional recebe login e link próprios; o administrador mantém a visão consolidada.
               </p>
             </div>
-            <button disabled={activeProfessionals.length >= (account.seatsTotal ?? 2)} onClick={() => setShowMemberForm(true)} className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-4 text-xs font-black uppercase tracking-widest text-white disabled:opacity-40">
+            {!readOnly && <button disabled={activeProfessionals.length >= (account.seatsTotal ?? 2)} onClick={() => setShowMemberForm(true)} className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-4 text-xs font-black uppercase tracking-widest text-white disabled:opacity-40">
               <Plus className="h-4 w-4" /> Novo profissional
-            </button>
+            </button>}
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             {teamMetrics.map(({ professional, leads, conversion: memberConversion, averageMinutes }) => {
@@ -367,7 +411,7 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
                       <div className="flex items-center gap-2"><h3 className="text-lg font-black">{professional.name}</h3>{isOwner && <span className="rounded-full bg-blue-50 px-2 py-1 text-[8px] font-black uppercase text-blue-600">Administrador</span>}</div>
                       <p className="mt-1 text-xs font-bold text-slate-400">{professional.specialty || professional.teamTag || "Dentista"}</p>
                     </div>
-                    <button disabled={isOwner || busyId === professional.id} onClick={() => run(professional.id, () => onToggleProfessional(professional.id, !professional.isActive), professional.isActive ? "Acesso pausado." : "Acesso reativado.")} className={`rounded-xl p-3 ${professional.isActive ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"}`} title={professional.isActive ? "Pausar acesso" : "Reativar acesso"}>
+                    <button disabled={readOnly || isOwner || busyId === professional.id} onClick={() => run(professional.id, () => onToggleProfessional(professional.id, !professional.isActive), professional.isActive ? "Acesso pausado." : "Acesso reativado.")} className={`rounded-xl p-3 disabled:opacity-50 ${professional.isActive ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"}`} title={professional.isActive ? "Pausar acesso" : "Reativar acesso"}>
                       {busyId === professional.id ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
                     </button>
                   </div>
@@ -398,31 +442,43 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
             </p>
           </div>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <Field label="WhatsApp da clínica" value={clinicProfile.whatsapp} onChange={(value) => setClinicProfile({ ...clinicProfile, whatsapp: value })} />
-            <Field label="Cidade" value={clinicProfile.city} onChange={(value) => setClinicProfile({ ...clinicProfile, city: value })} />
-            <Field label="UF" value={clinicProfile.state} onChange={(value) => setClinicProfile({ ...clinicProfile, state: value.toUpperCase().slice(0, 2) })} />
-            <Field label="Mensagem padrão" value={clinicProfile.standardMessage} onChange={(value) => setClinicProfile({ ...clinicProfile, standardMessage: value })} />
+            <Field disabled={readOnly} label="WhatsApp da clínica" value={clinicProfile.whatsapp} onChange={(value) => setClinicProfile({ ...clinicProfile, whatsapp: value })} />
+            <Field disabled={readOnly} label="Cidade" value={clinicProfile.city} onChange={(value) => setClinicProfile({ ...clinicProfile, city: value })} />
+            <Field disabled={readOnly} label="UF" value={clinicProfile.state} onChange={(value) => setClinicProfile({ ...clinicProfile, state: value.toUpperCase().slice(0, 2) })} />
+            <Field disabled={readOnly} label="Mensagem padrão" value={clinicProfile.standardMessage} onChange={(value) => setClinicProfile({ ...clinicProfile, standardMessage: value })} />
+            <Field disabled={readOnly} label="Link público" value={clinicProfile.publicSlug} onChange={(value) => setClinicProfile({ ...clinicProfile, publicSlug: value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} />
+            <Field required={false} disabled={readOnly} label="URL https da foto" value={clinicProfile.profileImage} onChange={(value) => setClinicProfile({ ...clinicProfile, profileImage: value })} />
           </div>
           <label className="mt-4 block space-y-2">
             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Descrição curta</span>
-            <textarea value={clinicProfile.bio} onChange={(event) => setClinicProfile({ ...clinicProfile, bio: event.target.value })} className="min-h-28 w-full rounded-xl border-2 border-slate-100 bg-slate-50 p-3 text-sm font-bold outline-none focus:border-blue-500" />
+            <textarea disabled={readOnly} value={clinicProfile.bio} onChange={(event) => setClinicProfile({ ...clinicProfile, bio: event.target.value })} className="min-h-28 w-full rounded-xl border-2 border-slate-100 bg-slate-50 p-3 text-sm font-bold outline-none focus:border-blue-500 disabled:opacity-70" />
           </label>
-          <button
+          {!readOnly && <button
             disabled={busyId === "clinic-profile"}
             onClick={() => run(
               "clinic-profile",
-              () => onUpdateClinicProfile(clinicProfile),
+              async () => {
+                await onUpdateClinicProfile(clinicProfile);
+                if (onUpdateSlug && managerProfessional && clinicProfile.publicSlug !== managerProfessional.publicSlug) {
+                  const slug = await onUpdateSlug(clinicProfile.publicSlug);
+                  setClinicProfile((current) => ({ ...current, publicSlug: slug }));
+                }
+              },
               "Perfil da clínica atualizado.",
             )}
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 py-4 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50"
           >
             {busyId === "clinic-profile" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
             Salvar perfil da clínica
-          </button>
+          </button>}
         </section>
       )}
 
-      {showMemberForm && (
+      {tab === "post" && <DailyPostCard post={dailyPost} />}
+
+      {tab === "assistant" && !readOnly && onAskAssistant && <AIAssistantPanel leadRecords={leadRecords} onAsk={onAskAssistant} />}
+
+      {showMemberForm && !readOnly && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/65 p-5 backdrop-blur-sm">
           <form onSubmit={submitMember} className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-[2rem] bg-white p-7 shadow-2xl">
             <div className="flex items-start justify-between gap-4"><div><p className="text-[9px] font-black uppercase tracking-widest text-blue-600">Novo acesso Network</p><h2 className="mt-1 text-2xl font-black">Adicionar profissional</h2></div><button type="button" onClick={() => setShowMemberForm(false)} className="rounded-xl bg-slate-100 p-3"><X className="h-5 w-5" /></button></div>
@@ -444,7 +500,7 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
 };
 
 const AssignmentSelect = ({ lead, professionals, busy, onChange }: { lead: LeadRecord; professionals: DentistRecord[]; busy: boolean; onChange: (professionalId: string | null) => void }) => (
-  <select disabled={busy} value={lead.professionalId ?? ""} onChange={(event) => onChange(event.target.value || null)} className="max-w-52 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black disabled:opacity-50">
+  <select disabled={busy} value={lead.professionalId ?? lead.dentistId ?? ""} onChange={(event) => onChange(event.target.value || null)} className="max-w-52 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black disabled:opacity-50">
     <option value="">Sem responsável</option>
     {professionals.map((professional) => <option key={professional.id} value={professional.id}>{professional.name}</option>)}
   </select>
@@ -462,6 +518,6 @@ const Metric = ({ label, value }: { label: string; value: string | number }) => 
   <div className="rounded-xl bg-slate-50 p-3"><p className="text-lg font-black">{value}</p><p className="mt-1 text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</p></div>
 );
 
-const Field = ({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) => (
-  <label className="space-y-2"><span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</span><input required type={type} value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 p-3 text-sm font-bold outline-none focus:border-blue-500" /></label>
+const Field = ({ label, value, onChange, type = "text", disabled = false, required = true }: { label: string; value: string; onChange: (value: string) => void; type?: string; disabled?: boolean; required?: boolean }) => (
+  <label className="space-y-2"><span className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</span><input required={required} disabled={disabled} type={type} value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-xl border-2 border-slate-100 bg-slate-50 p-3 text-sm font-bold outline-none focus:border-blue-500 disabled:opacity-70" /></label>
 );
