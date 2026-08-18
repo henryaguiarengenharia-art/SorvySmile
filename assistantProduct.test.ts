@@ -5,6 +5,7 @@ import { PLAN_CONFIGS } from "./planCatalog";
 const backend = readFileSync("functions/src/index.ts", "utf8");
 const assistantCore = readFileSync("functions/src/assistant.ts", "utf8");
 const panel = readFileSync("components/AIAssistantPanel.tsx", "utf8");
+const routing = readFileSync("services/assistantRouting.ts", "utf8");
 const patientGuide = readFileSync("components/PatientAssistantGuide.tsx", "utf8");
 const entitlements = readFileSync("functions/src/assistantEntitlements.ts", "utf8");
 const app = readFileSync("App.tsx", "utf8");
@@ -29,6 +30,14 @@ describe("produto de assistentes SorvySmile", () => {
     expect(panel).toContain("Cancelar");
     expect(backend).toContain("resolveAssistantAction");
     expect(assistantCore).toContain("Nenhuma mensagem pode ser enviada");
+  });
+
+  it("roteia atalhos localmente e reserva a Gemini para o fallback", () => {
+    expect(panel).toContain("routeAssistantQuestion");
+    expect(panel).not.toContain("getAssistantWorkspace");
+    expect(routing).toContain("Post do dia");
+    expect(routing).toContain("Mensagem para novos leads");
+    expect(panel).toContain("IA avançada somente quando necessário");
   });
 
   it("persiste conversas sanitizadas, uso por conta e auditoria sem acesso direto", () => {

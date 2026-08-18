@@ -59,7 +59,7 @@ interface ClinicDashboardViewProps {
   readOnly?: boolean;
 }
 
-type ClinicTab = "overview" | "leads" | "team" | "profile" | "post" | "assistant";
+type ClinicTab = "overview" | "leads" | "team" | "profile" | "post";
 
 const statusLabel: Record<LeadStatus, string> = {
   new: "Novo",
@@ -289,7 +289,6 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
         <Tab active={tab === "team"} onClick={() => setTab("team")} label="Equipe" />
         <Tab active={tab === "profile"} onClick={() => setTab("profile")} label="Perfil da clínica" />
         <Tab active={tab === "post"} onClick={() => setTab("post")} label="Post do Dia" />
-        {!readOnly && onAskAssistant && <Tab active={tab === "assistant"} onClick={() => setTab("assistant")} label="Assistentes IA" />}
       </nav>
 
       {tab === "overview" && (
@@ -481,7 +480,24 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
 
       {tab === "post" && <DailyPostCard post={dailyPost} history={dailyPostHistory} readOnly={readOnly} onEvent={onDailyPostEvent} />}
 
-      {tab === "assistant" && !readOnly && onAskAssistant && <AIAssistantPanel leadRecords={leadRecords} accountId={account.id} role="clinic" onAsk={onAskAssistant} onViewLead={(leadId) => { const lead = leadRecords.find((item) => item.id === leadId); setTab("leads"); if (lead) setSearch(lead.lead.name); }} />}
+      {account.tier === "network" && !readOnly && onAskAssistant && (
+        <AIAssistantPanel
+          leadRecords={leadRecords}
+          accountId={account.id}
+          role="clinic"
+          onAsk={onAskAssistant}
+          onViewLead={(leadId) => {
+            const lead = leadRecords.find((item) => item.id === leadId);
+            setTab("leads");
+            if (lead) setSearch(lead.lead.name);
+          }}
+          onShortcut={(shortcut) => {
+            if (shortcut === "post") setTab("post");
+            else if (shortcut === "leads") setTab("leads");
+            else setTab("overview");
+          }}
+        />
+      )}
 
       {showMemberForm && !readOnly && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/65 p-5 backdrop-blur-sm">

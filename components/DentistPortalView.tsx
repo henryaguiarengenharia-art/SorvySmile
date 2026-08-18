@@ -56,7 +56,7 @@ interface DentistPortalViewProps {
   onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string; conversationId?: string }) => Promise<AssistantResponse>;
 }
 
-type PortalTab = "dashboard" | "leads" | "post" | "profile" | "assistant";
+type PortalTab = "dashboard" | "leads" | "post" | "profile";
 
 const formatPhone = (value: string): string => {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -419,7 +419,6 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
           label="Post do Dia"
           onClick={() => setTab("post")}
         />
-        {planConfig.features.assistantPreview && onAskAssistant && !readOnly && <TabButton active={tab === "assistant"} icon={<Sparkles className="h-4 w-4" />} label="Assistentes IA" onClick={() => setTab("assistant")} />}
       </nav>
 
       {tab === "dashboard" && (
@@ -664,8 +663,6 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
         <DailyPostCard post={dailyPost} history={dailyPostHistory} readOnly={readOnly} onEvent={onDailyPostEvent} />
       )}
 
-      {tab === "assistant" && planConfig.features.assistantPreview && onAskAssistant && <AIAssistantPanel leadRecords={leadRecords} accountId={professional.billingAccountId} role="professional" onAsk={onAskAssistant} onViewLead={(leadId) => { const lead = leadRecords.find((item) => item.id === leadId); if (lead) { setTab("leads"); setSelectedLead(lead); } }} />}
-
       {tab === "profile" && (
         <section className="mx-auto max-w-3xl space-y-6 rounded-[2rem] border border-slate-100 bg-white p-7 md:p-9">
           <div className="flex items-center gap-4">
@@ -768,6 +765,27 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             Salvar perfil
           </button>}
         </section>
+      )}
+
+      {planConfig.features.assistantPreview && onAskAssistant && !readOnly && (
+        <AIAssistantPanel
+          leadRecords={leadRecords}
+          accountId={professional.billingAccountId}
+          role="professional"
+          onAsk={onAskAssistant}
+          onViewLead={(leadId) => {
+            const lead = leadRecords.find((item) => item.id === leadId);
+            if (lead) {
+              setTab("leads");
+              setSelectedLead(lead);
+            }
+          }}
+          onShortcut={(shortcut) => {
+            if (shortcut === "post") setTab("post");
+            else if (shortcut === "leads") setTab("leads");
+            else setTab("dashboard");
+          }}
+        />
       )}
 
       {scheduleLead && (
