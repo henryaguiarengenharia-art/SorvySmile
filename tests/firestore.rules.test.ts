@@ -117,6 +117,13 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
           title: "Rascunho",
           status: "draft",
         }),
+        setDoc(doc(db, "dailyPostTemplates", "template_publicado"), { title: "Template", status: "published" }),
+        setDoc(doc(db, "dailyPostTemplates", "template_rascunho"), { title: "Template interno", status: "draft" }),
+        setDoc(doc(db, "professionalContentPreferences", "pro_a"), { professionalId: "pro_a", accountId: "acc_a" }),
+        setDoc(doc(db, "professionalContentPreferences", "pro_b"), { professionalId: "pro_b", accountId: "acc_b" }),
+        setDoc(doc(db, "dailyPostAssignments", "pro_a_2026-08-17"), { professionalId: "pro_a", accountId: "acc_a", status: "assigned" }),
+        setDoc(doc(db, "dailyPostAssignments", "pro_b_2026-08-17"), { professionalId: "pro_b", accountId: "acc_b", status: "assigned" }),
+        setDoc(doc(db, "dailyPostEvents", "event_a"), { professionalId: "pro_a", accountId: "acc_a" }),
         setDoc(doc(db, "adminAuditLogs", "audit_a"), {
           accountId: "acc_a",
           action: "account_status_changed",
@@ -267,6 +274,22 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
     await assertFails(
       updateDoc(doc(hq, "dailyPosts", "publicado"), { title: "Alterado direto" }),
     );
+  });
+
+  it("isola templates, preferências, atribuições e eventos por profissional", async () => {
+    const professional = environment.authenticatedContext("user_a").firestore();
+    const clinic = environment.authenticatedContext("clinic_a").firestore();
+    const hq = environment.authenticatedContext("hq").firestore();
+    await assertSucceeds(getDoc(doc(professional, "dailyPostTemplates", "template_publicado")));
+    await assertFails(getDoc(doc(professional, "dailyPostTemplates", "template_rascunho")));
+    await assertSucceeds(getDoc(doc(professional, "professionalContentPreferences", "pro_a")));
+    await assertFails(getDoc(doc(professional, "professionalContentPreferences", "pro_b")));
+    await assertSucceeds(getDoc(doc(professional, "dailyPostAssignments", "pro_a_2026-08-17")));
+    await assertFails(getDoc(doc(professional, "dailyPostAssignments", "pro_b_2026-08-17")));
+    await assertSucceeds(getDoc(doc(clinic, "dailyPostAssignments", "pro_a_2026-08-17")));
+    await assertFails(getDoc(doc(professional, "dailyPostEvents", "event_a")));
+    await assertSucceeds(getDoc(doc(hq, "dailyPostEvents", "event_a")));
+    await assertFails(updateDoc(doc(hq, "dailyPostTemplates", "template_publicado"), { title: "Direto" }));
   });
 
   it("restringe auditoria ao HQ e bloqueia dados internos do assistente", async () => {

@@ -15,6 +15,7 @@ import {
   connectFunctionsEmulator,
   getFunctions,
 } from "firebase/functions";
+import { connectStorageEmulator, getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -50,6 +51,7 @@ const app = initializeApp(
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const functions = getFunctions(app, "southamerica-east1");
+export const storage = getStorage(app);
 
 const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
 if (isFirebaseConfigured && appCheckSiteKey && typeof window !== "undefined") {
@@ -66,4 +68,5 @@ if (useEmulators && typeof window !== "undefined") {
   });
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
+  connectStorageEmulator(storage, "127.0.0.1", 9199);
 }

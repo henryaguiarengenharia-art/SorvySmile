@@ -22,7 +22,8 @@ import {
 } from "lucide-react";
 import {
   AssistantResponse,
-  DailyPost,
+  DailyPostAssignment,
+  DailyPostVariant,
   DentistRecord,
   LeadRecord,
   LeadStatus,
@@ -48,7 +49,9 @@ interface DentistPortalViewProps {
   ) => Promise<void>;
   onDeleteLead: (id: string) => Promise<void>;
   readOnly?: boolean;
-  dailyPost?: DailyPost | null;
+  dailyPost?: DailyPostAssignment | null;
+  dailyPostHistory?: DailyPostAssignment[];
+  onDailyPostEvent?: (event: 'view' | 'customize' | 'copy_caption' | 'download_feed' | 'download_story' | 'mark_as_used' | 'request_alternative', format?: 'feed' | 'story' | 'carousel' | 'none', variant?: DailyPostVariant) => Promise<void>;
   onUpdateSlug?: (slug: string) => Promise<string>;
   onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string }) => Promise<AssistantResponse>;
 }
@@ -93,6 +96,8 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   onDeleteLead,
   readOnly = false,
   dailyPost,
+  dailyPostHistory,
+  onDailyPostEvent,
   onUpdateSlug,
   onAskAssistant,
 }) => {
@@ -448,7 +453,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
           </div>
 
           <div className="grid gap-5 lg:grid-cols-3">
-            <DailyPostCard post={dailyPost} compact />
+            <DailyPostCard post={dailyPost} history={dailyPostHistory} compact readOnly={readOnly} onEvent={onDailyPostEvent} />
 
             <article className="rounded-[2rem] border border-slate-100 bg-white p-7">
               <Clock className="h-6 w-6 text-amber-500" />
@@ -656,7 +661,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       )}
 
       {tab === "post" && (
-        <DailyPostCard post={dailyPost} />
+        <DailyPostCard post={dailyPost} history={dailyPostHistory} readOnly={readOnly} onEvent={onDailyPostEvent} />
       )}
 
       {tab === "assistant" && planConfig.features.assistantPreview && onAskAssistant && <AIAssistantPanel leadRecords={leadRecords} onAsk={onAskAssistant} />}

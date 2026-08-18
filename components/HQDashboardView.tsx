@@ -25,14 +25,14 @@ import {
   BillingAccount,
   DentistRecord,
   DailyPost,
-  DailyPostStatus,
+  DailyPostEventRecord,
   LeadRecord,
   PlanConfig,
   PlanTier,
   SubscriptionHistoryEvent,
 } from "../types";
 import { planName } from "../planCatalog";
-import { DailyPostManager } from "./DailyPostManager";
+import { DailyPostManager, DailyPostManagerInput } from "./DailyPostManager";
 import { PeriodFilter } from "./PeriodFilter";
 import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
 
@@ -65,9 +65,10 @@ interface HQDashboardViewProps {
   ) => Promise<void>;
   onViewProfessionalDashboard: (professionalId: string) => void;
   dailyPosts: DailyPost[];
+  dailyPostEvents: DailyPostEventRecord[];
   adminAuditLogs: AdminAuditLog[];
   subscriptionHistory: SubscriptionHistoryEvent[];
-  onManageDailyPost: (input: { postId?: string; title: string; caption: string; cta: string; imageUrl?: string; status: DailyPostStatus; publishAtMs?: number | null; expiresAtMs?: number | null }) => Promise<unknown>;
+  onManageDailyPost: (input: DailyPostManagerInput) => Promise<unknown>;
 }
 
 const statusCopy: Record<
@@ -106,6 +107,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   onRestoreProfessional,
   onViewProfessionalDashboard,
   dailyPosts,
+  dailyPostEvents,
   adminAuditLogs,
   subscriptionHistory,
   onManageDailyPost,
@@ -472,7 +474,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
 
       <section className="space-y-4">
         <div><p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Conteúdo para a rede</p><h2 className="mt-1 text-2xl font-black">Post do Dia</h2></div>
-        <DailyPostManager posts={dailyPosts} onSave={onManageDailyPost} />
+        <DailyPostManager posts={dailyPosts} events={dailyPostEvents} onSave={onManageDailyPost} />
       </section>
 
       {managedProfessional && (() => {

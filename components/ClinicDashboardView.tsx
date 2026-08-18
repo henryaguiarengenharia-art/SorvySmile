@@ -18,7 +18,8 @@ import {
 import {
   BillingAccount,
   AssistantResponse,
-  DailyPost,
+  DailyPostAssignment,
+  DailyPostVariant,
   DentistRecord,
   LeadRecord,
   LeadStatus,
@@ -50,7 +51,9 @@ interface ClinicDashboardViewProps {
   onUpdateLead: (leadId: string, patch: Partial<LeadRecord>) => Promise<void>;
   managerProfessional?: DentistRecord;
   onUpdateClinicProfile: (patch: Partial<DentistRecord>) => Promise<void>;
-  dailyPost?: DailyPost | null;
+  dailyPost?: DailyPostAssignment | null;
+  dailyPostHistory?: DailyPostAssignment[];
+  onDailyPostEvent?: (event: 'view' | 'customize' | 'copy_caption' | 'download_feed' | 'download_story' | 'mark_as_used' | 'request_alternative', format?: 'feed' | 'story' | 'carousel' | 'none', variant?: DailyPostVariant) => Promise<void>;
   onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string }) => Promise<AssistantResponse>;
   onUpdateSlug?: (slug: string) => Promise<string>;
   readOnly?: boolean;
@@ -96,6 +99,8 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
   managerProfessional,
   onUpdateClinicProfile,
   dailyPost,
+  dailyPostHistory,
+  onDailyPostEvent,
   onAskAssistant,
   onUpdateSlug,
   readOnly = false,
@@ -474,7 +479,7 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
         </section>
       )}
 
-      {tab === "post" && <DailyPostCard post={dailyPost} />}
+      {tab === "post" && <DailyPostCard post={dailyPost} history={dailyPostHistory} readOnly={readOnly} onEvent={onDailyPostEvent} />}
 
       {tab === "assistant" && !readOnly && onAskAssistant && <AIAssistantPanel leadRecords={leadRecords} onAsk={onAskAssistant} />}
 

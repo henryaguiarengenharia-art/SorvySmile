@@ -224,9 +224,9 @@ npx --no-install firebase functions:artifacts:setpolicy \
   --project "$PROJECT_ID" \
   --force
 
-printf 'Publicando Firestore somente em %s...\n' "$PROJECT_ID"
+printf 'Publicando regras e indices somente em %s...\n' "$PROJECT_ID"
 npx --no-install firebase deploy \
-  --only firestore:rules,firestore:indexes \
+  --only firestore:rules,firestore:indexes,storage \
   --project "$PROJECT_ID" \
   --non-interactive
 
@@ -248,15 +248,21 @@ done
 
 printf 'Publicando o primeiro lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:updateProfessionalSlug,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember,functions:manageDailyPost \
+  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:updateProfessionalSlug,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember,functions:manageDailyPost,functions:getDailyPostAssignment,functions:recordDailyPostEvent \
   --project "$PROJECT_ID" \
   --non-interactive
 
 printf 'Publicando o segundo lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:publishScheduledDailyPosts,functions:expireProfessionalTrials,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
+  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:publishScheduledDailyPosts,functions:assignDailyPostsHourly,functions:expireProfessionalTrials,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
   --project "$PROJECT_ID" \
   --non-interactive
+
+printf 'Criando ou atualizando a biblioteca idempotente de 60 Posts do Dia...\n'
+TARGET_FIREBASE_PROJECT_ID="$PROJECT_ID" \
+GOOGLE_CLOUD_PROJECT="$PROJECT_ID" \
+GCLOUD_PROJECT="$PROJECT_ID" \
+node functions/lib/seedDailyPostTemplates.js
 
 printf 'Compilando e publicando o frontend funcional da homologacao...\n'
 npm run build -- --mode homologation

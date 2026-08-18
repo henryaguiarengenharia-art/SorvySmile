@@ -158,6 +158,63 @@ export const dailyPostSchema = z.object({
   message: "A expiração precisa ocorrer depois da publicação.",
 });
 
+const dailyPostStatusSchema = z.enum(["draft", "scheduled", "published", "inactive", "archived"]);
+const dailyPostCategorySchema = z.enum(["prevention", "aesthetics", "orthodontics", "implants", "pediatric", "periodontics", "urgent_care"]);
+const dailyPostGoalSchema = z.enum(["education", "problem_awareness", "authority", "conversion"]);
+const dailyPostFormatSchema = z.enum(["single_card", "carousel", "qa", "myth_truth", "checklist"]);
+
+export const dailyPostTemplateSchema = z.object({
+  templateId: z.string().min(3).max(160).optional(),
+  title: z.string().trim().min(3).max(120),
+  hook: z.string().trim().min(3).max(160),
+  shortText: z.string().trim().min(10).max(500),
+  caption: z.string().trim().min(10).max(2200),
+  ctaText: z.string().trim().min(3).max(160),
+  ctaType: z.enum(["schedule", "contact", "learn", "save", "share"]),
+  hashtags: z.array(z.string().trim().min(2).max(60)).max(20),
+  category: dailyPostCategorySchema,
+  communicationGoal: dailyPostGoalSchema,
+  targetAudienceTags: z.array(z.string().trim().min(2).max(80)).max(20),
+  specialtyTags: z.array(z.string().trim().min(2).max(80)).max(20),
+  editorialFormat: dailyPostFormatSchema,
+  feedLayoutKey: z.string().trim().min(3).max(80),
+  storyLayoutKey: z.string().trim().min(3).max(80),
+  paletteKey: z.string().regex(/^#[0-9a-f]{6}$/i),
+  imageStrategy: z.enum(["library", "professional_photo", "clinic_photo", "uploaded_by_professional", "illustration", "no_photo"]),
+  defaultImageUrl: optionalHttpsUrl.optional().default(""),
+  carouselSlides: z.array(z.object({ title: z.string().max(120), text: z.string().max(500) })).max(7),
+  status: dailyPostStatusSchema,
+  isEvergreen: z.boolean(),
+  priority: z.number().int().min(0).max(1000),
+  mandatoryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().default(""),
+  availableFromMs: z.number().int().positive().nullable().optional(),
+  availableUntilMs: z.number().int().positive().nullable().optional(),
+}).refine((value) => value.editorialFormat !== "carousel" || (value.carouselSlides.length >= 4 && value.carouselSlides.length <= 7), {
+  message: "O carrossel precisa ter entre 4 e 7 páginas.",
+}).refine((value) => !value.availableUntilMs || !value.availableFromMs || value.availableUntilMs > value.availableFromMs, {
+  message: "A data final precisa ocorrer depois da data inicial.",
+});
+
+export const dailyPostAssignmentRequestSchema = z.object({
+  professionalId: z.string().min(3).max(160).optional(),
+});
+
+export const dailyPostEventSchema = z.object({
+  assignmentId: z.string().min(3).max(220),
+  eventType: z.enum(["view", "customize", "copy_caption", "download_feed", "download_story", "mark_as_used", "request_alternative"]),
+  format: z.enum(["feed", "story", "carousel", "none"]).optional().default("none"),
+  customizedVariant: z.object({
+    title: z.string().trim().min(3).max(120),
+    caption: z.string().trim().min(10).max(2200),
+    ctaText: z.string().trim().min(3).max(160),
+    imageUrl: optionalHttpsUrl.optional().default(""),
+    includeLogo: z.boolean(),
+    displayName: z.string().trim().max(120),
+    instagramHandle: z.string().trim().max(80),
+    paletteKey: z.string().regex(/^#[0-9a-f]{6}$/i),
+  }).optional(),
+});
+
 export const assistantRequestSchema = z.object({
   mode: z.enum(["management", "conversion"]),
   accountId: z.string().min(3).max(160).optional(),

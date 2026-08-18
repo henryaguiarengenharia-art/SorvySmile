@@ -2,7 +2,33 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Fotos de triagem não são persistidas. Uploads ficam bloqueados por padrão.
+    function signedIn() { return request.auth != null; }
+    function currentUser() { return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)); }
+    function assignment(assignmentId) { return firestore.get(/databases/(default)/documents/dailyPostAssignments/$(assignmentId)); }
+
+    match /daily-posts/templates/{templateId}/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if signedIn() && currentUser().data.role == 'hq'
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    match /daily-posts/professionals/{professionalId}/{assignmentId}/{fileName} {
+      allow read: if signedIn() && (
+        currentUser().data.role == 'hq'
+        || currentUser().data.professionalId == professionalId
+        || (currentUser().data.role == 'clinic' && currentUser().data.accountId == assignment(assignmentId).data.accountId)
+      );
+      allow write: if signedIn()
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)')
+        && (
+          currentUser().data.professionalId == professionalId
+          || currentUser().data.role == 'hq'
+          || (currentUser().data.role == 'clinic' && currentUser().data.accountId == assignment(assignmentId).data.accountId)
+        );
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

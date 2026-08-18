@@ -15,6 +15,7 @@ import {
 import { PatientJourney } from "./components/PatientJourney";
 import {
   AppView,
+  DailyPostAssignment,
   PlanTier,
   PublicProfessionalProfile,
   WorkspaceUser,
@@ -27,9 +28,11 @@ import {
   createTeamMember,
   deleteLeadRecord,
   getPublicProfile,
+  getDailyPostAssignment,
   loginWorkspace,
   logoutWorkspace,
   manageDailyPost,
+  recordDailyPostEvent,
   requestPasswordReset,
   registerPendingSubscription,
   restoreWorkspaceSession,
@@ -120,8 +123,24 @@ const App: React.FC = () => {
   const [pendingRegistration, setPendingRegistration] =
     useState<PendingRegistration | null>(null);
   const [hqPreviewProfessionalId, setHqPreviewProfessionalId] = useState<string | null>(null);
+  const [dailyPostAssignment, setDailyPostAssignment] = useState<DailyPostAssignment | null>(null);
+  const [dailyPostHistory, setDailyPostHistory] = useState<DailyPostAssignment[]>([]);
 
   const slug = useMemo(resolveSlug, []);
+
+  useEffect(() => {
+    const target = workspaceUser?.role === "hq" ? hqPreviewProfessionalId ?? undefined : workspaceUser?.professionalId;
+    if (!workspaceUser || (workspaceUser.role === "hq" && !target)) {
+      setDailyPostAssignment(null);
+      setDailyPostHistory([]);
+      return;
+    }
+    let cancelled = false;
+    getDailyPostAssignment(target).then(({ assignment, history }) => {
+      if (!cancelled) { setDailyPostAssignment(assignment); setDailyPostHistory(history); }
+    }).catch((error: Error) => { if (!cancelled) setPageError(error.message); });
+    return () => { cancelled = true; };
+  }, [workspaceUser, hqPreviewProfessionalId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -271,9 +290,13 @@ const App: React.FC = () => {
   const hqPreviewUsage = hqPreviewAccount
     ? workspace?.usageByAccount[hqPreviewAccount.id]?.[currentMonth] ?? 0
     : 0;
-  const currentDailyPost = workspace?.dailyPosts.find((post) =>
-    post.status === "published" && (!post.expiresAt || post.expiresAt > Date.now()),
-  ) ?? null;
+  const handleDailyPostEvent = async (eventType: Parameters<typeof recordDailyPostEvent>[0]["eventType"], format: Parameters<typeof recordDailyPostEvent>[0]["format"] = "none", customizedVariant?: Parameters<typeof recordDailyPostEvent>[0]["customizedVariant"]) => {
+    if (!dailyPostAssignment) return;
+    const replacement = await recordDailyPostEvent({ assignmentId: dailyPostAssignment.id, eventType, format, customizedVariant });
+    if (replacement) setDailyPostAssignment(replacement);
+    else if (customizedVariant) setDailyPostAssignment({ ...dailyPostAssignment, status: "customized", customizedVariant });
+    else setDailyPostAssignment({ ...dailyPostAssignment, status: eventType === "mark_as_used" ? "used" : eventType.startsWith("download") ? "downloaded" : eventType === "copy_caption" ? "copied" : dailyPostAssignment.status });
+  };
 
   const showPublicNav = ![
     "patient",
@@ -399,7 +422,9 @@ const App: React.FC = () => {
               professional={currentProfessional}
               planConfig={PLAN_CONFIGS[currentAccount.tier]}
               currentUsage={currentUsage}
-              dailyPost={currentDailyPost}
+              dailyPost={dailyPostAssignment}
+              dailyPostHistory={dailyPostHistory}
+              onDailyPostEvent={handleDailyPostEvent}
               onUpdateLead={(id, patch) =>
                 updateLeadCrm(id, patch).catch((error: Error) => {
                   setPageError(error.message);
@@ -447,7 +472,9 @@ const App: React.FC = () => {
                   throw error;
                 })
               }
-              dailyPost={currentDailyPost}
+              dailyPost={dailyPostAssignment}
+              dailyPostHistory={dailyPostHistory}
+              onDailyPostEvent={handleDailyPostEvent}
               onAskAssistant={(input) => askBusinessAssistant({ ...input, accountId: currentAccount.id })}
               onUpdateSlug={(slug) => updateProfessionalSlug({ slug })}
               onUpdateLead={(id, patch) =>
@@ -477,7 +504,8 @@ const App: React.FC = () => {
                 currentUsage={hqPreviewUsage}
                 currentProfessionalId={hqPreviewAccount.ownerProfessionalId ?? hqPreviewProfessional.id}
                 managerProfessional={hqPreviewProfessional}
-                dailyPost={currentDailyPost}
+                dailyPost={dailyPostAssignment}
+                dailyPostHistory={dailyPostHistory}
                 readOnly
                 onAssignLead={async () => undefined}
                 onCreateProfessional={async () => undefined}
@@ -492,7 +520,8 @@ const App: React.FC = () => {
                 planConfig={PLAN_CONFIGS[hqPreviewAccount.tier]}
                 currentUsage={hqPreviewUsage}
                 readOnly
-                dailyPost={currentDailyPost}
+                dailyPost={dailyPostAssignment}
+                dailyPostHistory={dailyPostHistory}
                 onUpdateLead={async () => undefined}
                 onUpdateProfessional={async () => undefined}
                 onDeleteLead={async () => undefined}
@@ -524,6 +553,7 @@ const App: React.FC = () => {
               onRestoreProfessional={restoreProfessional}
               onViewProfessionalDashboard={setHqPreviewProfessionalId}
               dailyPosts={workspace.dailyPosts}
+              dailyPostEvents={workspace.dailyPostEvents}
               adminAuditLogs={workspace.adminAuditLogs}
               subscriptionHistory={workspace.subscriptionHistory}
               onManageDailyPost={manageDailyPost}

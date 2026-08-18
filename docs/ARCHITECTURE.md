@@ -18,7 +18,11 @@
 |---|---|---|
 | `publicProfiles` | somente perfil ativo por slug | nenhuma |
 | `publicSlugAliases` | consulta pontual para preservar links antigos | nenhuma |
-| `dailyPosts` | HQ lê todos; assinante lê somente publicados | nenhuma |
+| `dailyPosts` | legado preservado para migração e auditoria | nenhuma |
+| `dailyPostTemplates` | HQ lê todos; assinante lê somente publicados | nenhuma |
+| `professionalContentPreferences` | HQ, profissional e gestor da própria conta | nenhuma |
+| `dailyPostAssignments` | HQ, profissional e gestor da própria conta | nenhuma |
+| `dailyPostEvents` | somente HQ | nenhuma |
 | `users` | próprio usuário ou HQ | nenhuma |
 | `accounts` | mesma conta ou HQ | nenhuma |
 | `professionals` | HQ; clínica da conta; dentista lê o próprio perfil | campos seguros e Functions de equipe |
@@ -115,8 +119,13 @@ restrita para ativar, pausar ou marcar inadimplência.
   estado anterior quando a conta ainda está ativa.
 - Ações de HQ geram documentos em `adminAuditLogs` e `subscriptionHistory`.
   A HQ pode consultar o histórico, mas não há escrita direta pelo navegador.
-- A HQ cria, programa, publica e desativa o Post do Dia. Uma tarefa a cada 15
-  minutos efetiva publicações e expirações programadas.
+- A HQ cria, duplica, programa, publica, desativa e arquiva templates do Post do
+  Dia. A cada 15 minutos, o backend efetiva agendamentos e prepara a atribuição
+  determinística por `professionalId` e data local.
+- O seed idempotente mantém os 60 templates iniciais com IDs fixos. Cada
+  atribuição salva um snapshot; alterações posteriores não reescrevem o histórico.
+- Personalizações e eventos ficam isolados por profissional. Feed e Story são
+  gerados em PNG com 1080 × 1350 e 1080 × 1920, sem publicação na vitrine.
 - Os painéis separam indicadores de 7, 30 e 90 dias da visão geral acumulada.
 - O painel Network oferece assistentes de Gestão e Conversão. Elas geram apoio
   operacional revisável e não realizam atendimento, diagnóstico ou prescrição.

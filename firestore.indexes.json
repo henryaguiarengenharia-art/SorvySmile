@@ -101,6 +101,22 @@
       ]
     },
     {
+      "collectionGroup": "dailyPostTemplates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "availableFromMs", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "dailyPostTemplates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "availableUntilMs", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "dailyPosts",
       "queryScope": "COLLECTION",
       "fields": [

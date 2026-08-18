@@ -23,7 +23,8 @@ de triagem quando o link possui um responsável ativo.
 - relatório informativo e CTAs de agendamento ou pedido de contato;
 - destino sempre definido pelo dono do link, sem marketplace público;
 - portal individual do dentista e painel consolidado da clínica no Network;
-- Post do Dia administrado pela HQ, filtros de 7/30/90 dias e visão geral;
+- Post do Dia com biblioteca de 60 conteúdos, seleção diária por perfil,
+  personalização isolada, histórico e downloads de Feed e Story;
 - assistentes operacionais de Gestão e Conversão no Network, sem diagnóstico.
 
 | Plano | Mensalidade | Triagens/mês | Principal evolução |

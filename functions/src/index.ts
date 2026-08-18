@@ -48,6 +48,9 @@ import {
   captureLeadSchema,
   checkoutSchema,
   dailyPostSchema,
+  dailyPostAssignmentRequestSchema,
+  dailyPostEventSchema,
+  dailyPostTemplateSchema,
   hqProfessionalPatchSchema,
   imageSchema,
   leadAssignmentSchema,
@@ -64,6 +67,7 @@ import {
   teamMemberSchema,
 } from "./validation.js";
 import { assertSlugAllowed } from "./slug.js";
+import { chooseDailyPostTemplate, localDateKey, SeedDailyPostTemplate } from "./dailyPostLibrary.js";
 
 if (getApps().length === 0) initializeApp();
 
@@ -1509,38 +1513,194 @@ export const updateProfessionalSlug = onCall(
   },
 );
 
+async function resolveDailyPostProfessional(uid: string, requestedProfessionalId?: string): Promise<{ professionalId: string; professional: ProfessionalRecord }> {
+  const user = await readUser(uid);
+  const professionalId = requestedProfessionalId || user.professionalId;
+  if (!professionalId) throw new HttpsError("invalid-argument", "Selecione um profissional.");
+  const professionalSnap = await db.doc(`professionals/${professionalId}`).get();
+  if (!professionalSnap.exists) throw new HttpsError("not-found", "Profissional não encontrado.");
+  const professional = professionalSnap.data() as ProfessionalRecord;
+  const allowed = user.role === "hq"
+    || (user.role === "professional" && user.professionalId === professionalId)
+    || (user.role === "clinic" && user.accountId === professional.accountId);
+  if (!allowed) throw new HttpsError("permission-denied", "Você não pode acessar o Post do Dia deste profissional.");
+  return { professionalId, professional };
+}
+
+function dailyPostTemplateFromData(id: string, data: Record<string, unknown>): SeedDailyPostTemplate {
+  return {
+    ...(data as unknown as SeedDailyPostTemplate),
+    id,
+    availableFrom: null,
+    availableUntil: null,
+  };
+}
+
+async function createOrReadDailyPostAssignment(professionalId: string, professional: ProfessionalRecord, now: number, alternative = false) {
+  const preferenceRef = db.doc(`professionalContentPreferences/${professionalId}`);
+  const preferenceSnap = await preferenceRef.get();
+  const preference = preferenceSnap.data() ?? {};
+  const timeZone = typeof preference.timeZone === "string" ? preference.timeZone : "America/Sao_Paulo";
+  const assignmentDate = localDateKey(now, timeZone);
+  const assignmentRef = db.doc(`dailyPostAssignments/${professionalId}_${assignmentDate}`);
+  const existing = await assignmentRef.get();
+  if (existing.exists && !alternative) return { id: existing.id, ...existing.data() };
+  if (alternative && preference.allowDailyAlternative === false) {
+    throw new HttpsError("failed-precondition", "Outra opção não está habilitada para este perfil.");
+  }
+
+  const templatesSnap = await db.collection("dailyPostTemplates").where("status", "==", "published").limit(200).get();
+  const eligible = templatesSnap.docs
+    .filter((item) => {
+      const data = item.data();
+      return (!data.availableFromMs || Number(data.availableFromMs) <= now)
+        && (!data.availableUntilMs || Number(data.availableUntilMs) >= now);
+    })
+    .map((item) => dailyPostTemplateFromData(item.id, item.data()));
+  if (!eligible.length) throw new HttpsError("failed-precondition", "A biblioteca do Post do Dia ainda não foi publicada.");
+
+  const historySnap = await db.collection("dailyPostAssignments").where("professionalId", "==", professionalId).limit(200).get();
+  const history = historySnap.docs
+    .map((item) => item.data())
+    .sort((a, b) => Number(b.generatedAtMs ?? 0) - Number(a.generatedAtMs ?? 0));
+  const usedTemplateIds = history.flatMap((item) => [String(item.templateId ?? ""), ...((item.templateHistory as string[] | undefined) ?? [])]).filter(Boolean);
+  if (existing.exists) usedTemplateIds.push(String(existing.data()?.templateId ?? ""));
+  const specialties = Array.isArray(preference.specialties)
+    ? preference.specialties.map(String)
+    : [String(professional.specialty ?? "general_dentistry")];
+  const targetAudiences = Array.isArray(preference.targetAudiences) ? preference.targetAudiences.map(String) : ["adults", "families"];
+  const preferredCategories = Array.isArray(preference.preferredCategories) ? preference.preferredCategories.map(String) : [];
+  const blockedCategories = Array.isArray(preference.blockedCategories) ? preference.blockedCategories.map(String) : [];
+  const mandatory = eligible.filter((item) => item.mandatoryDate === assignmentDate);
+  const selected = chooseDailyPostTemplate(mandatory.length ? mandatory : eligible, {
+    specialties, targetAudiences, preferredCategories, blockedCategories, usedTemplateIds,
+    previousCategory: String(history.find((item) => item.category)?.category ?? ""),
+  });
+  if (!selected) throw new HttpsError("failed-precondition", "Nenhum conteúdo elegível foi encontrado.");
+  const template = selected.template;
+  const currentData = existing.data();
+  const snapshot = {
+    title: template.title, hook: template.hook, shortText: template.shortText,
+    caption: template.caption, ctaText: template.ctaText, ctaType: template.ctaType,
+    hashtags: template.hashtags, category: template.category,
+    communicationGoal: template.communicationGoal, editorialFormat: template.editorialFormat,
+    feedLayoutKey: template.feedLayoutKey, storyLayoutKey: template.storyLayoutKey,
+    paletteKey: template.paletteKey, imageStrategy: template.imageStrategy,
+    defaultImageUrl: template.defaultImageUrl, carouselSlides: template.carouselSlides,
+  };
+  const data = {
+    professionalId,
+    accountId: professional.accountId ?? "",
+    assignmentDate,
+    timeZone,
+    templateId: template.id,
+    templateVersion: template.version,
+    category: template.category,
+    selectionReason: mandatory.length ? "scheduled_campaign" : selected.reason,
+    status: "assigned",
+    contentSnapshot: snapshot,
+    customizedVariant: null,
+    templateHistory: alternative
+      ? [...((currentData?.templateHistory as string[] | undefined) ?? []), String(currentData?.templateId ?? "")].filter(Boolean)
+      : [],
+    alternativeCount: alternative ? Number(currentData?.alternativeCount ?? 0) + 1 : 0,
+    generatedAtMs: alternative ? Number(currentData?.generatedAtMs ?? now) : now,
+    updatedAtMs: now,
+    openedAtMs: currentData?.openedAtMs ?? null,
+    copiedAtMs: currentData?.copiedAtMs ?? null,
+    downloadedAtMs: currentData?.downloadedAtMs ?? null,
+    usedAtMs: currentData?.usedAtMs ?? null,
+    skippedAtMs: alternative ? now : currentData?.skippedAtMs ?? null,
+  };
+  await assignmentRef.set(data, { merge: true });
+  if (!preferenceSnap.exists) {
+    await preferenceRef.set({
+      professionalId, accountId: professional.accountId ?? "", specialties, targetAudiences, preferredCategories: [], blockedCategories: [],
+      tone: "acolhedor", defaultCtaText: "", defaultCtaLink: professional.bioLink ?? "",
+      professionalName: professional.name ?? "", clinicName: "", instagramHandle: "",
+      logoUrl: "", professionalPhotoUrl: professional.profileImage ?? "", primaryColor: "#123B5D",
+      secondaryColor: "#18AFA5", allowDailyAlternative: true, timeZone, updatedAtMs: now,
+    }, { merge: true });
+  }
+  return { id: assignmentRef.id, ...data };
+}
+
 export const manageDailyPost = onCall(
   { enforceAppCheck: ENFORCE_APP_CHECK },
   async (request) => {
     const uid = requireUid(request);
     await requireHq(uid);
-    const input = parseInput(dailyPostSchema, request.data);
+    const legacyInput = dailyPostSchema.safeParse(request.data);
+    const isRichTemplate = typeof request.data === "object" && request.data !== null && "hook" in request.data;
+    const input = legacyInput.success && !isRichTemplate
+      ? {
+          templateId: legacyInput.data.postId,
+          title: legacyInput.data.title,
+          hook: legacyInput.data.title,
+          shortText: legacyInput.data.caption.slice(0, 500),
+          caption: legacyInput.data.caption,
+          ctaText: legacyInput.data.cta,
+          ctaType: "contact" as const,
+          hashtags: ["#SaudeBucal", "#SorvySmile"],
+          category: "prevention" as const,
+          communicationGoal: "education" as const,
+          targetAudienceTags: ["adults", "families"],
+          specialtyTags: ["general_dentistry"],
+          editorialFormat: "single_card" as const,
+          feedLayoutKey: "feed-single_card",
+          storyLayoutKey: "story-single_card",
+          paletteKey: "#18AFA5",
+          imageStrategy: legacyInput.data.imageUrl ? "library" as const : "no_photo" as const,
+          defaultImageUrl: legacyInput.data.imageUrl,
+          carouselSlides: [],
+          status: legacyInput.data.status,
+          isEvergreen: true,
+          priority: 50,
+          mandatoryDate: "",
+          availableFromMs: legacyInput.data.publishAtMs,
+          availableUntilMs: legacyInput.data.expiresAtMs,
+        }
+      : parseInput(dailyPostTemplateSchema, request.data);
     const now = Date.now();
-    if (input.expiresAtMs && input.expiresAtMs <= now) {
+    if (input.availableUntilMs && input.availableUntilMs <= now) {
       throw new HttpsError("invalid-argument", "A expiração precisa estar no futuro.");
     }
-    const postRef = input.postId
-      ? db.doc(`dailyPosts/${input.postId}`)
-      : db.collection("dailyPosts").doc();
-    const publishAtMs = input.publishAtMs ?? now;
+    const postRef = input.templateId
+      ? db.doc(`dailyPostTemplates/${input.templateId}`)
+      : db.collection("dailyPostTemplates").doc();
+    const publishAtMs = input.availableFromMs ?? now;
     const status = input.status === "scheduled" && publishAtMs <= now
       ? "published"
       : input.status;
     const batch = db.batch();
-    if (status === "published") {
-      const current = await db.collection("dailyPosts").where("status", "==", "published").limit(20).get();
-      current.docs.filter((item) => item.id !== postRef.id).forEach((item) => batch.set(item.ref, { status: "inactive", updatedAtMs: now }, { merge: true }));
-    }
     const existing = await postRef.get();
     batch.set(postRef, {
       title: input.title,
+      hook: input.hook,
+      shortText: input.shortText,
       caption: input.caption,
-      cta: input.cta,
-      imageUrl: input.imageUrl,
+      ctaText: input.ctaText,
+      ctaType: input.ctaType,
+      hashtags: input.hashtags,
+      category: input.category,
+      communicationGoal: input.communicationGoal,
+      targetAudienceTags: input.targetAudienceTags,
+      specialtyTags: input.specialtyTags,
+      editorialFormat: input.editorialFormat,
+      feedLayoutKey: input.feedLayoutKey,
+      storyLayoutKey: input.storyLayoutKey,
+      paletteKey: input.paletteKey,
+      imageStrategy: input.imageStrategy,
+      defaultImageUrl: input.defaultImageUrl,
+      carouselSlides: input.carouselSlides,
       status,
-      publishAtMs,
-      expiresAtMs: input.expiresAtMs ?? null,
+      isEvergreen: input.isEvergreen,
+      priority: input.priority,
+      mandatoryDate: input.mandatoryDate,
+      availableFromMs: publishAtMs,
+      availableUntilMs: input.availableUntilMs ?? null,
       publishedAtMs: status === "published" ? now : existing.data()?.publishedAtMs ?? null,
+      version: Number(existing.data()?.version ?? 0) + 1,
       createdAtMs: existing.data()?.createdAtMs ?? now,
       createdBy: existing.data()?.createdBy ?? uid,
       updatedAtMs: now,
@@ -1555,6 +1715,59 @@ export const manageDailyPost = onCall(
     });
     await batch.commit();
     return { ok: true, postId: postRef.id, status };
+  },
+);
+
+export const getDailyPostAssignment = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(dailyPostAssignmentRequestSchema, request.data ?? {});
+    const { professionalId, professional } = await resolveDailyPostProfessional(uid, input.professionalId);
+    const assignment = await createOrReadDailyPostAssignment(professionalId, professional, Date.now());
+    const historySnap = await db.collection("dailyPostAssignments").where("professionalId", "==", professionalId).limit(60).get();
+    const history = historySnap.docs
+      .map((item) => ({ id: item.id, ...item.data() } as Record<string, unknown> & { id: string }))
+      .sort((a, b) => Number(b.generatedAtMs ?? 0) - Number(a.generatedAtMs ?? 0));
+    return { ok: true, assignment, history };
+  },
+);
+
+export const recordDailyPostEvent = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(dailyPostEventSchema, request.data);
+    const assignmentRef = db.doc(`dailyPostAssignments/${input.assignmentId}`);
+    const assignmentSnap = await assignmentRef.get();
+    if (!assignmentSnap.exists) throw new HttpsError("not-found", "Post do Dia não encontrado.");
+    const assignment = assignmentSnap.data()!;
+    const { professionalId, professional } = await resolveDailyPostProfessional(uid, String(assignment.professionalId));
+    const now = Date.now();
+    if (input.eventType === "request_alternative") {
+      const replacement = await createOrReadDailyPostAssignment(professionalId, professional, now, true);
+      await db.collection("dailyPostEvents").add({ professionalId, assignmentId: input.assignmentId, templateId: assignment.templateId, eventType: input.eventType, format: input.format, createdAtMs: now });
+      return { ok: true, assignment: replacement };
+    }
+    const statusByEvent: Record<string, string> = {
+      view: "opened", customize: "customized", copy_caption: "copied",
+      download_feed: "downloaded", download_story: "downloaded", mark_as_used: "used",
+    };
+    const timestampByEvent: Record<string, string> = {
+      view: "openedAtMs", copy_caption: "copiedAtMs", download_feed: "downloadedAtMs",
+      download_story: "downloadedAtMs", mark_as_used: "usedAtMs",
+    };
+    const batch = db.batch();
+    const eventRef = db.collection("dailyPostEvents").doc();
+    batch.set(eventRef, { professionalId, accountId: professional.accountId ?? "", assignmentId: input.assignmentId, templateId: assignment.templateId, eventType: input.eventType, format: input.format, createdAtMs: now });
+    batch.set(assignmentRef, {
+      status: statusByEvent[input.eventType] ?? assignment.status,
+      ...(timestampByEvent[input.eventType] ? { [timestampByEvent[input.eventType]]: now } : {}),
+      ...(input.customizedVariant ? { customizedVariant: input.customizedVariant } : {}),
+      updatedAtMs: now,
+    }, { merge: true });
+    await batch.commit();
+    return { ok: true };
   },
 );
 
@@ -1980,25 +2193,39 @@ export const publishScheduledDailyPosts = onSchedule(
   async () => {
     const now = Date.now();
     const [scheduled, expired] = await Promise.all([
-      db.collection("dailyPosts").where("status", "==", "scheduled").where("publishAtMs", "<=", now).limit(20).get(),
-      db.collection("dailyPosts").where("status", "==", "published").where("expiresAtMs", "<=", now).limit(20).get(),
+      db.collection("dailyPostTemplates").where("status", "==", "scheduled").where("availableFromMs", "<=", now).limit(100).get(),
+      db.collection("dailyPostTemplates").where("status", "==", "published").where("availableUntilMs", "<=", now).limit(100).get(),
     ]);
     if (!expired.empty) {
       const batch = db.batch();
       expired.docs.forEach((item) => batch.set(item.ref, { status: "inactive", updatedAtMs: now }, { merge: true }));
       await batch.commit();
     }
-    const next = scheduled.docs.sort((a, b) => Number(a.data().publishAtMs) - Number(b.data().publishAtMs)).at(-1);
-    if (!next) return;
-    const current = await db.collection("dailyPosts").where("status", "==", "published").limit(20).get();
+    if (scheduled.empty) return;
     const batch = db.batch();
-    current.docs.forEach((item) => batch.set(item.ref, { status: "inactive", updatedAtMs: now }, { merge: true }));
     scheduled.docs.forEach((item) => batch.set(item.ref, {
-      status: item.id === next.id ? "published" : "inactive",
-      publishedAtMs: item.id === next.id ? now : null,
+      status: "published",
+      publishedAtMs: now,
       updatedAtMs: now,
     }, { merge: true }));
     await batch.commit();
+  },
+);
+
+export const assignDailyPostsHourly = onSchedule(
+  { schedule: "every 15 minutes", timeZone: "America/Sao_Paulo" },
+  async () => {
+    const now = Date.now();
+    const professionals = await db.collection("professionals").limit(500).get();
+    for (const document of professionals.docs) {
+      const professional = document.data() as ProfessionalRecord;
+      if (professional.status === "inactive" || professional.status === "archived" || professional.isActive === false) continue;
+      try {
+        await createOrReadDailyPostAssignment(document.id, professional, now);
+      } catch (error) {
+        console.error("daily_post_assignment_failed", document.id, error);
+      }
+    }
   },
 );
 

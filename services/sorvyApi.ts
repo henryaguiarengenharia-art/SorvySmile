@@ -27,6 +27,9 @@ import {
   AssistantMode,
   AssistantResponse,
   DailyPost,
+  DailyPostAssignment,
+  DailyPostEventRecord,
+  DailyPostVariant,
   DentistRecord,
   LeadRecord,
   PhotoValidation,
@@ -53,6 +56,7 @@ export interface WorkspaceData {
   accounts: Record<string, BillingAccount>;
   usageByAccount: Record<string, Record<string, number>>;
   dailyPosts: DailyPost[];
+  dailyPostEvents: DailyPostEventRecord[];
   adminAuditLogs: AdminAuditLog[];
   subscriptionHistory: SubscriptionHistoryEvent[];
 }
@@ -189,14 +193,31 @@ function mapDailyPost(id: string, data: DocumentData): DailyPost {
     id,
     title: data.title ?? "",
     caption: data.caption ?? "",
-    cta: data.cta ?? "",
-    imageUrl: data.imageUrl ?? "",
+    cta: data.ctaText ?? data.cta ?? "",
+    imageUrl: data.defaultImageUrl ?? data.imageUrl ?? "",
     status: data.status ?? "draft",
-    publishAt: data.publishAtMs,
-    expiresAt: data.expiresAtMs,
+    publishAt: data.availableFromMs ?? data.publishAtMs,
+    expiresAt: data.availableUntilMs ?? data.expiresAtMs,
     publishedAt: data.publishedAtMs,
     createdAt: Number(data.createdAtMs ?? Date.now()),
     updatedAt: Number(data.updatedAtMs ?? Date.now()),
+    hook: data.hook,
+    shortText: data.shortText,
+    ctaType: data.ctaType,
+    hashtags: data.hashtags,
+    category: data.category,
+    communicationGoal: data.communicationGoal,
+    targetAudienceTags: data.targetAudienceTags,
+    specialtyTags: data.specialtyTags,
+    editorialFormat: data.editorialFormat,
+    feedLayoutKey: data.feedLayoutKey,
+    storyLayoutKey: data.storyLayoutKey,
+    paletteKey: data.paletteKey,
+    imageStrategy: data.imageStrategy,
+    carouselSlides: data.carouselSlides,
+    isEvergreen: data.isEvergreen,
+    priority: data.priority,
+    version: data.version,
   };
 }
 
@@ -590,6 +611,7 @@ export async function updateProfessionalSlug(input: {
 
 export async function manageDailyPost(input: {
   postId?: string;
+  templateId?: string;
   title: string;
   caption: string;
   cta: string;
@@ -597,12 +619,49 @@ export async function manageDailyPost(input: {
   status: DailyPost["status"];
   publishAtMs?: number | null;
   expiresAtMs?: number | null;
+  hook?: string;
+  shortText?: string;
+  ctaText?: string;
+  ctaType?: 'schedule' | 'contact' | 'learn' | 'save' | 'share';
+  hashtags?: string[];
+  category?: string;
+  communicationGoal?: string;
+  targetAudienceTags?: string[];
+  specialtyTags?: string[];
+  editorialFormat?: string;
+  feedLayoutKey?: string;
+  storyLayoutKey?: string;
+  paletteKey?: string;
+  imageStrategy?: string;
+  defaultImageUrl?: string;
+  carouselSlides?: Array<{ title: string; text: string }>;
+  isEvergreen?: boolean;
+  priority?: number;
+  availableFromMs?: number | null;
+  availableUntilMs?: number | null;
 }): Promise<{ postId: string; status: DailyPost["status"] }> {
   const callable = httpsCallable<typeof input, { ok: true; postId: string; status: DailyPost["status"] }>(
     functions,
     "manageDailyPost",
   );
   try { return (await callable(input)).data; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function getDailyPostAssignment(professionalId?: string): Promise<{ assignment: DailyPostAssignment; history: DailyPostAssignment[] }> {
+  const callable = httpsCallable<{ professionalId?: string }, { ok: true; assignment: DailyPostAssignment; history: DailyPostAssignment[] }>(functions, "getDailyPostAssignment");
+  try { const data = (await callable(professionalId ? { professionalId } : {})).data; return { assignment: data.assignment, history: data.history }; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function recordDailyPostEvent(input: {
+  assignmentId: string;
+  eventType: 'view' | 'customize' | 'copy_caption' | 'download_feed' | 'download_story' | 'mark_as_used' | 'request_alternative';
+  format?: 'feed' | 'story' | 'carousel' | 'none';
+  customizedVariant?: DailyPostVariant;
+}): Promise<DailyPostAssignment | null> {
+  const callable = httpsCallable<typeof input, { ok: true; assignment?: DailyPostAssignment }>(functions, "recordDailyPostEvent");
+  try { return (await callable(input)).data.assignment ?? null; }
   catch (error) { throw new Error(errorMessage(error)); }
 }
 
@@ -702,6 +761,7 @@ export async function subscribeWorkspace(
     accounts: {},
     usageByAccount: {},
     dailyPosts: [],
+    dailyPostEvents: [],
     adminAuditLogs: [],
     subscriptionHistory: [],
   };
@@ -712,21 +772,25 @@ export async function subscribeWorkspace(
     accounts: { ...state.accounts },
     usageByAccount: { ...state.usageByAccount },
     dailyPosts: [...state.dailyPosts],
+    dailyPostEvents: [...state.dailyPostEvents],
     adminAuditLogs: [...state.adminAuditLogs],
     subscriptionHistory: [...state.subscriptionHistory],
   });
   const handleError = (error: unknown) => onError(errorMessage(error));
   const subscriptions: Unsubscribe[] = [];
 
-  const dailyPostQuery = user.role === "hq"
-    ? collection(db, "dailyPosts")
-    : query(collection(db, "dailyPosts"), where("status", "==", "published"));
-  subscriptions.push(onSnapshot(dailyPostQuery, (snapshot) => {
-    state.dailyPosts = snapshot.docs
-      .map((item) => mapDailyPost(item.id, item.data()))
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-    emit();
-  }, handleError));
+  if (user.role === "hq") {
+    subscriptions.push(onSnapshot(collection(db, "dailyPostTemplates"), (snapshot) => {
+      state.dailyPosts = snapshot.docs
+        .map((item) => mapDailyPost(item.id, item.data()))
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+      emit();
+    }, handleError));
+    subscriptions.push(onSnapshot(query(collection(db, "dailyPostEvents"), orderBy("createdAtMs", "desc"), limit(500)), (snapshot) => {
+      state.dailyPostEvents = snapshot.docs.map((item) => ({ id: item.id, ...(item.data() as Omit<DailyPostEventRecord, "id">) }));
+      emit();
+    }, handleError));
+  }
 
   const leadQuery = user.role === "hq"
     ? collection(db, "leads")

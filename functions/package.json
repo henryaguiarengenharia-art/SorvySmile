@@ -13,7 +13,8 @@
     "build:watch": "tsc --watch",
     "test": "vitest run",
     "seed:hq": "npm run build && node lib/seedHq.js",
-    "seed:pilot": "npm run build && node lib/seedPilot.js"
+    "seed:pilot": "npm run build && node lib/seedPilot.js",
+    "seed:daily-posts": "npm run build && node lib/seedDailyPostTemplates.js"
   },
   "dependencies": {
     "@google/genai": "2.13.0",

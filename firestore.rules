@@ -44,6 +44,30 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /dailyPostTemplates/{templateId} {
+      allow read: if isHq() || (signedIn() && resource.data.status == 'published');
+      allow write: if false;
+    }
+
+    match /professionalContentPreferences/{professionalId} {
+      allow read: if isHq()
+        || isAssignedProfessional(professionalId)
+        || (isClinicManager() && belongsTo(resource.data.accountId));
+      allow write: if false;
+    }
+
+    match /dailyPostAssignments/{assignmentId} {
+      allow read: if isHq()
+        || isAssignedProfessional(resource.data.professionalId)
+        || (isClinicManager() && belongsTo(resource.data.accountId));
+      allow write: if false;
+    }
+
+    match /dailyPostEvents/{eventId} {
+      allow read: if isHq();
+      allow write: if false;
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isHq());
       allow write: if false;

@@ -185,7 +185,9 @@ export interface PublicProfessionalProfile {
   profileImage?: string;
 }
 
-export type DailyPostStatus = 'draft' | 'scheduled' | 'published' | 'inactive';
+export type DailyPostStatus = 'draft' | 'scheduled' | 'published' | 'inactive' | 'archived';
+export type DailyPostCategory = 'prevention' | 'aesthetics' | 'orthodontics' | 'implants' | 'pediatric' | 'periodontics' | 'urgent_care';
+export type DailyPostFormat = 'single_card' | 'carousel' | 'qa' | 'myth_truth' | 'checklist';
 
 export interface DailyPost {
   id: string;
@@ -199,6 +201,77 @@ export interface DailyPost {
   publishedAt?: number;
   createdAt: number;
   updatedAt: number;
+  hook?: string;
+  shortText?: string;
+  ctaType?: 'schedule' | 'contact' | 'learn' | 'save' | 'share';
+  hashtags?: string[];
+  category?: DailyPostCategory;
+  communicationGoal?: 'education' | 'problem_awareness' | 'authority' | 'conversion';
+  targetAudienceTags?: string[];
+  specialtyTags?: string[];
+  editorialFormat?: DailyPostFormat;
+  feedLayoutKey?: string;
+  storyLayoutKey?: string;
+  paletteKey?: string;
+  imageStrategy?: 'library' | 'professional_photo' | 'clinic_photo' | 'uploaded_by_professional' | 'illustration' | 'no_photo';
+  carouselSlides?: Array<{ title: string; text: string }>;
+  isEvergreen?: boolean;
+  priority?: number;
+  version?: number;
+}
+
+export interface DailyPostVariant {
+  title: string;
+  caption: string;
+  ctaText: string;
+  imageUrl: string;
+  includeLogo: boolean;
+  displayName: string;
+  instagramHandle: string;
+  paletteKey: string;
+}
+
+export interface DailyPostAssignment {
+  id: string;
+  professionalId: string;
+  accountId: string;
+  assignmentDate: string;
+  templateId: string;
+  templateVersion: number;
+  category: DailyPostCategory;
+  selectionReason: string;
+  status: 'assigned' | 'opened' | 'customized' | 'copied' | 'downloaded' | 'used' | 'skipped';
+  contentSnapshot: {
+    title: string;
+    hook: string;
+    shortText: string;
+    caption: string;
+    ctaText: string;
+    ctaType: string;
+    hashtags: string[];
+    category: DailyPostCategory;
+    communicationGoal: string;
+    editorialFormat: DailyPostFormat;
+    feedLayoutKey: string;
+    storyLayoutKey: string;
+    paletteKey: string;
+    imageStrategy: string;
+    defaultImageUrl: string;
+    carouselSlides: Array<{ title: string; text: string }>;
+  };
+  customizedVariant?: DailyPostVariant | null;
+  alternativeCount: number;
+  generatedAtMs: number;
+}
+
+export interface DailyPostEventRecord {
+  id: string;
+  professionalId: string;
+  assignmentId: string;
+  templateId: string;
+  eventType: 'view' | 'customize' | 'copy_caption' | 'download_feed' | 'download_story' | 'mark_as_used' | 'request_alternative';
+  format: string;
+  createdAtMs: number;
 }
 
 export interface AdminAuditLog {
