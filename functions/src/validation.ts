@@ -220,13 +220,65 @@ export const assistantRequestSchema = z.object({
   mode: z.enum(["management", "conversion"]),
   accountId: z.string().min(3).max(160).optional(),
   leadId: z.string().min(3).max(160).optional(),
+  conversationId: z.string().min(3).max(160).optional(),
   question: z.string().trim().min(3).max(600).refine(
     (value) => !/[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(value)
       && !/(?:\d[\s().+-]*){10,}/.test(value),
     "Não inclua email ou telefone na pergunta.",
   ),
-}).refine((value) => value.mode !== "conversion" || Boolean(value.leadId), {
-  message: "Selecione um lead para a assistente de conversão.",
+});
+
+export const assistantWorkspaceSchema = z.object({
+  accountId: z.string().min(3).max(160).optional(),
+  professionalId: z.string().min(3).max(160).optional(),
+  conversationId: z.string().min(3).max(160).optional(),
+});
+
+export const assistantActionDecisionSchema = z.object({
+  actionId: z.string().min(3).max(160),
+  decision: z.enum(["confirm", "cancel"]),
+});
+
+export const assistantFeedbackSchema = z.object({
+  conversationId: z.string().min(3).max(160),
+  messageId: z.string().min(3).max(160),
+  feedback: z.enum(["positive", "negative"]),
+});
+
+export const assistantClientEventSchema = z.object({
+  conversationId: z.string().min(3).max(160),
+  eventType: z.enum(["suggestion_copied"]),
+});
+
+export const assistantSettingsSchema = z.object({
+  accountId: z.string().min(3).max(160),
+  enabled: z.boolean(),
+  monthlyLimit: z.number().int().min(1).max(5000),
+  dailyLimit: z.number().int().min(1).max(500),
+  trialLimit: z.number().int().min(1).max(100),
+  inputTokenCostPerMillion: z.number().min(0).max(100),
+  outputTokenCostPerMillion: z.number().min(0).max(100),
+  enabledAssistants: z.array(z.enum(["sofia-conversion", "sofia-management"])).min(1).max(2),
+});
+
+export const customAssistantProfileSchema = z.object({
+  accountId: z.string().min(3).max(160),
+  professionalId: z.string().min(3).max(160).optional(),
+  enabled: z.boolean(),
+  name: z.string().trim().min(2).max(40),
+  roleName: z.string().trim().min(2).max(80),
+  description: z.string().trim().min(3).max(240),
+  greeting: z.string().trim().min(3).max(260),
+  avatarUrl: optionalHttpsUrl.optional().default(""),
+  fullImageUrl: optionalHttpsUrl.optional().default(""),
+  primaryColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+  secondaryColor: z.string().regex(/^#[0-9a-f]{6}$/i),
+  tone: z.string().trim().min(3).max(160),
+  vocabulary: z.string().trim().max(400).optional().default(""),
+  institutionalContext: z.string().trim().max(800).optional().default(""),
+  approvedKnowledgeTags: z.array(z.string().trim().min(2).max(60)).max(20),
+  ctaText: z.string().trim().min(2).max(100),
+  ctaLink: optionalHttpsUrl,
 });
 
 export function slugify(value: string): string {

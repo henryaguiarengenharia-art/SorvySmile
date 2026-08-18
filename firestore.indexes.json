@@ -123,6 +123,38 @@
         { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "expiresAtMs", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "lastInteractionAtMs", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "assistantConversations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "accountId", "order": "ASCENDING" },
+        { "fieldPath": "lastInteractionAtMs", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "assistantAuditLogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "accountId", "order": "ASCENDING" },
+        { "fieldPath": "createdAtMs", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "dailyPostEvents",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "accountId", "order": "ASCENDING" },
+        { "fieldPath": "createdAtMs", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

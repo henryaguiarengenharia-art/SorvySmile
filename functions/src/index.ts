@@ -22,7 +22,24 @@ import {
   describeAiFailure,
   validatePhotoWithGemini,
 } from "./gemini.js";
-import { generateBusinessAssistant, scopeBusinessLeads } from "./assistant.js";
+import {
+  canSuggestLeadStatusChange,
+  generateBusinessAssistant,
+  sanitizeAssistantText,
+  scopeBusinessLeads,
+} from "./assistant.js";
+import {
+  ASSISTANT_DEFINITIONS,
+  ASSISTANT_PROMPT_VERSION,
+  definitionIdForMode,
+} from "./assistantDefinitions.js";
+import {
+  assistantEntitlement,
+  assistantLimits,
+  assistantModesForActor,
+  planHasProfessionalAssistants,
+  AssistantSettingsLike,
+} from "./assistantEntitlements.js";
 import {
   ANALYSIS_CACHE_TTL_MS,
   analysisCacheId,
@@ -44,7 +61,12 @@ import {
 } from "./lifecycle.js";
 import {
   accountStatusSchema,
+  assistantActionDecisionSchema,
+  assistantClientEventSchema,
+  assistantFeedbackSchema,
   assistantRequestSchema,
+  assistantSettingsSchema,
+  assistantWorkspaceSchema,
   captureLeadSchema,
   checkoutSchema,
   dailyPostSchema,
@@ -62,6 +84,7 @@ import {
   professionalSlugSchema,
   professionalTrialSchema,
   profilePatchSchema,
+  customAssistantProfileSchema,
   slugify,
   startTriageSchema,
   teamMemberSchema,
@@ -260,7 +283,10 @@ type AdminAuditAction =
   | "professional_restored"
   | "professional_slug_changed"
   | "daily_post_updated"
-  | "assistant_requested";
+  | "assistant_requested"
+  | "assistant_action_confirmed"
+  | "assistant_settings_updated"
+  | "custom_assistant_updated";
 
 type FirestoreWriter = { set: (...args: any[]) => unknown };
 
@@ -1795,6 +1821,394 @@ export const recordDailyPostEvent = onCall(
   },
 );
 
+interface ResolvedAssistantAccess {
+  uid: string;
+  user: UserRecord;
+  accountId: string;
+  account: FirebaseFirestore.DocumentData;
+  plan: PlanTier;
+  settings: AssistantSettingsLike & FirebaseFirestore.DocumentData;
+  usage: FirebaseFirestore.DocumentData;
+  period: string;
+  day: string;
+  trialActive: boolean;
+  trialExpired: boolean;
+  entitlement: ReturnType<typeof assistantEntitlement>;
+}
+
+function assistantBlockMessage(reason: ReturnType<typeof assistantEntitlement>["reason"]): string {
+  const messages = {
+    plan: "A Sofia está disponível nos planos Pro e Network.",
+    account: "A conta precisa estar ativa para usar a Sofia.",
+    disabled: "A Sofia está desativada para esta conta. Fale com o suporte Sorvy.",
+    monthly_limit: "O limite mensal da Sofia foi atingido.",
+    daily_limit: "O limite diário da Sofia foi atingido. Tente novamente amanhã.",
+    trial_limit: "O limite de interações do período de demonstração foi utilizado.",
+    trial_expired: "O período de demonstração terminou. Ative o Pro ou Network para continuar usando a Sofia.",
+    available: "",
+  } as const;
+  return messages[reason];
+}
+
+async function resolveAssistantAccess(uid: string, requestedAccountId?: string): Promise<ResolvedAssistantAccess> {
+  const user = await readUser(uid);
+  if (!user.role || !["hq", "clinic", "professional"].includes(user.role)) {
+    throw new HttpsError("permission-denied", "Papel de acesso inválido para as assistentes.");
+  }
+  const accountId = user.role === "hq" ? requestedAccountId : user.accountId;
+  if (!accountId) throw new HttpsError("invalid-argument", "Selecione uma conta.");
+  if (user.role !== "hq" && user.accountId !== accountId) {
+    throw new HttpsError("permission-denied", "Conta inválida.");
+  }
+  const accountSnap = await db.doc(`accounts/${accountId}`).get();
+  if (!accountSnap.exists) throw new HttpsError("not-found", "Conta não encontrada.");
+  const account = accountSnap.data()!;
+  const plan = normalizePlan(account.plan);
+  if (user.role === "clinic" && (account.ownerType !== "clinic" || plan !== "network")) {
+    throw new HttpsError("permission-denied", "A gestão da Sofia exige o administrador de uma conta Network.");
+  }
+  if (user.role === "professional") {
+    const professional = user.professionalId
+      ? await db.doc(`professionals/${user.professionalId}`).get()
+      : null;
+    if (!professional?.exists || professional.data()?.isActive !== true || professional.data()?.accountId !== accountId) {
+      throw new HttpsError("permission-denied", "O acesso profissional está inativo.");
+    }
+  }
+  const now = Date.now();
+  const period = monthKey(new Date(now));
+  const day = new Date(now).toISOString().slice(0, 10);
+  const [settingsSnap, usageSnap] = await Promise.all([
+    db.doc(`accountAssistantSettings/${accountId}`).get(),
+    db.doc(`assistantUsage/${accountId}_${period}`).get(),
+  ]);
+  const settings = (settingsSnap.data() ?? {}) as AssistantSettingsLike & FirebaseFirestore.DocumentData;
+  const usage = usageSnap.data() ?? {};
+  const trialEndsAt = Number(account.trialEndsAtMs ?? account.trialUntil ?? 0);
+  const trialMarked = account.subscriptionStatus === "trial" || account.trialStatus === "active";
+  const trialActive = trialMarked && trialEndsAt > now;
+  const trialExpired = account.trialStatus === "expired" || (trialMarked && trialEndsAt <= now);
+  const entitlement = assistantEntitlement({
+    plan,
+    accountActive: account.status === "active" && !trialExpired,
+    trialActive,
+    trialExpired,
+    settings,
+    usage: { ...usage, trialRequests: Number(settings.trialUsed ?? 0) },
+    day,
+  });
+  return { uid, user, accountId, account, plan, settings, usage, period, day, trialActive, trialExpired, entitlement };
+}
+
+function publicEntitlement(access: ResolvedAssistantAccess): Record<string, unknown> {
+  return {
+    ...access.entitlement,
+    plan: access.plan,
+    trialActive: access.trialActive,
+    trialExpired: access.trialExpired,
+    period: access.period,
+  };
+}
+
+async function recordAssistantAudit(input: {
+  uid: string;
+  accountId: string;
+  professionalId?: string;
+  assistantId: string;
+  mode: string;
+  eventType: string;
+  status: "success" | "blocked" | "failed";
+  conversationId?: string;
+  actionId?: string;
+  details?: Record<string, unknown>;
+}): Promise<void> {
+  await db.collection("assistantAuditLogs").add({
+    ...input,
+    professionalId: input.professionalId ?? null,
+    conversationId: input.conversationId ?? null,
+    actionId: input.actionId ?? null,
+    details: input.details ?? {},
+    createdAtMs: Date.now(),
+  });
+}
+
+async function reserveAssistantInteraction(access: ResolvedAssistantAccess, mode: "management" | "conversion"): Promise<ReturnType<typeof assistantEntitlement>> {
+  const settingsRef = db.doc(`accountAssistantSettings/${access.accountId}`);
+  const usageRef = db.doc(`assistantUsage/${access.accountId}_${access.period}`);
+  return db.runTransaction(async (transaction) => {
+    const [settingsSnap, usageSnap] = await Promise.all([
+      transaction.get(settingsRef),
+      transaction.get(usageRef),
+    ]);
+    const settings = (settingsSnap.data() ?? access.settings) as AssistantSettingsLike & FirebaseFirestore.DocumentData;
+    const enabledAssistants = Array.isArray(settings.enabledAssistants)
+      ? settings.enabledAssistants
+      : ["sofia-conversion", "sofia-management"];
+    if (!assistantModesForActor(access.user.role ?? "professional", access.account.ownerType).includes(mode)) {
+      throw new HttpsError("permission-denied", "Este modo da Sofia não está disponível para o seu papel.");
+    }
+    if (!enabledAssistants.includes(definitionIdForMode(mode))) {
+      throw new HttpsError("failed-precondition", "Este modo da Sofia está desativado para a conta.");
+    }
+    const usage = usageSnap.data() ?? {};
+    const current = assistantEntitlement({
+      plan: access.plan,
+      accountActive: access.account.status === "active",
+      trialActive: access.trialActive,
+      trialExpired: access.trialExpired,
+      settings,
+      usage: { ...usage, trialRequests: Number(settings.trialUsed ?? 0) },
+      day: access.day,
+    });
+    if (!current.enabled) {
+      const code = ["monthly_limit", "daily_limit", "trial_limit"].includes(current.reason)
+        ? "resource-exhausted"
+        : "failed-precondition";
+      throw new HttpsError(code, assistantBlockMessage(current.reason));
+    }
+    const nextDailyUsage = { ...(usage.dailyUsage ?? {}), [access.day]: current.usedToday + 1 };
+    transaction.set(usageRef, {
+      accountId: access.accountId,
+      period: access.period,
+      requests: current.usedThisMonth + 1,
+      dailyUsage: nextDailyUsage,
+      inputTokens: Number(usage.inputTokens ?? 0),
+      outputTokens: Number(usage.outputTokens ?? 0),
+      estimatedCost: Number(usage.estimatedCost ?? 0),
+      lastRequestAtMs: Date.now(),
+      updatedAtMs: Date.now(),
+    }, { merge: true });
+    if (access.trialActive) {
+      transaction.set(settingsRef, {
+        accountId: access.accountId,
+        trialUsed: current.usedInTrial + 1,
+        updatedAtMs: Date.now(),
+      }, { merge: true });
+    }
+    return assistantEntitlement({
+      plan: access.plan,
+      accountActive: true,
+      trialActive: access.trialActive,
+      trialExpired: access.trialExpired,
+      settings: { ...settings, trialUsed: current.usedInTrial + (access.trialActive ? 1 : 0) },
+      usage: {
+        ...usage,
+        requests: current.usedThisMonth + 1,
+        dailyUsage: nextDailyUsage,
+        trialRequests: current.usedInTrial + (access.trialActive ? 1 : 0),
+      },
+      day: access.day,
+    });
+  });
+}
+
+function leadCreatedAt(lead: FirebaseFirestore.DocumentData): number {
+  return Number(lead.createdAtMs ?? lead.createdAt ?? 0);
+}
+
+function aggregateLeadMetrics(leads: FirebaseFirestore.DocumentData[]): Record<string, number> {
+  const terminal = leads.filter((lead) => lead.status === "closed" || lead.status === "lost");
+  const contacted = leads.filter((lead) => Number(lead.firstContactAt ?? 0) > 0);
+  const converted = leads.filter((lead) => lead.status === "closed").length;
+  const now = Date.now();
+  return {
+    leads: leads.length,
+    new: leads.filter((lead) => lead.status === "new").length,
+    inChat: leads.filter((lead) => lead.status === "in_chat").length,
+    scheduled: leads.filter((lead) => lead.status === "scheduled").length,
+    converted,
+    lost: leads.filter((lead) => lead.status === "lost").length,
+    conversionPercent: terminal.length ? Math.round((converted / terminal.length) * 100) : 0,
+    contactRequests: leads.filter((lead) => Boolean(lead.contactRequestedAtMs)).length,
+    withoutFirstContact: leads.filter((lead) => !Number(lead.firstContactAt ?? 0)).length,
+    waitingOver24Hours: leads.filter((lead) => !Number(lead.firstContactAt ?? 0) && now - leadCreatedAt(lead) > 86_400_000).length,
+    averageResponseMinutes: contacted.length
+      ? Math.round(contacted.reduce((sum, lead) => sum + Math.max(0, Number(lead.firstContactAt) - leadCreatedAt(lead)), 0) / contacted.length / 60_000)
+      : 0,
+  };
+}
+
+async function buildAssistantContext(access: ResolvedAssistantAccess, mode: "management" | "conversion", leadId?: string): Promise<{
+  context: Record<string, unknown>;
+  selectedLead?: FirebaseFirestore.DocumentData & { id: string };
+}> {
+  const now = Date.now();
+  const periodStart = now - 30 * 86_400_000;
+  const previousPeriodStart = now - 60 * 86_400_000;
+  const [leadSnapshot, professionalSnapshot, postEventsSnapshot] = await Promise.all([
+    db.collection("leads").where("accountId", "==", access.accountId).orderBy("createdAtMs", "desc").limit(2000).get(),
+    db.collection("professionals").where("accountId", "==", access.accountId).limit(100).get(),
+    db.collection("dailyPostEvents")
+      .where("accountId", "==", access.accountId)
+      .where("createdAtMs", ">=", periodStart)
+      .orderBy("createdAtMs", "desc")
+      .limit(2000)
+      .get(),
+  ]);
+  const accountLeads: Array<{ id: string } & FirebaseFirestore.DocumentData> = leadSnapshot.docs.map(
+    (item) => ({ id: item.id, ...item.data() }),
+  );
+  const leads = scopeBusinessLeads(accountLeads, access.user.role, access.user.professionalId);
+  const periodLeads = leads.filter((lead) => leadCreatedAt(lead) >= periodStart);
+  const previousPeriodLeads = leads.filter((lead) => {
+    const createdAt = leadCreatedAt(lead);
+    return createdAt >= previousPeriodStart && createdAt < periodStart;
+  });
+  const periodMetrics = aggregateLeadMetrics(periodLeads);
+  const previousPeriodMetrics = aggregateLeadMetrics(previousPeriodLeads);
+  const scopedPostEvents = postEventsSnapshot.docs
+    .map((item) => item.data())
+    .filter((event) => access.user.role !== "professional" || event.professionalId === access.user.professionalId)
+    .filter((event) => Number(event.createdAtMs ?? 0) >= periodStart);
+  const context: Record<string, unknown> = {
+    source: "SorvySmile operational aggregates",
+    period: {
+      label: "últimos 30 dias",
+      from: new Date(periodStart).toISOString().slice(0, 10),
+      to: new Date(now).toISOString().slice(0, 10),
+    },
+    scope: {
+      role: access.user.role === "professional" ? "professional_own_data" : "clinic_account",
+      recordsConsidered: leads.length,
+      limitedToLatestAccountRecords: leadSnapshot.size === 2000,
+    },
+    account: { plan: access.plan, status: access.account.status },
+    totalsGeneral: aggregateLeadMetrics(leads),
+    totalsPeriod: periodMetrics,
+    totalsPreviousPeriod: previousPeriodMetrics,
+    trends: {
+      leadVolumeDelta: periodMetrics.leads - previousPeriodMetrics.leads,
+      convertedDelta: periodMetrics.converted - previousPeriodMetrics.converted,
+      conversionPercentagePointDelta: periodMetrics.conversionPercent - previousPeriodMetrics.conversionPercent,
+      comparison: "últimos 30 dias versus 30 dias anteriores",
+    },
+    contentUsagePeriod: {
+      views: scopedPostEvents.filter((event) => event.eventType === "view").length,
+      downloads: scopedPostEvents.filter((event) => String(event.eventType ?? "").startsWith("download_")).length,
+      markedAsUsed: scopedPostEvents.filter((event) => event.eventType === "mark_as_used").length,
+    },
+    team: access.user.role === "professional"
+      ? { professionals: 1, distributionAvailable: false }
+      : {
+          professionals: professionalSnapshot.size,
+          distributionAvailable: true,
+          distribution: professionalSnapshot.docs.map((professional, index) => {
+            const professionalLeads = leads.filter((lead) => (lead.professionalId ?? lead.dentistId) === professional.id);
+            return {
+              label: `profissional_${index + 1}`,
+              active: professional.data().isActive === true,
+              leadsInPeriod: professionalLeads.filter((lead) => leadCreatedAt(lead) >= periodStart).length,
+              openLeads: professionalLeads.filter((lead) => !["closed", "lost"].includes(lead.status)).length,
+            };
+          }),
+        },
+  };
+  if (mode !== "conversion") return { context };
+  if (!leadId) {
+    context.priorityCandidates = leads
+      .filter((lead) => !["closed", "lost"].includes(lead.status))
+      .sort((a, b) => {
+        const aPriority = (a.contactRequestedAtMs ? 2 : 0) + (!a.firstContactAt ? 1 : 0);
+        const bPriority = (b.contactRequestedAtMs ? 2 : 0) + (!b.firstContactAt ? 1 : 0);
+        return bPriority - aPriority || leadCreatedAt(a) - leadCreatedAt(b);
+      })
+      .slice(0, 10)
+      .map((lead, index) => ({
+        anonymousId: `lead_${index + 1}`,
+        status: lead.status,
+        ageHours: Math.max(0, Math.round((now - leadCreatedAt(lead)) / 3_600_000)),
+        contactRequested: Boolean(lead.contactRequestedAtMs),
+        firstContactRecorded: Boolean(lead.firstContactAt),
+        scheduled: Boolean(lead.scheduledAt),
+      }));
+    return { context };
+  }
+  const selectedLead = leads.find((item) => item.id === leadId);
+  if (!selectedLead) throw new HttpsError("not-found", "Lead não encontrado no escopo autorizado.");
+  context.selectedLead = {
+    anonymousId: "lead_selecionado",
+    status: selectedLead.status,
+    ageHours: Math.max(0, Math.round((now - leadCreatedAt(selectedLead)) / 3_600_000)),
+    hoursSinceLastContact: Number(selectedLead.firstContactAt ?? 0)
+      ? Math.max(0, Math.round((now - Number(selectedLead.firstContactAt)) / 3_600_000))
+      : null,
+    contactRequested: Boolean(selectedLead.contactRequestedAtMs),
+    whatsappOpened: Boolean(selectedLead.patientOpenedWhatsAppAtMs),
+    intentCategory: selectedLead.intentCategory ?? selectedLead.scores?.intentCategory ?? "",
+    recommendedSpecialty: selectedLead.recommendedSpecialty ?? selectedLead.scores?.recommendedSpecialty ?? "",
+    informativeVisualStatus: selectedLead.scores?.status ?? "",
+    scheduled: Boolean(selectedLead.scheduledAt),
+  };
+  return { context, selectedLead };
+}
+
+export const getAssistantWorkspace = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(assistantWorkspaceSchema, request.data ?? {});
+    const access = await resolveAssistantAccess(uid, input.accountId);
+    const enabledAssistantIds = Array.isArray(access.settings.enabledAssistants)
+      ? access.settings.enabledAssistants
+      : ["sofia-conversion", "sofia-management"];
+    const roleModes = assistantModesForActor(access.user.role ?? "professional", access.account.ownerType);
+    const availableModes = roleModes.filter((mode) => enabledAssistantIds.includes(definitionIdForMode(mode)));
+    const conversationsSnap = await db.collection("assistantConversations")
+      .where("userId", "==", uid)
+      .orderBy("lastInteractionAtMs", "desc")
+      .limit(10)
+      .get();
+    const conversations = conversationsSnap.docs
+      .filter((item) => item.data().accountId === access.accountId && availableModes.includes(item.data().mode))
+      .map((item) => ({
+        id: item.id,
+        mode: item.data().mode,
+        assistantDefinitionId: item.data().assistantDefinitionId,
+        status: item.data().status ?? "active",
+        startedAt: Number(item.data().startedAtMs ?? 0),
+        lastInteractionAt: Number(item.data().lastInteractionAtMs ?? 0),
+        preview: String(item.data().preview ?? ""),
+      }));
+    const activeConversationId = input.conversationId ?? conversations[0]?.id;
+    const messages: Array<Record<string, unknown>> = [];
+    if (activeConversationId) {
+      const conversation = await db.doc(`assistantConversations/${activeConversationId}`).get();
+      if (conversation.exists && conversation.data()?.userId === uid && conversation.data()?.accountId === access.accountId) {
+        const messageSnap = await conversation.ref.collection("messages").orderBy("createdAtMs", "asc").limit(50).get();
+        messages.push(...messageSnap.docs.map((item) => ({
+          id: item.id,
+          role: item.data().role,
+          sanitizedContent: item.data().sanitizedContent,
+          createdAt: Number(item.data().createdAtMs ?? 0),
+          actionType: item.data().actionType ?? "",
+          feedback: item.data().feedback ?? undefined,
+        })));
+      }
+    }
+    await recordAssistantAudit({
+      uid,
+      accountId: access.accountId,
+      professionalId: access.user.professionalId,
+      assistantId: "sofia",
+      mode: "workspace",
+      eventType: "assistant_opened",
+      status: "success",
+      conversationId: activeConversationId,
+    });
+    const enabledDefinitionIds = new Set(availableModes.map(definitionIdForMode));
+    return {
+      entitlement: availableModes.length > 0
+        ? publicEntitlement(access)
+        : { ...publicEntitlement(access), enabled: false, reason: "disabled" },
+      definitions: ASSISTANT_DEFINITIONS.filter((item) => enabledDefinitionIds.has(item.id)),
+      availableModes,
+      conversations,
+      messages,
+      activeConversationId,
+    };
+  },
+);
+
 export const askBusinessAssistant = onCall(
   {
     enforceAppCheck: ENFORCE_APP_CHECK,
@@ -1805,108 +2219,529 @@ export const askBusinessAssistant = onCall(
   async (request) => {
     const uid = requireUid(request);
     const input = parseInput(assistantRequestSchema, request.data);
-    const user = await readUser(uid);
-    const accountId = user.role === "hq" ? input.accountId : user.accountId;
-    if (!accountId) throw new HttpsError("invalid-argument", "Selecione uma conta.");
-    const accountSnap = await db.doc(`accounts/${accountId}`).get();
-    if (!accountSnap.exists || normalizePlan(accountSnap.data()?.plan) !== "network") {
-      throw new HttpsError("failed-precondition", "As assistentes de IA estão disponíveis no plano Network.");
+    const access = await resolveAssistantAccess(uid, input.accountId);
+    const assistantId = definitionIdForMode(input.mode);
+    if (!access.entitlement.enabled) {
+      await recordAssistantAudit({
+        uid, accountId: access.accountId, professionalId: access.user.professionalId,
+        assistantId, mode: input.mode, eventType: "limit_reached", status: "blocked",
+        details: { reason: access.entitlement.reason },
+      });
+      const code = ["monthly_limit", "daily_limit", "trial_limit"].includes(access.entitlement.reason)
+        ? "resource-exhausted"
+        : "failed-precondition";
+      throw new HttpsError(code, assistantBlockMessage(access.entitlement.reason));
     }
-    if (user.role !== "hq" && user.accountId !== accountId) {
-      throw new HttpsError("permission-denied", "Conta inválida.");
+    if (!assistantModesForActor(access.user.role ?? "professional", access.account.ownerType).includes(input.mode)) {
+      await recordAssistantAudit({
+        uid, accountId: access.accountId, professionalId: access.user.professionalId,
+        assistantId, mode: input.mode, eventType: "mode_blocked", status: "blocked",
+        details: { role: access.user.role ?? "professional" },
+      });
+      throw new HttpsError("permission-denied", "Este modo da Sofia não está disponível para o seu papel.");
     }
-    if (user.role !== "hq" && accountSnap.data()?.status !== "active") {
-      throw new HttpsError("failed-precondition", "A conta precisa estar ativa para usar as assistentes.");
-    }
-    if (user.role === "professional") {
-      const professional = user.professionalId
-        ? await db.doc(`professionals/${user.professionalId}`).get()
-        : null;
-      if (!professional?.exists || professional.data()?.isActive !== true) {
-        throw new HttpsError("permission-denied", "O acesso profissional está inativo.");
+    const conversationRef = input.conversationId
+      ? db.doc(`assistantConversations/${input.conversationId}`)
+      : db.collection("assistantConversations").doc();
+    if (input.conversationId) {
+      const existing = await conversationRef.get();
+      if (!existing.exists
+        || existing.data()?.userId !== uid
+        || existing.data()?.accountId !== access.accountId
+        || existing.data()?.mode !== input.mode) {
+        throw new HttpsError("permission-denied", "Conversa inválida para este contexto.");
       }
     }
-    const day = new Date().toISOString().slice(0, 10);
-    const usageRef = db.doc(`assistantUsage/${uid}_${day}`);
-    await db.runTransaction(async (transaction) => {
-      const usage = await transaction.get(usageRef);
-      const requests = Number(usage.data()?.requests ?? 0);
-      if (requests >= 40) throw new HttpsError("resource-exhausted", "O limite diário da assistente foi atingido.");
-      transaction.set(usageRef, { uid, accountId, day, requests: requests + 1, updatedAtMs: Date.now() }, { merge: true });
-    });
-
-    const [leadSnapshot, professionalSnapshot] = await Promise.all([
-      db.collection("leads")
-        .where("accountId", "==", accountId)
-        .orderBy("createdAtMs", "desc")
-        .limit(500)
-        .get(),
-      db.collection("professionals").where("accountId", "==", accountId).limit(100).get(),
-    ]);
-    const accountLeads: Array<{ id: string } & FirebaseFirestore.DocumentData> = leadSnapshot.docs.map(
-      (item) => ({ id: item.id, ...item.data() }),
-    );
-    const leads = scopeBusinessLeads(accountLeads, user.role, user.professionalId);
-    const terminal = leads.filter((lead) => lead.status === "closed" || lead.status === "lost");
-    const contacted = leads.filter((lead) => Number(lead.firstContactAt ?? 0) > 0);
-    const averageResponseMinutes = contacted.length
-      ? Math.round(contacted.reduce(
-          (sum, lead) => sum + Math.max(
-            0,
-            Number(lead.firstContactAt) - Number(lead.createdAtMs ?? lead.createdAt),
-          ),
-          0,
-        ) / contacted.length / 60_000)
-      : 0;
-    const context: Record<string, unknown> = {
-      account: { plan: "network", status: accountSnap.data()?.status },
-      scope: {
-        recordsConsidered: leads.length,
-        limitedToLatestAccountRecords: leadSnapshot.size === 500,
-      },
-      totals: {
-        leads: leads.length,
-        new: leads.filter((lead) => lead.status === "new").length,
-        inChat: leads.filter((lead) => lead.status === "in_chat").length,
-        scheduled: leads.filter((lead) => lead.status === "scheduled").length,
-        converted: leads.filter((lead) => lead.status === "closed").length,
-        conversionPercent: terminal.length ? Math.round((leads.filter((lead) => lead.status === "closed").length / terminal.length) * 100) : 0,
-        contactRequests: leads.filter((lead) => Boolean(lead.contactRequestedAtMs)).length,
-        averageResponseMinutes,
-        professionals: user.role === "professional" ? 1 : professionalSnapshot.size,
-      },
-    };
-    if (input.mode === "conversion") {
-      const lead = leads.find((item) => item.id === input.leadId);
-      if (!lead) throw new HttpsError("not-found", "Lead não encontrado nesta conta.");
-      context.selectedLead = {
-        status: lead.status,
-        ageHours: Math.max(0, Math.round((Date.now() - Number(lead.createdAtMs ?? lead.createdAt)) / 3_600_000)),
-        contactRequested: Boolean(lead.contactRequestedAtMs),
-        whatsappOpened: Boolean(lead.patientOpenedWhatsAppAtMs),
-        intentCategory: lead.intentCategory ?? lead.scores?.intentCategory ?? "",
-        recommendedSpecialty: lead.recommendedSpecialty ?? lead.scores?.recommendedSpecialty ?? "",
-        visualStatus: lead.scores?.status ?? "",
-      };
+    const { context, selectedLead } = await buildAssistantContext(access, input.mode, input.leadId);
+    let reservedEntitlement: ReturnType<typeof assistantEntitlement>;
+    try {
+      reservedEntitlement = await reserveAssistantInteraction(access, input.mode);
+    } catch (error) {
+      await recordAssistantAudit({
+        uid, accountId: access.accountId, professionalId: access.user.professionalId,
+        assistantId, mode: input.mode, eventType: "limit_reached", status: "blocked",
+        details: { reason: error instanceof Error ? error.message : "blocked" },
+      });
+      throw error;
     }
     try {
       const result = await generateBusinessAssistant(
-        GEMINI_API_KEY.value(),
-        GEMINI_MODEL.value(),
-        input.mode,
-        context,
-        input.question,
+        GEMINI_API_KEY.value(), GEMINI_MODEL.value(), input.mode, context, input.question,
       );
       const now = Date.now();
+      const userMessageRef = conversationRef.collection("messages").doc();
+      const assistantMessageRef = conversationRef.collection("messages").doc();
+      const usageRef = db.doc(`assistantUsage/${access.accountId}_${access.period}`);
+      const estimatedCost = (result.tokenUsage.inputTokens / 1_000_000) * Number(access.settings.inputTokenCostPerMillion ?? 0)
+        + (result.tokenUsage.outputTokens / 1_000_000) * Number(access.settings.outputTokenCostPerMillion ?? 0);
+      const actionRef = result.suggestedStatus && selectedLead
+        && canSuggestLeadStatusChange(String(selectedLead.status ?? ""), result.suggestedStatus)
+        ? db.collection("assistantActions").doc()
+        : null;
       const batch = db.batch();
-      addAdminAudit(batch, { actorUid: uid, action: "assistant_requested", accountId, details: { mode: input.mode }, now });
-      batch.set(db.collection("assistantAudit").doc(), { uid, accountId, mode: input.mode, createdAtMs: now });
+      batch.set(conversationRef, {
+        accountId: access.accountId,
+        professionalId: access.user.role === "professional" ? access.user.professionalId ?? null : null,
+        assistantDefinitionId: assistantId,
+        mode: input.mode,
+        userId: uid,
+        role: access.user.role,
+        status: "active",
+        ...(input.conversationId ? {} : { startedAtMs: now }),
+        lastInteractionAtMs: now,
+        promptVersion: ASSISTANT_PROMPT_VERSION,
+        knowledgeVersion: result.knowledgeVersion,
+        preview: result.headline,
+      }, { merge: true });
+      batch.set(userMessageRef, {
+        role: "user",
+        sanitizedContent: sanitizeAssistantText(input.question),
+        createdAtMs: now,
+        tokenUsage: { inputTokens: result.tokenUsage.inputTokens },
+        model: result.model,
+        actionType: "question",
+      });
+      batch.set(assistantMessageRef, {
+        role: "assistant",
+        sanitizedContent: sanitizeAssistantText(`${result.headline}\n\n${result.answer}`, 1400),
+        createdAtMs: now,
+        tokenUsage: result.tokenUsage,
+        model: result.model,
+        knowledgeVersion: result.knowledgeVersion,
+        actionType: actionRef ? "action_proposed" : "response_generated",
+      });
+      batch.set(usageRef, {
+        inputTokens: FieldValue.increment(result.tokenUsage.inputTokens),
+        outputTokens: FieldValue.increment(result.tokenUsage.outputTokens),
+        estimatedCost: FieldValue.increment(estimatedCost),
+        model: result.model,
+        lastRequestAtMs: now,
+        updatedAtMs: now,
+      }, { merge: true });
+      if (actionRef && selectedLead) {
+        batch.set(actionRef, {
+          accountId: access.accountId,
+          professionalId: access.user.role === "professional" ? access.user.professionalId ?? null : selectedLead.professionalId ?? selectedLead.dentistId ?? null,
+          conversationId: conversationRef.id,
+          assistantId,
+          actorUid: uid,
+          actionType: "update_lead_status",
+          proposedPayload: {
+            leadId: selectedLead.id,
+            sourceStatus: selectedLead.status,
+            targetStatus: result.suggestedStatus,
+          },
+          rationale: result.suggestionRationale,
+          status: "proposed",
+          createdAtMs: now,
+        });
+      }
+      addAdminAudit(batch, { actorUid: uid, action: "assistant_requested", accountId: access.accountId, professionalId: access.user.professionalId, details: { mode: input.mode }, now });
       await batch.commit();
-      return { ...result, generatedAt: now };
+      const auditBase = {
+        uid,
+        accountId: access.accountId,
+        professionalId: access.user.professionalId,
+        assistantId,
+        mode: input.mode,
+        status: "success" as const,
+        conversationId: conversationRef.id,
+      };
+      await Promise.all([
+        recordAssistantAudit({ ...auditBase, eventType: "message_sent" }),
+        recordAssistantAudit({ ...auditBase, eventType: "response_generated", actionId: actionRef?.id, details: { inputTokens: result.tokenUsage.inputTokens, outputTokens: result.tokenUsage.outputTokens } }),
+        ...(input.conversationId ? [] : [recordAssistantAudit({ ...auditBase, eventType: "conversation_started" })]),
+        ...(actionRef ? [recordAssistantAudit({ ...auditBase, eventType: "action_proposed", actionId: actionRef.id })] : []),
+      ]);
+      return {
+        ...result,
+        assistantName: "Sofia",
+        mode: input.mode,
+        leadId: selectedLead?.id,
+        conversationId: conversationRef.id,
+        messageId: assistantMessageRef.id,
+        entitlement: {
+          ...reservedEntitlement,
+          plan: access.plan,
+          trialActive: access.trialActive,
+          trialExpired: access.trialExpired,
+          period: access.period,
+        },
+        proposedAction: actionRef && selectedLead ? {
+          id: actionRef.id,
+          actionType: "update_lead_status",
+          label: `Alterar status para ${result.suggestedStatus}`,
+          rationale: result.suggestionRationale,
+          targetStatus: result.suggestedStatus,
+          status: "proposed",
+        } : undefined,
+        generatedAt: now,
+      };
     } catch (error) {
-      console.error("Falha na assistente operacional", describeAiFailure(error));
-      throw new HttpsError("internal", "A assistente está temporariamente indisponível. Tente novamente.");
+      console.error("Falha na Sofia", describeAiFailure(error));
+      await recordAssistantAudit({
+        uid, accountId: access.accountId, professionalId: access.user.professionalId,
+        assistantId, mode: input.mode, eventType: "assistant_error", status: "failed",
+        conversationId: conversationRef.id,
+      });
+      throw new HttpsError("internal", "A Sofia está temporariamente indisponível. Nenhuma ação foi executada.");
     }
+  },
+);
+
+export const resolveAssistantAction = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(assistantActionDecisionSchema, request.data);
+    const actionRef = db.doc(`assistantActions/${input.actionId}`);
+    const actionSnap = await actionRef.get();
+    if (!actionSnap.exists) throw new HttpsError("not-found", "Ação sugerida não encontrada.");
+    const action = actionSnap.data()!;
+    if (action.actorUid !== uid || action.status !== "proposed") {
+      throw new HttpsError("permission-denied", "Esta ação não pode ser alterada.");
+    }
+    const access = await resolveAssistantAccess(uid, action.accountId);
+    if (["plan", "account", "disabled", "trial_expired"].includes(access.entitlement.reason)) {
+      throw new HttpsError("failed-precondition", assistantBlockMessage(access.entitlement.reason));
+    }
+    if (input.decision === "cancel") {
+      const cancelledAtMs = Date.now();
+      await db.runTransaction(async (transaction) => {
+        const freshAction = await transaction.get(actionRef);
+        if (!freshAction.exists || freshAction.data()?.actorUid !== uid || freshAction.data()?.status !== "proposed") {
+          throw new HttpsError("failed-precondition", "Esta ação já foi resolvida.");
+        }
+        transaction.set(actionRef, { status: "cancelled", cancelledAtMs, updatedAtMs: cancelledAtMs }, { merge: true });
+      });
+      await recordAssistantAudit({ uid, accountId: access.accountId, professionalId: access.user.professionalId, assistantId: action.assistantId, mode: "conversion", eventType: "action_cancelled", status: "success", conversationId: action.conversationId, actionId: input.actionId });
+      return { ok: true, status: "cancelled" };
+    }
+    const leadId = String(action.proposedPayload?.leadId ?? "");
+    const sourceStatus = String(action.proposedPayload?.sourceStatus ?? "");
+    const targetStatus = String(action.proposedPayload?.targetStatus ?? "");
+    if (!leadId || !["new", "in_chat", "scheduled", "closed", "lost"].includes(targetStatus)) {
+      throw new HttpsError("failed-precondition", "A ação sugerida está inválida.");
+    }
+    const leadRef = db.doc(`leads/${leadId}`);
+    const now = Date.now();
+    const executed = await db.runTransaction(async (transaction) => {
+      const [freshAction, leadSnap] = await Promise.all([
+        transaction.get(actionRef),
+        transaction.get(leadRef),
+      ]);
+      if (!freshAction.exists || freshAction.data()?.actorUid !== uid || freshAction.data()?.status !== "proposed") {
+        throw new HttpsError("failed-precondition", "Esta ação já foi resolvida.");
+      }
+      if (!leadSnap.exists || leadSnap.data()?.accountId !== access.accountId) {
+        throw new HttpsError("permission-denied", "Lead fora da conta autorizada.");
+      }
+      if (access.user.role === "professional"
+        && (leadSnap.data()?.professionalId ?? leadSnap.data()?.dentistId) !== access.user.professionalId) {
+        throw new HttpsError("permission-denied", "Lead fora do escopo profissional.");
+      }
+      if (sourceStatus && leadSnap.data()?.status !== sourceStatus) {
+        transaction.set(actionRef, {
+          status: "failed",
+          failureReason: "lead_status_changed",
+          failedAtMs: now,
+          updatedAtMs: now,
+        }, { merge: true });
+        return false;
+      }
+      transaction.set(leadRef, { status: targetStatus, updatedAtMs: now }, { merge: true });
+      transaction.set(actionRef, { status: "executed", confirmedAtMs: now, confirmedBy: uid, executedAtMs: now, updatedAtMs: now }, { merge: true });
+      addAdminAudit(transaction, { actorUid: uid, action: "assistant_action_confirmed", accountId: access.accountId, professionalId: access.user.professionalId, details: { actionId: input.actionId, sourceStatus, targetStatus }, now });
+      return true;
+    });
+    if (!executed) {
+      await recordAssistantAudit({ uid, accountId: access.accountId, professionalId: access.user.professionalId, assistantId: action.assistantId, mode: "conversion", eventType: "action_conflict", status: "failed", conversationId: action.conversationId, actionId: input.actionId });
+      throw new HttpsError("failed-precondition", "O status do lead mudou depois da sugestão. Peça uma nova análise antes de aplicar.");
+    }
+    await recordAssistantAudit({ uid, accountId: access.accountId, professionalId: access.user.professionalId, assistantId: action.assistantId, mode: "conversion", eventType: "action_confirmed", status: "success", conversationId: action.conversationId, actionId: input.actionId });
+    return { ok: true, status: "executed", leadId, targetStatus };
+  },
+);
+
+export const recordAssistantFeedback = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(assistantFeedbackSchema, request.data);
+    const conversationRef = db.doc(`assistantConversations/${input.conversationId}`);
+    const conversation = await conversationRef.get();
+    if (!conversation.exists || conversation.data()?.userId !== uid) {
+      throw new HttpsError("permission-denied", "Conversa inválida.");
+    }
+    const messageRef = conversationRef.collection("messages").doc(input.messageId);
+    const message = await messageRef.get();
+    if (!message.exists || message.data()?.role !== "assistant") {
+      throw new HttpsError("not-found", "Resposta não encontrada.");
+    }
+    await messageRef.set({ feedback: input.feedback, feedbackAtMs: Date.now() }, { merge: true });
+    await recordAssistantAudit({ uid, accountId: conversation.data()!.accountId, professionalId: conversation.data()!.professionalId, assistantId: conversation.data()!.assistantDefinitionId, mode: conversation.data()!.mode, eventType: input.feedback === "positive" ? "feedback_positive" : "feedback_negative", status: "success", conversationId: input.conversationId });
+    return { ok: true };
+  },
+);
+
+export const recordAssistantClientEvent = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(assistantClientEventSchema, request.data);
+    const conversation = await db.doc(`assistantConversations/${input.conversationId}`).get();
+    if (!conversation.exists || conversation.data()?.userId !== uid) {
+      throw new HttpsError("permission-denied", "Conversa inválida.");
+    }
+    await recordAssistantAudit({
+      uid,
+      accountId: conversation.data()!.accountId,
+      professionalId: conversation.data()!.professionalId,
+      assistantId: conversation.data()!.assistantDefinitionId,
+      mode: conversation.data()!.mode,
+      eventType: input.eventType,
+      status: "success",
+      conversationId: input.conversationId,
+    });
+    return { ok: true };
+  },
+);
+
+export const getAssistantAdminSettings = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    await requireHq(uid);
+    const input = parseInput(assistantWorkspaceSchema, request.data ?? {});
+    if (!input.accountId) throw new HttpsError("invalid-argument", "Selecione uma conta.");
+    const customId = input.professionalId
+      ? `custom_${input.accountId}_${input.professionalId}`
+      : `custom_${input.accountId}`;
+    const [settingsSnap, customSnap] = await Promise.all([
+      db.doc(`accountAssistantSettings/${input.accountId}`).get(),
+      db.doc(`customAssistantProfiles/${customId}`).get(),
+    ]);
+    const settings = settingsSnap.data() ?? {};
+    return {
+      accountId: input.accountId,
+      enabled: settings.enabled !== false,
+      enabledAssistants: settings.enabledAssistants ?? ["sofia-conversion", "sofia-management"],
+      ...assistantLimits(settings),
+      inputTokenCostPerMillion: Number(settings.inputTokenCostPerMillion ?? 0),
+      outputTokenCostPerMillion: Number(settings.outputTokenCostPerMillion ?? 0),
+      customAssistant: customSnap.exists ? { id: customSnap.id, ...customSnap.data() } : null,
+    };
+  },
+);
+
+export const getAssistantAdminOverview = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    await requireHq(uid);
+    const period = monthKey();
+    const periodStart = Date.UTC(Number(period.slice(0, 4)), Number(period.slice(5, 7)) - 1, 1);
+    const [usageSnap, auditSnap] = await Promise.all([
+      db.collection("assistantUsage").where("period", "==", period).limit(1000).get(),
+      db.collection("assistantAuditLogs").where("createdAtMs", ">=", periodStart).limit(2000).get(),
+    ]);
+    const audits = auditSnap.docs.map((item) => item.data());
+    return {
+      period,
+      accountsUsed: new Set(usageSnap.docs.map((item) => item.data().accountId)).size,
+      interactions: usageSnap.docs.reduce((sum, item) => sum + Number(item.data().requests ?? 0), 0),
+      inputTokens: usageSnap.docs.reduce((sum, item) => sum + Number(item.data().inputTokens ?? 0), 0),
+      outputTokens: usageSnap.docs.reduce((sum, item) => sum + Number(item.data().outputTokens ?? 0), 0),
+      estimatedCost: usageSnap.docs.reduce((sum, item) => sum + Number(item.data().estimatedCost ?? 0), 0),
+      actionsProposed: audits.filter((item) => item.eventType === "action_proposed").length,
+      actionsConfirmed: audits.filter((item) => item.eventType === "action_confirmed").length,
+      positiveFeedback: audits.filter((item) => item.eventType === "feedback_positive").length,
+      negativeFeedback: audits.filter((item) => item.eventType === "feedback_negative").length,
+      blocked: audits.filter((item) => item.status === "blocked").length,
+      errors: audits.filter((item) => item.status === "failed").length,
+    };
+  },
+);
+
+export const updateAssistantSettings = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    await requireHq(uid);
+    const input = parseInput(assistantSettingsSchema, request.data);
+    const settingsRef = db.doc(`accountAssistantSettings/${input.accountId}`);
+    const [account, existingSettings] = await Promise.all([
+      db.doc(`accounts/${input.accountId}`).get(),
+      settingsRef.get(),
+    ]);
+    if (!account.exists) throw new HttpsError("not-found", "Conta não encontrada.");
+    const now = Date.now();
+    const batch = db.batch();
+    batch.set(settingsRef, {
+      accountId: input.accountId,
+      enabled: input.enabled,
+      enabledAssistants: input.enabledAssistants,
+      monthlyLimit: input.monthlyLimit,
+      dailyLimit: input.dailyLimit,
+      trialLimit: input.trialLimit,
+      inputTokenCostPerMillion: input.inputTokenCostPerMillion,
+      outputTokenCostPerMillion: input.outputTokenCostPerMillion,
+      updatedAtMs: now,
+      updatedBy: uid,
+      createdAtMs: existingSettings.data()?.createdAtMs ?? FieldValue.serverTimestamp(),
+      createdBy: existingSettings.data()?.createdBy ?? uid,
+    }, { merge: true });
+    addAdminAudit(batch, { actorUid: uid, action: "assistant_settings_updated", accountId: input.accountId, details: { enabled: input.enabled, monthlyLimit: input.monthlyLimit, dailyLimit: input.dailyLimit, trialLimit: input.trialLimit, inputTokenCostPerMillion: input.inputTokenCostPerMillion, outputTokenCostPerMillion: input.outputTokenCostPerMillion }, now });
+    await batch.commit();
+    return { ok: true };
+  },
+);
+
+function publicAssistantFromCustomProfile(
+  id: string,
+  data: FirebaseFirestore.DocumentData | undefined,
+): Record<string, unknown> | null {
+  if (!data || data.status !== "active") return null;
+  return {
+    id,
+    name: String(data.name ?? "Aury"),
+    roleName: String(data.roleName ?? "Guia virtual"),
+    description: String(data.description ?? ""),
+    greeting: String(data.greeting ?? ""),
+    avatarUrl: String(data.avatarUrl ?? ""),
+    fullImageUrl: String(data.fullImageUrl ?? ""),
+    assetVersion: Number(data.assetVersion ?? 1),
+    avatarOrigin: data.avatarUrl ? "hq_approved_url" : "none",
+    primaryColor: String(data.primaryColor ?? "#18AFA5"),
+    secondaryColor: String(data.secondaryColor ?? "#DDF4F6"),
+    ctaText: String(data.ctaText ?? "Falar com a clínica"),
+    ctaLink: String(data.ctaLink ?? ""),
+    isCustom: true,
+  };
+}
+
+function assistantAssetMetadata(value: string): { name: string; origin: string } {
+  if (!value) return { name: "", origin: "none" };
+  try {
+    const url = new URL(value);
+    const decodedPath = decodeURIComponent(url.pathname);
+    return {
+      name: decodedPath.split("/").filter(Boolean).at(-1) ?? "approved-asset",
+      origin: url.hostname.includes("firebasestorage.googleapis.com") ? "sorvy_storage" : "hq_approved_url",
+    };
+  } catch {
+    return { name: "approved-asset", origin: "hq_approved_url" };
+  }
+}
+
+export const updateCustomAssistantProfile = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    await requireHq(uid);
+    const input = parseInput(customAssistantProfileSchema, request.data);
+    const account = await db.doc(`accounts/${input.accountId}`).get();
+    if (!account.exists) throw new HttpsError("not-found", "Conta não encontrada.");
+    if (input.enabled && !planHasProfessionalAssistants(normalizePlan(account.data()?.plan))) {
+      throw new HttpsError("failed-precondition", "A identidade personalizada está disponível nos planos Pro e Network.");
+    }
+    if (input.professionalId) {
+      const professional = await db.doc(`professionals/${input.professionalId}`).get();
+      if (!professional.exists || professional.data()?.accountId !== input.accountId) {
+        throw new HttpsError("permission-denied", "Profissional fora da conta selecionada.");
+      }
+    }
+    const now = Date.now();
+    const customId = input.professionalId
+      ? `custom_${input.accountId}_${input.professionalId}`
+      : `custom_${input.accountId}`;
+    const customRef = db.doc(`customAssistantProfiles/${customId}`);
+    const [existingCustom, accountCustom, accountOverrides] = await Promise.all([
+      customRef.get(),
+      input.professionalId
+        ? db.doc(`customAssistantProfiles/custom_${input.accountId}`).get()
+        : Promise.resolve(null),
+      input.professionalId
+        ? Promise.resolve(null)
+        : db.collection("customAssistantProfiles").where("accountId", "==", input.accountId).get(),
+    ]);
+    const assetVersion = Number(existingCustom.data()?.assetVersion ?? 0) + 1;
+    const avatarAsset = assistantAssetMetadata(input.avatarUrl);
+    const fullImageAsset = assistantAssetMetadata(input.fullImageUrl);
+    const safePublicProfile = input.enabled ? {
+      id: customId,
+      name: input.name,
+      roleName: input.roleName,
+      description: input.description,
+      greeting: input.greeting,
+      avatarUrl: input.avatarUrl,
+      fullImageUrl: input.fullImageUrl,
+      assetVersion,
+      avatarOrigin: avatarAsset.origin,
+      primaryColor: input.primaryColor,
+      secondaryColor: input.secondaryColor,
+      ctaText: input.ctaText,
+      ctaLink: input.ctaLink,
+      isCustom: true,
+    } : null;
+    const inheritedPublicProfile = accountCustom
+      ? publicAssistantFromCustomProfile(accountCustom.id, accountCustom.data())
+      : null;
+    const activeProfessionalOverrides = new Set(
+      accountOverrides?.docs
+        .filter((item) => item.data().professionalId && item.data().status === "active")
+        .map((item) => String(item.data().professionalId))
+        ?? [],
+    );
+    const profiles = await db.collection("publicProfiles").where("accountId", "==", input.accountId).get();
+    const batch = db.batch();
+    batch.set(customRef, {
+      id: customId,
+      accountId: input.accountId,
+      professionalId: input.professionalId ?? null,
+      name: input.name,
+      roleName: input.roleName,
+      description: input.description,
+      greeting: input.greeting,
+      avatarUrl: input.avatarUrl,
+      fullImageUrl: input.fullImageUrl,
+      assetVersion,
+      avatarAssetName: avatarAsset.name,
+      avatarOrigin: avatarAsset.origin,
+      fullImageAssetName: fullImageAsset.name,
+      fullImageOrigin: fullImageAsset.origin,
+      primaryColor: input.primaryColor,
+      secondaryColor: input.secondaryColor,
+      tone: input.tone,
+      vocabulary: input.vocabulary,
+      institutionalContext: input.institutionalContext,
+      approvedKnowledgeTags: input.approvedKnowledgeTags,
+      ctaText: input.ctaText,
+      ctaLink: input.ctaLink,
+      status: input.enabled ? "active" : "inactive",
+      createdBy: existingCustom.data()?.createdBy ?? uid,
+      updatedAtMs: now,
+      createdAtMs: existingCustom.data()?.createdAtMs ?? FieldValue.serverTimestamp(),
+    }, { merge: true });
+    if (!input.professionalId) {
+      batch.set(db.doc(`accountAssistantSettings/${input.accountId}`), {
+        accountId: input.accountId,
+        customAssistantEnabled: input.enabled,
+        customAssistantId: customId,
+        updatedAtMs: now,
+      }, { merge: true });
+    }
+    for (const profile of profiles.docs) {
+      if (input.professionalId && profile.data().professionalId !== input.professionalId) continue;
+      if (!input.professionalId && activeProfessionalOverrides.has(String(profile.data().professionalId ?? ""))) continue;
+      batch.set(profile.ref, {
+        patientAssistant: safePublicProfile ?? inheritedPublicProfile,
+        updatedAtMs: now,
+      }, { merge: true });
+    }
+    addAdminAudit(batch, { actorUid: uid, action: "custom_assistant_updated", accountId: input.accountId, professionalId: input.professionalId, details: { customId, enabled: input.enabled }, now });
+    await batch.commit();
+    return { ok: true, customAssistantId: customId };
   },
 );
 

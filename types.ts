@@ -183,6 +183,22 @@ export interface PublicProfessionalProfile {
   active: boolean;
   status?: ProfessionalStatus;
   profileImage?: string;
+  patientAssistant?: PublicPatientAssistant;
+}
+
+export interface PublicPatientAssistant {
+  id: string;
+  name: string;
+  roleName: string;
+  description: string;
+  greeting: string;
+  avatarUrl?: string;
+  fullImageUrl?: string;
+  primaryColor: string;
+  secondaryColor: string;
+  ctaText: string;
+  ctaLink: string;
+  isCustom: boolean;
 }
 
 export type DailyPostStatus = 'draft' | 'scheduled' | 'published' | 'inactive' | 'archived';
@@ -305,12 +321,126 @@ export interface SubscriptionHistoryEvent {
 
 export type AssistantMode = 'management' | 'conversion';
 
+export type AssistantDefinitionId =
+  | 'aury-patient-guide'
+  | 'sofia-conversion'
+  | 'sofia-management'
+  | 'sofia-commercial';
+
+export interface AssistantDefinition {
+  id: AssistantDefinitionId;
+  name: string;
+  role: string;
+  description: string;
+  greeting: string;
+  primaryColor: string;
+  secondaryColor: string;
+  systemPromptVersion: string;
+}
+
+export interface AssistantEntitlement {
+  enabled: boolean;
+  reason: 'available' | 'plan' | 'account' | 'disabled' | 'monthly_limit' | 'daily_limit' | 'trial_limit' | 'trial_expired';
+  plan: PlanTier;
+  trialActive: boolean;
+  trialExpired: boolean;
+  monthlyLimit: number;
+  dailyLimit: number;
+  trialLimit: number;
+  usedThisMonth: number;
+  usedToday: number;
+  usedInTrial: number;
+  remainingThisMonth: number;
+  remainingToday: number;
+  remainingInTrial: number;
+  period: string;
+}
+
+export interface AssistantConversationSummary {
+  id: string;
+  mode: AssistantMode;
+  assistantDefinitionId: AssistantDefinitionId;
+  status: 'active' | 'closed';
+  startedAt: number;
+  lastInteractionAt: number;
+  preview: string;
+}
+
+export interface AssistantMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  sanitizedContent: string;
+  createdAt: number;
+  actionType?: string;
+  feedback?: 'positive' | 'negative';
+}
+
+export interface AssistantActionProposal {
+  id: string;
+  actionType: 'update_lead_status';
+  label: string;
+  rationale: string;
+  targetStatus: LeadStatus;
+  status: 'proposed' | 'confirmed' | 'cancelled' | 'executed' | 'failed';
+}
+
+export interface AssistantWorkspace {
+  entitlement: AssistantEntitlement;
+  definitions: AssistantDefinition[];
+  availableModes: AssistantMode[];
+  conversations: AssistantConversationSummary[];
+  messages: AssistantMessage[];
+  activeConversationId?: string;
+}
+
 export interface AssistantResponse {
   headline: string;
   answer: string;
   actions: string[];
   suggestedMessage?: string;
+  assistantName: 'Sofia';
+  mode: AssistantMode;
+  leadId?: string;
+  conversationId: string;
+  messageId: string;
+  promptVersion: string;
+  knowledgeVersion: string;
+  model: string;
+  tokenUsage: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  entitlement: AssistantEntitlement;
+  proposedAction?: AssistantActionProposal;
   generatedAt: number;
+}
+
+export interface AssistantAdminSettings {
+  accountId: string;
+  enabled: boolean;
+  enabledAssistants: Array<'sofia-conversion' | 'sofia-management'>;
+  monthlyLimit: number;
+  dailyLimit: number;
+  trialLimit: number;
+  inputTokenCostPerMillion: number;
+  outputTokenCostPerMillion: number;
+  customAssistant?: PublicPatientAssistant | null;
+}
+
+export interface AssistantAdminOverview {
+  period: string;
+  accountsUsed: number;
+  interactions: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCost: number;
+  actionsProposed: number;
+  actionsConfirmed: number;
+  positiveFeedback: number;
+  negativeFeedback: number;
+  blocked: number;
+  errors: number;
 }
 
 export interface WorkspaceUser {

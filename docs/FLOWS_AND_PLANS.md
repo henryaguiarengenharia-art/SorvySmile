@@ -65,7 +65,7 @@ volume que justifique essa complexidade.
 | CRM, templates e agendamento | não | sim | sim |
 | Gestão e atribuição de equipe | não | não | sim |
 | KPIs por dentista (7/30/90 dias) | não | não | sim |
-| Assistentes operacionais de Gestão e Conversão | não | não | sim |
+| Sofia — Conversão e Gestão | não | sim | sim |
 | Acessos incluídos | 1 | 1 | 2 |
 | Acesso adicional | — | — | R$ 79 |
 

@@ -13,6 +13,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { PatientJourney } from "./components/PatientJourney";
+import { PatientAssistantGuide } from "./components/PatientAssistantGuide";
 import {
   AppView,
   DailyPostAssignment,
@@ -374,7 +375,10 @@ const App: React.FC = () => {
       )}
 
       {view === "patient" && profile && (
-        <PatientJourney profile={profile} onExit={() => setView("landing")} />
+        <>
+          <PatientJourney profile={profile} onExit={() => setView("landing")} />
+          <PatientAssistantGuide profile={profile} stage="journey" />
+        </>
       )}
 
       {view === "pricing" && (

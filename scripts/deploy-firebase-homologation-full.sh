@@ -248,21 +248,45 @@ done
 
 printf 'Publicando o primeiro lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:updateProfessionalSlug,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember,functions:manageDailyPost,functions:getDailyPostAssignment,functions:recordDailyPostEvent \
+  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:updateProfessionalSlug,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember,functions:manageDailyPost,functions:getDailyPostAssignment,functions:recordDailyPostEvent,functions:getAssistantWorkspace,functions:resolveAssistantAction,functions:recordAssistantFeedback,functions:recordAssistantClientEvent \
   --project "$PROJECT_ID" \
   --non-interactive
 
 printf 'Publicando o segundo lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:publishScheduledDailyPosts,functions:assignDailyPostsHourly,functions:expireProfessionalTrials,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
+  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:getAssistantAdminSettings,functions:getAssistantAdminOverview,functions:updateAssistantSettings,functions:updateCustomAssistantProfile,functions:publishScheduledDailyPosts,functions:assignDailyPostsHourly,functions:expireProfessionalTrials,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
   --project "$PROJECT_ID" \
   --non-interactive
+
+printf 'Garantindo acesso HTTP às novas Functions callable das assistentes...\n'
+for service_name in \
+  getassistantworkspace \
+  resolveassistantaction \
+  recordassistantfeedback \
+  recordassistantclientevent \
+  getassistantadminsettings \
+  getassistantadminoverview \
+  updateassistantsettings \
+  updatecustomassistantprofile; do
+  gcloud run services add-iam-policy-binding "$service_name" \
+    --region southamerica-east1 \
+    --project "$PROJECT_ID" \
+    --member=allUsers \
+    --role=roles/run.invoker \
+    --quiet >/dev/null
+done
 
 printf 'Criando ou atualizando a biblioteca idempotente de 60 Posts do Dia...\n'
 TARGET_FIREBASE_PROJECT_ID="$PROJECT_ID" \
 GOOGLE_CLOUD_PROJECT="$PROJECT_ID" \
 GCLOUD_PROJECT="$PROJECT_ID" \
 node functions/lib/seedDailyPostTemplates.js
+
+printf 'Criando ou atualizando definições versionadas das assistentes...\n'
+TARGET_FIREBASE_PROJECT_ID="$PROJECT_ID" \
+GOOGLE_CLOUD_PROJECT="$PROJECT_ID" \
+GCLOUD_PROJECT="$PROJECT_ID" \
+node functions/lib/seedAssistantDefinitions.js
 
 printf 'Compilando e publicando o frontend funcional da homologacao...\n'
 npm run build -- --mode homologation

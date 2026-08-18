@@ -31,7 +31,8 @@
 | `usage` | mesma conta ou HQ | nenhuma |
 | `usageReservations` | nenhuma | nenhuma |
 | `adminAuditLogs` e `subscriptionHistory` | somente HQ | nenhuma |
-| `assistantUsage` e `assistantAudit` | nenhuma | nenhuma |
+| `assistantDefinitions`, `assistantKnowledge` e configurações | nenhuma | nenhuma |
+| `assistantConversations`, `assistantActions`, `assistantUsage` e `assistantAuditLogs` | nenhuma | nenhuma |
 
 Plano, cota, vínculo de conta, perfil público e status da assinatura são
 autoritativos no servidor.
@@ -71,10 +72,15 @@ tentativas para cada triagem incluída no plano. Falhas do provedor devolvem a
 tentativa. A primeira produção limita a escala das Functions a cinco instâncias,
 com concorrência controlada, como proteção adicional de custo.
 
-As assistentes operacionais do Network têm limite de 40 solicitações por usuário
-por dia. O contexto enviado não inclui nome, telefone, email ou foto; um
-profissional individual recebe somente indicadores dos próprios leads, enquanto
-o gestor da clínica recebe os indicadores consolidados da conta.
+As assistentes profissionais estão disponíveis nos planos Pro e Network. O Pro
+solo usa Conversão e Gestão; no Network, profissionais usam Conversão e o gestor
+usa Gestão. Os
+limites iniciais são 100 interações por conta/mês, 20 por conta/dia e 10 durante
+o trial, todos configuráveis pela HQ. O contexto enviado não inclui telefone,
+email ou foto; um profissional individual recebe somente indicadores dos
+próprios leads, enquanto o gestor Network recebe indicadores consolidados da
+própria conta. Conversas, tokens, custo, feedback e ações confirmadas possuem
+persistência e auditoria próprias. Veja `docs/ASSISTENTES_IA.md`.
 
 ## Consentimentos e retenção
 
@@ -127,7 +133,7 @@ restrita para ativar, pausar ou marcar inadimplência.
 - Personalizações e eventos ficam isolados por profissional. Feed e Story são
   gerados em PNG com 1080 × 1350 e 1080 × 1920, sem publicação na vitrine.
 - Os painéis separam indicadores de 7, 30 e 90 dias da visão geral acumulada.
-- O painel Network oferece assistentes de Gestão e Conversão. Elas geram apoio
+- Os painéis Pro e Network oferecem a Sofia conforme o papel autorizado. Ela gera apoio
   operacional revisável e não realizam atendimento, diagnóstico ou prescrição.
 - A alteração de slug é transacional e cria um alias público para que o endereço
   anterior continue resolvendo para o perfil atual.

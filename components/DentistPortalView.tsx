@@ -53,7 +53,7 @@ interface DentistPortalViewProps {
   dailyPostHistory?: DailyPostAssignment[];
   onDailyPostEvent?: (event: 'view' | 'customize' | 'copy_caption' | 'download_feed' | 'download_story' | 'mark_as_used' | 'request_alternative', format?: 'feed' | 'story' | 'carousel' | 'none', variant?: DailyPostVariant) => Promise<void>;
   onUpdateSlug?: (slug: string) => Promise<string>;
-  onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string }) => Promise<AssistantResponse>;
+  onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string; conversationId?: string }) => Promise<AssistantResponse>;
 }
 
 type PortalTab = "dashboard" | "leads" | "post" | "profile" | "assistant";
@@ -664,7 +664,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
         <DailyPostCard post={dailyPost} history={dailyPostHistory} readOnly={readOnly} onEvent={onDailyPostEvent} />
       )}
 
-      {tab === "assistant" && planConfig.features.assistantPreview && onAskAssistant && <AIAssistantPanel leadRecords={leadRecords} onAsk={onAskAssistant} />}
+      {tab === "assistant" && planConfig.features.assistantPreview && onAskAssistant && <AIAssistantPanel leadRecords={leadRecords} accountId={professional.billingAccountId} role="professional" onAsk={onAskAssistant} onViewLead={(leadId) => { const lead = leadRecords.find((item) => item.id === leadId); if (lead) { setTab("leads"); setSelectedLead(lead); } }} />}
 
       {tab === "profile" && (
         <section className="mx-auto max-w-3xl space-y-6 rounded-[2rem] border border-slate-100 bg-white p-7 md:p-9">

@@ -35,6 +35,8 @@ import { planName } from "../planCatalog";
 import { DailyPostManager, DailyPostManagerInput } from "./DailyPostManager";
 import { PeriodFilter } from "./PeriodFilter";
 import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
+import { AssistantAdminCard } from "./AssistantAdminCard";
+import { AssistantHqOverview } from "./AssistantHqOverview";
 
 interface HQDashboardViewProps {
   leadRecords: LeadRecord[];
@@ -363,6 +365,8 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
         </article>
       </section>
 
+      <AssistantHqOverview />
+
       <section className="overflow-hidden rounded-[2rem] border border-slate-100 bg-white">
         <header className="grid gap-4 border-b border-slate-100 bg-slate-50 p-6 md:grid-cols-[1fr_auto]">
           <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4">
@@ -548,6 +552,8 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
                   <button onClick={() => { setManagedProfessional(null); onViewProfessionalDashboard(professional.id); }} className="inline-flex items-center gap-2 rounded-xl border border-blue-100 px-3 py-2 text-xs font-black text-blue-700"><Eye className="h-4 w-4" /> {isClinicManager ? "Ver gestão da clínica" : "Ver painel do profissional"}</button>
                 </div>
               </div>
+
+              <AssistantAdminCard accountId={account.id} professionalId={isClinicManager ? undefined : professional.id} plan={account.tier} />
 
               <div className="mt-7 space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ações administrativas</p>

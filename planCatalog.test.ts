@@ -9,9 +9,10 @@ describe("catálogo comercial", () => {
     expect(PLAN_COPY.network.name).toBe("Network");
   });
 
-  it("libera recursos de equipe somente no Network", () => {
+  it("libera Sofia no Pro e Network, mantendo equipe somente no Network", () => {
     expect(PLAN_CONFIGS.lite.features.assistantPreview).toBe(false);
-    expect(PLAN_CONFIGS.pro.features.assistantPreview).toBe(false);
+    expect(PLAN_CONFIGS.pro.features.assistantPreview).toBe(true);
+    expect(PLAN_CONFIGS.network.features.assistantPreview).toBe(true);
     expect(PLAN_CONFIGS.network.features.teamManagement).toBe(true);
     expect(PLAN_CONFIGS.network.features.leadAssignment).toBe(true);
     expect(PLAN_CONFIGS.network.includedSeats).toBe(2);

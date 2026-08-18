@@ -159,5 +159,36 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /assistantDefinitions/{assistantId} {
+      allow read, write: if false;
+    }
+
+    match /assistantKnowledge/{knowledgeId} {
+      allow read, write: if false;
+    }
+
+    match /accountAssistantSettings/{accountId} {
+      allow read, write: if false;
+    }
+
+    match /customAssistantProfiles/{profileId} {
+      allow read, write: if false;
+    }
+
+    match /assistantConversations/{conversationId} {
+      allow read, write: if false;
+      match /messages/{messageId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /assistantActions/{actionId} {
+      allow read, write: if false;
+    }
+
+    match /assistantAuditLogs/{auditId} {
+      allow read, write: if false;
+    }
+
   }
 }

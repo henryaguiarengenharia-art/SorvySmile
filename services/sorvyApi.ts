@@ -24,8 +24,11 @@ import { httpsCallable } from "firebase/functions";
 import {
   BillingAccount,
   AdminAuditLog,
+  AssistantAdminSettings,
+  AssistantAdminOverview,
   AssistantMode,
   AssistantResponse,
+  AssistantWorkspace,
   DailyPost,
   DailyPostAssignment,
   DailyPostEventRecord,
@@ -279,6 +282,22 @@ export async function getPublicProfile(
       active: true,
       status: snap.data().status ?? "active",
       profileImage: snap.data().profileImage ?? "",
+      patientAssistant: normalizeTier(snap.data().plan) !== "lite" && snap.data().patientAssistant
+        ? {
+            id: String(snap.data().patientAssistant.id ?? "aury-patient-guide"),
+            name: String(snap.data().patientAssistant.name ?? "Aury"),
+            roleName: String(snap.data().patientAssistant.roleName ?? "Guia virtual"),
+            description: String(snap.data().patientAssistant.description ?? ""),
+            greeting: String(snap.data().patientAssistant.greeting ?? ""),
+            avatarUrl: String(snap.data().patientAssistant.avatarUrl ?? ""),
+            fullImageUrl: String(snap.data().patientAssistant.fullImageUrl ?? ""),
+            primaryColor: String(snap.data().patientAssistant.primaryColor ?? "#18AFA5"),
+            secondaryColor: String(snap.data().patientAssistant.secondaryColor ?? "#DDF4F6"),
+            ctaText: String(snap.data().patientAssistant.ctaText ?? "Falar com a clínica"),
+            ctaLink: String(snap.data().patientAssistant.ctaLink ?? ""),
+            isCustom: snap.data().patientAssistant.isCustom === true,
+          }
+        : undefined,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
@@ -672,8 +691,100 @@ export async function askBusinessAssistant(input: {
   question: string;
   accountId?: string;
   leadId?: string;
+  conversationId?: string;
 }): Promise<AssistantResponse> {
   const callable = httpsCallable<typeof input, AssistantResponse>(functions, "askBusinessAssistant");
+  try { return (await callable(input)).data; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function getAssistantWorkspace(input: {
+  accountId?: string;
+  conversationId?: string;
+} = {}): Promise<AssistantWorkspace> {
+  const callable = httpsCallable<typeof input, AssistantWorkspace>(functions, "getAssistantWorkspace");
+  try { return (await callable(input)).data; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function resolveAssistantAction(
+  actionId: string,
+  decision: "confirm" | "cancel",
+): Promise<{ status: "cancelled" | "executed"; leadId?: string; targetStatus?: string }> {
+  const callable = httpsCallable<
+    { actionId: string; decision: "confirm" | "cancel" },
+    { ok: true; status: "cancelled" | "executed"; leadId?: string; targetStatus?: string }
+  >(functions, "resolveAssistantAction");
+  try { return (await callable({ actionId, decision })).data; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function recordAssistantFeedback(input: {
+  conversationId: string;
+  messageId: string;
+  feedback: "positive" | "negative";
+}): Promise<void> {
+  const callable = httpsCallable<typeof input, { ok: true }>(functions, "recordAssistantFeedback");
+  try { await callable(input); }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function recordAssistantClientEvent(conversationId: string, eventType: "suggestion_copied"): Promise<void> {
+  const callable = httpsCallable<{ conversationId: string; eventType: "suggestion_copied" }, { ok: true }>(functions, "recordAssistantClientEvent");
+  try { await callable({ conversationId, eventType }); }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function getAssistantAdminSettings(accountId: string, professionalId?: string): Promise<AssistantAdminSettings> {
+  const callable = httpsCallable<{ accountId: string; professionalId?: string }, AssistantAdminSettings>(functions, "getAssistantAdminSettings");
+  try { return (await callable({ accountId, professionalId })).data; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function getAssistantAdminOverview(): Promise<AssistantAdminOverview> {
+  const callable = httpsCallable<Record<string, never>, AssistantAdminOverview>(functions, "getAssistantAdminOverview");
+  try { return (await callable({})).data; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function updateAssistantSettings(input: AssistantAdminSettings): Promise<void> {
+  const callable = httpsCallable<AssistantAdminSettings, { ok: true }>(functions, "updateAssistantSettings");
+  try {
+    await callable({
+      accountId: input.accountId,
+      enabled: input.enabled,
+      enabledAssistants: input.enabledAssistants,
+      monthlyLimit: input.monthlyLimit,
+      dailyLimit: input.dailyLimit,
+      trialLimit: input.trialLimit,
+      inputTokenCostPerMillion: input.inputTokenCostPerMillion,
+      outputTokenCostPerMillion: input.outputTokenCostPerMillion,
+    });
+  } catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export interface CustomAssistantProfileInput {
+  accountId: string;
+  professionalId?: string;
+  enabled: boolean;
+  name: string;
+  roleName: string;
+  description: string;
+  greeting: string;
+  avatarUrl: string;
+  fullImageUrl: string;
+  primaryColor: string;
+  secondaryColor: string;
+  tone: string;
+  vocabulary: string;
+  institutionalContext: string;
+  approvedKnowledgeTags: string[];
+  ctaText: string;
+  ctaLink: string;
+}
+
+export async function updateCustomAssistantProfile(input: CustomAssistantProfileInput): Promise<{ customAssistantId: string }> {
+  const callable = httpsCallable<typeof input, { ok: true; customAssistantId: string }>(functions, "updateCustomAssistantProfile");
   try { return (await callable(input)).data; }
   catch (error) { throw new Error(errorMessage(error)); }
 }

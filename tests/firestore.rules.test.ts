@@ -136,6 +136,14 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
           uid: "user_a",
           count: 1,
         }),
+        setDoc(doc(db, "assistantDefinitions", "sofia-conversion"), { name: "Sofia", status: "active" }),
+        setDoc(doc(db, "assistantKnowledge", "conversion-v1"), { status: "approved" }),
+        setDoc(doc(db, "accountAssistantSettings", "acc_a"), { accountId: "acc_a", monthlyLimit: 100 }),
+        setDoc(doc(db, "customAssistantProfiles", "custom_acc_a"), { accountId: "acc_a", name: "Cliente A" }),
+        setDoc(doc(db, "assistantConversations", "conversation_a"), { accountId: "acc_a", professionalId: "pro_a", userId: "user_a" }),
+        setDoc(doc(db, "assistantConversations", "conversation_a", "messages", "message_a"), { role: "assistant", sanitizedContent: "Resumo" }),
+        setDoc(doc(db, "assistantActions", "action_a"), { accountId: "acc_a", status: "proposed" }),
+        setDoc(doc(db, "assistantAuditLogs", "assistant_audit_a"), { accountId: "acc_a", eventType: "response_generated" }),
       ]);
     });
   });
@@ -301,5 +309,18 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
     await assertSucceeds(getDoc(doc(hq, "subscriptionHistory", "history_a")));
     await assertFails(getDoc(doc(professional, "assistantUsage", "user_a_2026-08-17")));
     await assertFails(getDoc(doc(hq, "assistantUsage", "user_a_2026-08-17")));
+    for (const path of [
+      ["assistantDefinitions", "sofia-conversion"],
+      ["assistantKnowledge", "conversion-v1"],
+      ["accountAssistantSettings", "acc_a"],
+      ["customAssistantProfiles", "custom_acc_a"],
+      ["assistantConversations", "conversation_a"],
+      ["assistantActions", "action_a"],
+      ["assistantAuditLogs", "assistant_audit_a"],
+    ]) {
+      await assertFails(getDoc(doc(professional, path[0], path[1])));
+      await assertFails(getDoc(doc(hq, path[0], path[1])));
+    }
+    await assertFails(getDoc(doc(professional, "assistantConversations", "conversation_a", "messages", "message_a")));
   });
 });

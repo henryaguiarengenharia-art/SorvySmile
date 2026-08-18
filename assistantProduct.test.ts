@@ -1,0 +1,75 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { PLAN_CONFIGS } from "./planCatalog";
+
+const backend = readFileSync("functions/src/index.ts", "utf8");
+const assistantCore = readFileSync("functions/src/assistant.ts", "utf8");
+const panel = readFileSync("components/AIAssistantPanel.tsx", "utf8");
+const patientGuide = readFileSync("components/PatientAssistantGuide.tsx", "utf8");
+const entitlements = readFileSync("functions/src/assistantEntitlements.ts", "utf8");
+const app = readFileSync("App.tsx", "utf8");
+const rules = readFileSync("firestore.rules", "utf8");
+const storageRules = readFileSync("storage.rules", "utf8");
+const deploy = readFileSync("scripts/deploy-firebase-homologation-full.sh", "utf8");
+
+describe("produto de assistentes SorvySmile", () => {
+  it("habilita Sofia somente no Pro e Network", () => {
+    expect(PLAN_CONFIGS.lite.features.assistantPreview).toBe(false);
+    expect(PLAN_CONFIGS.pro.features.assistantPreview).toBe(true);
+    expect(PLAN_CONFIGS.network.features.assistantPreview).toBe(true);
+    expect(backend).toContain('plan: access.plan');
+    expect(backend).toContain("A Sofia está disponível nos planos Pro e Network");
+  });
+
+  it("apresenta uma única Sofia com modos, atalhos e confirmação humana", () => {
+    expect(panel).toContain("Sofia · Assistente virtual");
+    expect(panel).toContain("Quem devo contatar hoje?");
+    expect(panel).toContain("Resumo dos últimos 30 dias");
+    expect(panel).toContain("Aplicar alteração");
+    expect(panel).toContain("Cancelar");
+    expect(backend).toContain("resolveAssistantAction");
+    expect(assistantCore).toContain("Nenhuma mensagem pode ser enviada");
+  });
+
+  it("persiste conversas sanitizadas, uso por conta e auditoria sem acesso direto", () => {
+    expect(backend).toContain("assistantConversations");
+    expect(backend).toContain("sanitizedContent");
+    expect(backend).toContain('assistantUsage/${access.accountId}_${access.period}');
+    expect(backend).toContain("assistantAuditLogs");
+    expect(rules).toContain("match /assistantConversations/{conversationId}");
+    expect(rules).toContain("match /assistantActions/{actionId}");
+    expect(rules).toContain("allow read, write: if false");
+  });
+
+  it("mantém Aury fora do arquivo protegido da triagem", () => {
+    expect(app).toContain("PatientAssistantGuide");
+    expect(app).toContain('<PatientAssistantGuide profile={profile} stage="journey" />');
+    expect(patientGuide).toContain("Como a foto é usada?");
+    expect(patientGuide.toLowerCase()).toContain("não é diagnóstico nem prescrição");
+    expect(patientGuide).not.toContain("askBusinessAssistant");
+  });
+
+  it("separa os modos por papel e preserva personalizações específicas", () => {
+    expect(entitlements).toContain('if (role === "clinic") return ["management"]');
+    expect(entitlements).toContain('ownerType === "clinic") return ["conversion"]');
+    expect(backend).toContain("activeProfessionalOverrides");
+    expect(backend).toContain("inheritedPublicProfile");
+    expect(backend).toContain('`custom_${input.accountId}_${input.professionalId}`');
+    expect(storageRules).toContain("match /assistant-assets/{accountId}/{professionalId}/{fileName}");
+    expect(storageRules).toContain("currentUser().data.role == 'hq'");
+  });
+
+  it("inclui callables e seeds no deploy de homologação", () => {
+    for (const name of [
+      "getAssistantWorkspace",
+      "resolveAssistantAction",
+      "recordAssistantFeedback",
+      "recordAssistantClientEvent",
+      "getAssistantAdminSettings",
+      "getAssistantAdminOverview",
+      "updateAssistantSettings",
+      "updateCustomAssistantProfile",
+      "seedAssistantDefinitions.js",
+    ]) expect(deploy).toContain(name);
+  });
+});

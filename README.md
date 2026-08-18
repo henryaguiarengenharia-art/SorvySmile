@@ -25,7 +25,9 @@ de triagem quando o link possui um responsável ativo.
 - portal individual do dentista e painel consolidado da clínica no Network;
 - Post do Dia com biblioteca de 60 conteúdos, seleção diária por perfil,
   personalização isolada, histórico e downloads de Feed e Story;
-- assistentes operacionais de Gestão e Conversão no Network, sem diagnóstico.
+- Sofia para Pro e Network, com o modo definido pelo papel, histórico, limites
+  por conta, contexto anonimizado e confirmação humana; Aury orienta a
+  jornada pública com respostas aprovadas, sem diagnóstico.
 
 | Plano | Mensalidade | Triagens/mês | Principal evolução |
 |---|---:|---:|---|

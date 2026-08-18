@@ -29,6 +29,15 @@ service firebase.storage {
         );
     }
 
+    match /assistant-assets/{accountId}/{professionalId}/{fileName} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if signedIn()
+        && currentUser().data.role == 'hq'
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|webp)');
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

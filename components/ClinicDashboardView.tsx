@@ -54,7 +54,7 @@ interface ClinicDashboardViewProps {
   dailyPost?: DailyPostAssignment | null;
   dailyPostHistory?: DailyPostAssignment[];
   onDailyPostEvent?: (event: 'view' | 'customize' | 'copy_caption' | 'download_feed' | 'download_story' | 'mark_as_used' | 'request_alternative', format?: 'feed' | 'story' | 'carousel' | 'none', variant?: DailyPostVariant) => Promise<void>;
-  onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string }) => Promise<AssistantResponse>;
+  onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string; conversationId?: string }) => Promise<AssistantResponse>;
   onUpdateSlug?: (slug: string) => Promise<string>;
   readOnly?: boolean;
 }
@@ -481,7 +481,7 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
 
       {tab === "post" && <DailyPostCard post={dailyPost} history={dailyPostHistory} readOnly={readOnly} onEvent={onDailyPostEvent} />}
 
-      {tab === "assistant" && !readOnly && onAskAssistant && <AIAssistantPanel leadRecords={leadRecords} onAsk={onAskAssistant} />}
+      {tab === "assistant" && !readOnly && onAskAssistant && <AIAssistantPanel leadRecords={leadRecords} accountId={account.id} role="clinic" onAsk={onAskAssistant} onViewLead={(leadId) => { const lead = leadRecords.find((item) => item.id === leadId); setTab("leads"); if (lead) setSearch(lead.lead.name); }} />}
 
       {showMemberForm && !readOnly && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/65 p-5 backdrop-blur-sm">
