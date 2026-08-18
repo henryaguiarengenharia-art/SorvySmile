@@ -31,6 +31,7 @@ import {
 } from "../types";
 import { planName } from "../planCatalog";
 import { AIAssistantPanel } from "./AIAssistantPanel";
+import { AssistantAdminCard } from "./AssistantAdminCard";
 import { DailyPostCard } from "./DailyPostCard";
 import { PeriodFilter } from "./PeriodFilter";
 import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
@@ -764,6 +765,13 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             )}
             Salvar perfil
           </button>}
+          {planConfig.features.assistantPreview && !readOnly && (
+            <AssistantAdminCard
+              accountId={professional.billingAccountId}
+              professionalId={professional.id}
+              plan={professional.plan}
+            />
+          )}
         </section>
       )}
 
