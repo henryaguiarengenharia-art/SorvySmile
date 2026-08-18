@@ -205,6 +205,7 @@ function mapDailyPost(id: string, data: DocumentData): DailyPost {
     shortText: data.shortText,
     ctaType: data.ctaType,
     hashtags: data.hashtags,
+    seoKeywords: data.seoKeywords,
     category: data.category,
     communicationGoal: data.communicationGoal,
     targetAudienceTags: data.targetAudienceTags,
@@ -624,6 +625,7 @@ export async function manageDailyPost(input: {
   ctaText?: string;
   ctaType?: 'schedule' | 'contact' | 'learn' | 'save' | 'share';
   hashtags?: string[];
+  seoKeywords?: string[];
   category?: string;
   communicationGoal?: string;
   targetAudienceTags?: string[];

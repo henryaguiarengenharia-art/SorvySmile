@@ -67,7 +67,13 @@ import {
   teamMemberSchema,
 } from "./validation.js";
 import { assertSlugAllowed } from "./slug.js";
-import { chooseDailyPostTemplate, localDateKey, SeedDailyPostTemplate } from "./dailyPostLibrary.js";
+import {
+  chooseDailyPostTemplate,
+  dailyPostAssignmentDocumentId,
+  DAILY_POST_LIBRARY_REVISION,
+  localDateKey,
+  SeedDailyPostTemplate,
+} from "./dailyPostLibrary.js";
 
 if (getApps().length === 0) initializeApp();
 
@@ -1531,6 +1537,7 @@ function dailyPostTemplateFromData(id: string, data: Record<string, unknown>): S
   return {
     ...(data as unknown as SeedDailyPostTemplate),
     id,
+    seoKeywords: Array.isArray(data.seoKeywords) ? data.seoKeywords.map(String) : [],
     availableFrom: null,
     availableUntil: null,
   };
@@ -1542,7 +1549,9 @@ async function createOrReadDailyPostAssignment(professionalId: string, professio
   const preference = preferenceSnap.data() ?? {};
   const timeZone = typeof preference.timeZone === "string" ? preference.timeZone : "America/Sao_Paulo";
   const assignmentDate = localDateKey(now, timeZone);
-  const assignmentRef = db.doc(`dailyPostAssignments/${professionalId}_${assignmentDate}`);
+  const assignmentRef = db.doc(
+    `dailyPostAssignments/${dailyPostAssignmentDocumentId(professionalId, assignmentDate)}`,
+  );
   const existing = await assignmentRef.get();
   if (existing.exists && !alternative) return { id: existing.id, ...existing.data() };
   if (alternative && preference.allowDailyAlternative === false) {
@@ -1582,12 +1591,19 @@ async function createOrReadDailyPostAssignment(professionalId: string, professio
   const snapshot = {
     title: template.title, hook: template.hook, shortText: template.shortText,
     caption: template.caption, ctaText: template.ctaText, ctaType: template.ctaType,
-    hashtags: template.hashtags, category: template.category,
+    hashtags: template.hashtags, seoKeywords: template.seoKeywords, category: template.category,
     communicationGoal: template.communicationGoal, editorialFormat: template.editorialFormat,
     feedLayoutKey: template.feedLayoutKey, storyLayoutKey: template.storyLayoutKey,
     paletteKey: template.paletteKey, imageStrategy: template.imageStrategy,
     defaultImageUrl: template.defaultImageUrl, carouselSlides: template.carouselSlides,
   };
+  const brandDisplayName = [
+    preference.professionalName,
+    preference.clinicName,
+    professional.name,
+  ]
+    .map((value) => String(value ?? "").trim())
+    .find(Boolean) ?? "Seu consultório";
   const data = {
     professionalId,
     accountId: professional.accountId ?? "",
@@ -1595,10 +1611,16 @@ async function createOrReadDailyPostAssignment(professionalId: string, professio
     timeZone,
     templateId: template.id,
     templateVersion: template.version,
+    libraryRevision: DAILY_POST_LIBRARY_REVISION,
     category: template.category,
     selectionReason: mandatory.length ? "scheduled_campaign" : selected.reason,
     status: "assigned",
     contentSnapshot: snapshot,
+    brandSnapshot: {
+      displayName: brandDisplayName,
+      instagramHandle: String(preference.instagramHandle ?? ""),
+      logoUrl: String(preference.logoUrl ?? ""),
+    },
     customizedVariant: null,
     templateHistory: alternative
       ? [...((currentData?.templateHistory as string[] | undefined) ?? []), String(currentData?.templateId ?? "")].filter(Boolean)
@@ -1642,6 +1664,7 @@ export const manageDailyPost = onCall(
           ctaText: legacyInput.data.cta,
           ctaType: "contact" as const,
           hashtags: ["#SaudeBucal", "#SorvySmile"],
+          seoKeywords: ["saúde bucal", "prevenção odontológica", "dentista"],
           category: "prevention" as const,
           communicationGoal: "education" as const,
           targetAudienceTags: ["adults", "families"],
@@ -1682,6 +1705,7 @@ export const manageDailyPost = onCall(
       ctaText: input.ctaText,
       ctaType: input.ctaType,
       hashtags: input.hashtags,
+      seoKeywords: input.seoKeywords,
       category: input.category,
       communicationGoal: input.communicationGoal,
       targetAudienceTags: input.targetAudienceTags,

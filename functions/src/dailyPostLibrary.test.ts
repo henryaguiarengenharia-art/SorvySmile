@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { chooseDailyPostTemplate, DAILY_POST_TEMPLATES, localDateKey } from "./dailyPostLibrary.js";
+import {
+  chooseDailyPostTemplate,
+  dailyPostAssignmentDocumentId,
+  DAILY_POST_LIBRARY_REVISION,
+  DAILY_POST_TEMPLATES,
+  localDateKey,
+} from "./dailyPostLibrary.js";
 
 describe("biblioteca do Post do Dia", () => {
   it("contém exatamente 60 conteúdos únicos nas distribuições aprovadas", () => {
@@ -16,6 +22,44 @@ describe("biblioteca do Post do Dia", () => {
     for (const template of DAILY_POST_TEMPLATES.filter((item) => item.editorialFormat === "carousel")) {
       expect(template.carouselSlides.length).toBeGreaterThanOrEqual(4);
       expect(template.carouselSlides.length).toBeLessThanOrEqual(7);
+      expect(template.carouselSlides).toHaveLength(5);
+      expect(template.carouselSlides.some((slide) => /^Ponto \d/.test(slide.title))).toBe(false);
+      expect(new Set(template.carouselSlides.map((slide) => slide.title)).size).toBe(5);
+    }
+  });
+
+  it("entrega conteúdo completo, pesquisável e pronto para conversão", () => {
+    for (const template of DAILY_POST_TEMPLATES) {
+      expect(template.version).toBe(DAILY_POST_LIBRARY_REVISION);
+      expect(template.shortText.length).toBeGreaterThanOrEqual(120);
+      expect(template.shortText.length).toBeLessThanOrEqual(500);
+      expect(template.caption).toContain(template.ctaText);
+      expect(template.caption).toContain("Conteúdo educativo");
+      expect(template.hashtags.length).toBeGreaterThanOrEqual(6);
+      expect(new Set(template.hashtags).size).toBe(template.hashtags.length);
+      expect(template.seoKeywords.length).toBeGreaterThanOrEqual(3);
+      expect(template.seoKeywords.every((keyword) => keyword.length >= 4)).toBe(true);
+    }
+  });
+
+  it("evita promessas e linguagem mercantilista incompatíveis com a ética odontológica", () => {
+    const libraryText = DAILY_POST_TEMPLATES
+      .map((template) => [
+        template.title,
+        template.shortText,
+        template.caption,
+        template.ctaText,
+      ].join(" "))
+      .join(" ")
+      .toLocaleLowerCase("pt-BR");
+    for (const forbidden of [
+      "resultado garantido",
+      "sorriso perfeito",
+      "sem dor garantido",
+      "o melhor dentista",
+      "preço imperdível",
+    ]) {
+      expect(libraryText).not.toContain(forbidden);
     }
   });
 
@@ -32,7 +76,27 @@ describe("biblioteca do Post do Dia", () => {
     expect(afterCycle).not.toBeNull();
   });
 
+  it("retorna uma proposta realmente diferente ao pedir outra opção", () => {
+    const current = DAILY_POST_TEMPLATES[0];
+    const replacement = chooseDailyPostTemplate(DAILY_POST_TEMPLATES, {
+      specialties: current.specialtyTags,
+      targetAudiences: current.targetAudienceTags,
+      preferredCategories: [current.category],
+      blockedCategories: [],
+      usedTemplateIds: [current.id],
+      previousCategory: current.category,
+    });
+    expect(replacement).not.toBeNull();
+    expect(replacement?.template.id).not.toBe(current.id);
+    expect(replacement?.template.category).not.toBe(current.category);
+  });
+
   it("calcula a data local do profissional", () => {
     expect(localDateKey(Date.UTC(2026, 0, 2, 1), "America/Sao_Paulo")).toBe("2026-01-01");
+  });
+
+  it("cria uma nova atribuição para a revisão editorial v2 sem apagar o legado", () => {
+    expect(dailyPostAssignmentDocumentId("profissional-1", "2026-08-18"))
+      .toBe("profissional-1_2026-08-18_v2");
   });
 });

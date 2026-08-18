@@ -172,6 +172,7 @@ export const dailyPostTemplateSchema = z.object({
   ctaText: z.string().trim().min(3).max(160),
   ctaType: z.enum(["schedule", "contact", "learn", "save", "share"]),
   hashtags: z.array(z.string().trim().min(2).max(60)).max(20),
+  seoKeywords: z.array(z.string().trim().min(3).max(80)).max(12).optional().default([]),
   category: dailyPostCategorySchema,
   communicationGoal: dailyPostGoalSchema,
   targetAudienceTags: z.array(z.string().trim().min(2).max(80)).max(20),

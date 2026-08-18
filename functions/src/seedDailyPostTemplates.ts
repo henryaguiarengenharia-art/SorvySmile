@@ -18,12 +18,12 @@ for (const template of DAILY_POST_TEMPLATES) {
     createdAtMs: now,
     updatedAtMs: now,
     publishedAtMs: now,
-    createdBy: "seed:daily-posts-v1",
-    updatedBy: "seed:daily-posts-v1",
+    createdBy: "seed:daily-posts-v2",
+    updatedBy: "seed:daily-posts-v2",
   }, { merge: true });
 }
 
 await writer.close();
-const count = await db.collection("dailyPostTemplates").where("createdBy", "==", "seed:daily-posts-v1").count().get();
+const count = await db.collection("dailyPostTemplates").where("createdBy", "==", "seed:daily-posts-v2").count().get();
 if (count.data().count !== 60) throw new Error(`A biblioteca inicial deveria conter 60 templates, mas contém ${count.data().count}.`);
 console.log(`Biblioteca inicial validada: ${count.data().count} templates em ${projectId}.`);

@@ -205,6 +205,7 @@ export interface DailyPost {
   shortText?: string;
   ctaType?: 'schedule' | 'contact' | 'learn' | 'save' | 'share';
   hashtags?: string[];
+  seoKeywords?: string[];
   category?: DailyPostCategory;
   communicationGoal?: 'education' | 'problem_awareness' | 'authority' | 'conversion';
   targetAudienceTags?: string[];
@@ -238,6 +239,7 @@ export interface DailyPostAssignment {
   assignmentDate: string;
   templateId: string;
   templateVersion: number;
+  libraryRevision?: number;
   category: DailyPostCategory;
   selectionReason: string;
   status: 'assigned' | 'opened' | 'customized' | 'copied' | 'downloaded' | 'used' | 'skipped';
@@ -249,6 +251,7 @@ export interface DailyPostAssignment {
     ctaText: string;
     ctaType: string;
     hashtags: string[];
+    seoKeywords?: string[];
     category: DailyPostCategory;
     communicationGoal: string;
     editorialFormat: DailyPostFormat;
@@ -258,6 +261,11 @@ export interface DailyPostAssignment {
     imageStrategy: string;
     defaultImageUrl: string;
     carouselSlides: Array<{ title: string; text: string }>;
+  };
+  brandSnapshot?: {
+    displayName: string;
+    instagramHandle: string;
+    logoUrl: string;
   };
   customizedVariant?: DailyPostVariant | null;
   alternativeCount: number;
