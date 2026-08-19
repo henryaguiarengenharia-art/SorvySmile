@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Bot, ChevronRight, MessageCircle, ShieldCheck, X } from "lucide-react";
 import { PublicProfessionalProfile } from "../types";
 
@@ -33,7 +33,6 @@ const FAQ = [
 export const PatientAssistantGuide: React.FC<PatientAssistantGuideProps> = ({ profile, stage }) => {
   const [open, setOpen] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
-  const [journeyStarted, setJourneyStarted] = useState(false);
   const assistant = useMemo(() => profile.patientAssistant ?? {
     id: "aury-patient-guide",
     name: "Aury",
@@ -49,20 +48,7 @@ export const PatientAssistantGuide: React.FC<PatientAssistantGuideProps> = ({ pr
     isCustom: false,
   }, [profile.patientAssistant]);
 
-  useEffect(() => {
-    const hideWhenTriageStarts = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      const button = target?.closest("button");
-      if (button?.textContent?.includes("Mapear meu sorriso agora")) {
-        setOpen(false);
-        setJourneyStarted(true);
-      }
-    };
-    document.addEventListener("click", hideWhenTriageStarts, true);
-    return () => document.removeEventListener("click", hideWhenTriageStarts, true);
-  }, []);
-
-  if (journeyStarted || stage === "camera" || stage === "analyzing") return null;
+  if (stage === "camera" || stage === "analyzing") return null;
 
   const contactLink = assistant.ctaLink || (profile.whatsapp
     ? `https://wa.me/${profile.whatsapp.replace(/\D/g, "")}`

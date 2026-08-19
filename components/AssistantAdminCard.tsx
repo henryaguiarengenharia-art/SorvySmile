@@ -12,6 +12,7 @@ interface AssistantAdminCardProps {
   accountId: string;
   professionalId?: string;
   plan: PlanTier;
+  adminMode?: boolean;
 }
 
 const DEFAULT_SETTINGS: Omit<AssistantAdminSettings, "accountId"> = {
@@ -25,9 +26,9 @@ const DEFAULT_SETTINGS: Omit<AssistantAdminSettings, "accountId"> = {
   customAssistant: null,
 };
 
-export const AssistantAdminCard: React.FC<AssistantAdminCardProps> = ({ accountId, professionalId, plan }) => {
+export const AssistantAdminCard: React.FC<AssistantAdminCardProps> = ({ accountId, professionalId, plan, adminMode = false }) => {
   const [settings, setSettings] = useState<AssistantAdminSettings>({ accountId, ...DEFAULT_SETTINGS });
-  const [customEnabled, setCustomEnabled] = useState(false);
+  const [customEnabled, setCustomEnabled] = useState(plan !== "lite");
   const [name, setName] = useState("Aury");
   const [roleName, setRoleName] = useState("Guia virtual");
   const [description, setDescription] = useState("Orientações simples e seguras durante a jornada.");
@@ -84,7 +85,7 @@ export const AssistantAdminCard: React.FC<AssistantAdminCardProps> = ({ accountI
     setError(null);
     setNotice(null);
     try {
-      await updateAssistantSettings(settings);
+      if (adminMode) await updateAssistantSettings(settings);
       if (plan !== "lite") {
         await updateCustomAssistantProfile({
           accountId,
@@ -106,7 +107,7 @@ export const AssistantAdminCard: React.FC<AssistantAdminCardProps> = ({ accountI
           ctaLink,
         });
       }
-      setNotice("Configuração das assistentes salva para esta conta.");
+      setNotice(adminMode ? "Configurações da conta salvas." : "Sua assistente foi atualizada na página pública.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Não foi possível salvar.");
     } finally {
@@ -136,10 +137,11 @@ export const AssistantAdminCard: React.FC<AssistantAdminCardProps> = ({ accountI
     <section className="mt-7 rounded-2xl border border-slate-100 p-5">
       <div className="flex items-start gap-3">
         <span className="rounded-xl bg-blue-50 p-2 text-blue-600"><Bot className="h-5 w-5" /></span>
-        <div><p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Assistentes da conta</p><h3 className="mt-1 font-black">Sofia e identidade pública</h3></div>
+        <div><p className="text-[10px] font-black uppercase tracking-widest text-blue-600">{adminMode ? "Assistentes da conta" : "Sua experiência, sua marca"}</p><h3 className="mt-1 font-black">{adminMode ? "Sofia e identidade pública" : "Configurações da sua assistente"}</h3></div>
       </div>
       {plan === "lite" && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-xs font-bold text-amber-800">O plano Lite permanece sem acesso à Sofia. A configuração fica preservada para um futuro upgrade.</p>}
-      <label className="mt-5 flex items-center justify-between rounded-xl bg-slate-50 p-4 text-sm font-black"><span>Habilitar Sofia nesta conta</span><input type="checkbox" checked={settings.enabled} onChange={(event) => setSettings({ ...settings, enabled: event.target.checked })} /></label>
+      {!adminMode && plan !== "lite" && <p className="mt-3 text-xs font-medium leading-relaxed text-slate-500">Personalize o nome, o tom de voz e as informações usadas pela assistente exibida na sua página pública.</p>}
+      {adminMode && <><label className="mt-5 flex items-center justify-between rounded-xl bg-slate-50 p-4 text-sm font-black"><span>Habilitar Sofia nesta conta</span><input type="checkbox" checked={settings.enabled} onChange={(event) => setSettings({ ...settings, enabled: event.target.checked })} /></label>
       <div className="mt-3 grid grid-cols-2 gap-3">
         {(["sofia-conversion", "sofia-management"] as const).map((assistantId) => {
           const checked = settings.enabledAssistants.includes(assistantId);
@@ -159,8 +161,8 @@ export const AssistantAdminCard: React.FC<AssistantAdminCardProps> = ({ accountI
       <div className="mt-4 grid grid-cols-2 gap-3">
         <DecimalField label="USD / 1M tokens de entrada" value={settings.inputTokenCostPerMillion} onChange={(inputTokenCostPerMillion) => setSettings({ ...settings, inputTokenCostPerMillion })} />
         <DecimalField label="USD / 1M tokens de saída" value={settings.outputTokenCostPerMillion} onChange={(outputTokenCostPerMillion) => setSettings({ ...settings, outputTokenCostPerMillion })} />
-      </div>
-      <label className="mt-5 flex items-center justify-between rounded-xl bg-cyan-50 p-4 text-sm font-black text-cyan-900"><span>Identidade pública personalizada</span><input type="checkbox" disabled={plan === "lite"} checked={customEnabled} onChange={(event) => setCustomEnabled(event.target.checked)} /></label>
+      </div></>}
+      <label className="mt-5 flex items-center justify-between rounded-xl bg-cyan-50 p-4 text-sm font-black text-cyan-900"><span>{adminMode ? "Identidade pública personalizada" : "Assistente ativa na página pública"}</span><input type="checkbox" disabled={plan === "lite"} checked={customEnabled} onChange={(event) => setCustomEnabled(event.target.checked)} /></label>
       {customEnabled && (
         <div className="mt-4 space-y-3">
           <div className="grid gap-3 sm:grid-cols-2"><input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome" /><input className="input" value={roleName} onChange={(event) => setRoleName(event.target.value)} placeholder="Função" /></div>
@@ -180,7 +182,7 @@ export const AssistantAdminCard: React.FC<AssistantAdminCardProps> = ({ accountI
           <p className="flex items-start gap-2 text-[10px] font-medium text-slate-500"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />A personalização usa accountId/professionalId e não altera as regras globais de segurança.</p>
         </div>
       )}
-      <button disabled={busy} onClick={() => void save()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-xs font-black text-white disabled:opacity-40">{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Salvar assistentes</button>
+      <button disabled={busy || plan === "lite"} onClick={() => void save()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-xs font-black text-white disabled:opacity-40">{busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{adminMode ? "Salvar assistentes" : "Salvar configurações da assistente"}</button>
       {notice && <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{notice}</p>}
       {error && <p className="mt-3 rounded-xl bg-rose-50 p-3 text-xs font-bold text-rose-700">{error}</p>}
     </section>

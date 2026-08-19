@@ -7,6 +7,7 @@ const assistantCore = readFileSync("functions/src/assistant.ts", "utf8");
 const panel = readFileSync("components/AIAssistantPanel.tsx", "utf8");
 const routing = readFileSync("services/assistantRouting.ts", "utf8");
 const patientGuide = readFileSync("components/PatientAssistantGuide.tsx", "utf8");
+const assistantSettings = readFileSync("components/AssistantAdminCard.tsx", "utf8");
 const entitlements = readFileSync("functions/src/assistantEntitlements.ts", "utf8");
 const app = readFileSync("App.tsx", "utf8");
 const rules = readFileSync("firestore.rules", "utf8");
@@ -53,6 +54,12 @@ describe("produto de assistentes SorvySmile", () => {
   it("mantém Aury fora do arquivo protegido da triagem", () => {
     expect(app).toContain("PatientAssistantGuide");
     expect(app).toContain('<PatientAssistantGuide profile={profile} stage="journey" />');
+    const landingPosition = app.indexOf('{view === "landing"');
+    const guidePosition = app.indexOf('<PatientAssistantGuide profile={profile} stage="journey" />');
+    const triagePosition = app.indexOf('{view === "patient"');
+    expect(landingPosition).toBeGreaterThan(-1);
+    expect(guidePosition).toBeGreaterThan(landingPosition);
+    expect(guidePosition).toBeLessThan(triagePosition);
     expect(patientGuide).toContain("Como a foto é usada?");
     expect(patientGuide.toLowerCase()).toContain("não é diagnóstico nem prescrição");
     expect(patientGuide).not.toContain("askBusinessAssistant");
@@ -66,6 +73,11 @@ describe("produto de assistentes SorvySmile", () => {
     expect(backend).toContain('`custom_${input.accountId}_${input.professionalId}`');
     expect(storageRules).toContain("match /assistant-assets/{accountId}/{professionalId}/{fileName}");
     expect(storageRules).toContain("currentUser().data.role == 'hq'");
+    expect(storageRules).toContain("currentUser().data.professionalId == professionalId");
+    expect(backend).toContain("Você só pode configurar a assistente do seu próprio perfil.");
+    expect(backend).toContain("Você só pode atualizar a assistente do seu próprio perfil.");
+    expect(assistantSettings).toContain("Configurações da sua assistente");
+    expect(assistantSettings).toContain("if (adminMode) await updateAssistantSettings(settings)");
   });
 
   it("inclui callables e seeds no deploy de homologação", () => {

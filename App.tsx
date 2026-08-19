@@ -366,19 +366,19 @@ const App: React.FC = () => {
       )}
 
       {view === "landing" && (
-        <LandingView
-          profile={profile}
-          loading={profileLoading}
-          onStart={() => profile && setView("patient")}
-          onPlans={() => setView("pricing")}
-        />
+        <>
+          <LandingView
+            profile={profile}
+            loading={profileLoading}
+            onStart={() => profile && setView("patient")}
+            onPlans={() => setView("pricing")}
+          />
+          {profile && <PatientAssistantGuide profile={profile} stage="journey" />}
+        </>
       )}
 
       {view === "patient" && profile && (
-        <>
-          <PatientJourney profile={profile} onExit={() => setView("landing")} />
-          <PatientAssistantGuide profile={profile} stage="journey" />
-        </>
+        <PatientJourney profile={profile} onExit={() => setView("landing")} />
       )}
 
       {view === "pricing" && (

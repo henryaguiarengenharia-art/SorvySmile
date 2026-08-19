@@ -2511,9 +2511,22 @@ export const getAssistantAdminSettings = onCall(
   { enforceAppCheck: ENFORCE_APP_CHECK },
   async (request) => {
     const uid = requireUid(request);
-    await requireHq(uid);
     const input = parseInput(assistantWorkspaceSchema, request.data ?? {});
     if (!input.accountId) throw new HttpsError("invalid-argument", "Selecione uma conta.");
+    const actor = await readUser(uid);
+    const ownsProfessionalProfile = actor.role === "professional"
+      && actor.accountId === input.accountId
+      && Boolean(actor.professionalId)
+      && actor.professionalId === input.professionalId;
+    if (actor.role !== "hq" && !ownsProfessionalProfile) {
+      throw new HttpsError("permission-denied", "Você só pode configurar a assistente do seu próprio perfil.");
+    }
+    if (ownsProfessionalProfile) {
+      const professional = await db.doc(`professionals/${input.professionalId}`).get();
+      if (!professional.exists || professional.data()?.isActive !== true) {
+        throw new HttpsError("failed-precondition", "O perfil profissional precisa estar ativo.");
+      }
+    }
     const customId = input.professionalId
       ? `custom_${input.accountId}_${input.professionalId}`
       : `custom_${input.accountId}`;
@@ -2638,8 +2651,15 @@ export const updateCustomAssistantProfile = onCall(
   { enforceAppCheck: ENFORCE_APP_CHECK },
   async (request) => {
     const uid = requireUid(request);
-    await requireHq(uid);
     const input = parseInput(customAssistantProfileSchema, request.data);
+    const actor = await readUser(uid);
+    const ownsProfessionalProfile = actor.role === "professional"
+      && actor.accountId === input.accountId
+      && Boolean(actor.professionalId)
+      && actor.professionalId === input.professionalId;
+    if (actor.role !== "hq" && !ownsProfessionalProfile) {
+      throw new HttpsError("permission-denied", "Você só pode atualizar a assistente do seu próprio perfil.");
+    }
     const account = await db.doc(`accounts/${input.accountId}`).get();
     if (!account.exists) throw new HttpsError("not-found", "Conta não encontrada.");
     if (input.enabled && !planHasProfessionalAssistants(normalizePlan(account.data()?.plan))) {
@@ -2647,7 +2667,7 @@ export const updateCustomAssistantProfile = onCall(
     }
     if (input.professionalId) {
       const professional = await db.doc(`professionals/${input.professionalId}`).get();
-      if (!professional.exists || professional.data()?.accountId !== input.accountId) {
+      if (!professional.exists || professional.data()?.accountId !== input.accountId || (ownsProfessionalProfile && professional.data()?.isActive !== true)) {
         throw new HttpsError("permission-denied", "Profissional fora da conta selecionada.");
       }
     }

@@ -33,9 +33,16 @@ service firebase.storage {
       allow get: if true;
       allow list: if false;
       allow write: if signedIn()
-        && currentUser().data.role == 'hq'
         && request.resource.size < 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/(png|webp)');
+        && request.resource.contentType.matches('image/(png|webp)')
+        && (
+          currentUser().data.role == 'hq'
+          || (
+            currentUser().data.role == 'professional'
+            && currentUser().data.accountId == accountId
+            && currentUser().data.professionalId == professionalId
+          )
+        );
     }
 
     match /{allPaths=**} {

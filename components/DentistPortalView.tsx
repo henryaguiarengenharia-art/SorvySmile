@@ -677,6 +677,13 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
               </p>
             </div>
           </div>
+          {planConfig.features.assistantPreview && !readOnly && (
+            <AssistantAdminCard
+              accountId={professional.billingAccountId}
+              professionalId={professional.id}
+              plan={professional.plan}
+            />
+          )}
           <div className="grid gap-5 md:grid-cols-2">
             <Field label="Link público">
               <input value={publicSlug} disabled={readOnly} onChange={(event) => setPublicSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} className="input" />
@@ -765,13 +772,6 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             )}
             Salvar perfil
           </button>}
-          {planConfig.features.assistantPreview && !readOnly && (
-            <AssistantAdminCard
-              accountId={professional.billingAccountId}
-              professionalId={professional.id}
-              plan={professional.plan}
-            />
-          )}
         </section>
       )}
 

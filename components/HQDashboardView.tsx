@@ -553,7 +553,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
                 </div>
               </div>
 
-              <AssistantAdminCard accountId={account.id} professionalId={isClinicManager ? undefined : professional.id} plan={account.tier} />
+              <AssistantAdminCard accountId={account.id} professionalId={isClinicManager ? undefined : professional.id} plan={account.tier} adminMode />
 
               <div className="mt-7 space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ações administrativas</p>
