@@ -1,4 +1,4 @@
-import { LeadRecord, WorkspaceUser } from "../types";
+import { LeadRecord, ProfessionalAssistantSettings, WorkspaceUser } from "../types";
 
 export type AssistantShortcutId =
   | "priorities"
@@ -22,6 +22,13 @@ export interface DeterministicAssistantReply {
   actionKeys?: string[];
   shortcut?: AssistantShortcutId;
 }
+
+const TONE_LEAD_INS: Record<ProfessionalAssistantSettings["tone"], string> = {
+  professional_warm: "Com base nos dados do seu painel, organizei o próximo passo:",
+  direct_clinical: "Leitura objetiva do painel:",
+  empathetic_educational: "Vamos organizar isso com clareza:",
+  casual_friendly: "Vamos lá! Aqui está o que encontrei:",
+};
 
 export const ASSISTANT_SHORTCUTS: AssistantShortcut[] = [
   { id: "priorities", label: "Prioridades de hoje", question: "O que devo priorizar hoje?" },
@@ -216,40 +223,67 @@ function directLeadReply(question: string, leads: LeadRecord[], now: number): De
   };
 }
 
+function personalizeDeterministicReply(
+  reply: DeterministicAssistantReply,
+  settings?: ProfessionalAssistantSettings,
+): DeterministicAssistantReply {
+  if (!settings) return reply;
+  const assistantName = settings.name.trim() || "Sofia";
+  const answer = reply.answer.replace(/\b(?:A|a) Sofia\b/g, assistantName);
+  return {
+    ...reply,
+    answer: `${TONE_LEAD_INS[settings.tone]}\n\n${answer}`,
+  };
+}
+
 export function routeAssistantQuestion(input: {
   question: string;
   leads: LeadRecord[];
   role: WorkspaceUser["role"];
   now?: number;
+  assistantSettings?: ProfessionalAssistantSettings;
 }): DeterministicAssistantReply | null {
   const question = input.question.trim();
   if (!question) return null;
   const normalized = normalize(question);
   const now = input.now ?? Date.now();
+  const finish = (reply: DeterministicAssistantReply): DeterministicAssistantReply => (
+    personalizeDeterministicReply(reply, input.assistantSettings)
+  );
   const direct = directLeadReply(question, input.leads, now);
-  if (direct) return direct;
+  if (direct) return finish(direct);
   if (/(prioriz|quem devo contatar|prioridade|o que devo fazer hoje|leads priorit)/.test(normalized)) {
-    return prioritiesReply(input.leads, now);
+    return finish(prioritiesReply(input.leads, now));
   }
   if (/(minha agenda|agenda|agendament|consultas marcadas)/.test(normalized)) {
-    return agendaReply(input.leads);
+    return finish(agendaReply(input.leads));
   }
   if (/(post do dia|post de hoje|conteudo do dia|publicar hoje)/.test(normalized)) {
-    return {
+    return finish({
       headline: "Post do dia",
       answer: "Seu Post do Dia está disponível no painel. Abra a área para revisar a arte, copiar a legenda e baixar o formato Feed ou Story.",
       actionKeys: ["open-post"],
       shortcut: "post",
-    };
+    });
   }
   if (/(precisam de atencao|sem retorno|sem contato|aguardando contato|leads parados|backlog)/.test(normalized)) {
-    return attentionReply(input.leads, now);
+    return finish(attentionReply(input.leads, now));
   }
   if (/(mensagem para novos|mensagem para lead|primeiro contato|rascunho|follow[- ]?up)/.test(normalized)) {
-    return newLeadMessageReply(input.leads, now);
+    return finish(newLeadMessageReply(input.leads, now));
+  }
+  if (/(informacoes? (?:do|de) atendimento|horarios? de atendimento|quais convenios|servicos? (?:oferecidos|atendidos|que (?:eu|nos) atendo)|valores? (?:de referencia|da consulta|do atendimento)|publico atendido|como (?:eu|nos) atendo)/.test(normalized)) {
+    const serviceContext = input.assistantSettings?.serviceContext.trim();
+    return finish({
+      headline: "Informações do seu atendimento",
+      answer: serviceContext
+        ? `${serviceContext}\n\nEstas informações foram cadastradas por você nas configurações da assistente.`
+        : "Você ainda não cadastrou informações de atendimento. Abra a aba Assistente para incluir serviços, horários, convênios, valores de referência e público atendido.",
+      actionKeys: input.role === "professional" ? ["open-assistant"] : ["open-dashboard"],
+    });
   }
   if (/(analise do funil|funil|conversao|gargalo|resumo|ultimos 30 dias|indicadores|metricas)/.test(normalized)) {
-    return funnelReply(input.leads, input.role);
+    return finish(funnelReply(input.leads, input.role));
   }
   return null;
 }

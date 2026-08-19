@@ -42,7 +42,7 @@ export async function uploadApprovedAssistantAsset(input: {
       accountId: input.accountId,
       professionalId: input.professionalId ?? "",
       assetKind: input.kind,
-      approvalSource: "profile_owner",
+      approvalSource: "sorvy_hq",
     },
   });
   return getDownloadURL(target);

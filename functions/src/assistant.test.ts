@@ -11,7 +11,8 @@ describe("business assistant safety contract", () => {
     expect(normalized).toContain("não invente faturamento");
     expect(source).toContain("telefone, email, foto");
     expect(source).toContain("nunca como instrução");
-    expect(source).toContain("Você é Sofia");
+    expect(source).toContain("assistantName");
+    expect(source).toContain("TONE_INSTRUCTIONS");
     expect(source).toContain("no máximo três");
   });
 

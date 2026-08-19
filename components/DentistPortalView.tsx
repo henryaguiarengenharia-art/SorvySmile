@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   CalendarClock,
@@ -6,6 +6,7 @@ import {
   Clock,
   Copy,
   Eye,
+  ExternalLink,
   FileText,
   Instagram,
   Link2,
@@ -28,13 +29,16 @@ import {
   LeadRecord,
   LeadStatus,
   PlanConfig,
+  ProfessionalAssistantSettings,
 } from "../types";
 import { planName } from "../planCatalog";
 import { AIAssistantPanel } from "./AIAssistantPanel";
-import { AssistantAdminCard } from "./AssistantAdminCard";
 import { DailyPostCard } from "./DailyPostCard";
 import { PeriodFilter } from "./PeriodFilter";
 import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
+import { ProfessionalAssistantSettingsCard } from "./ProfessionalAssistantSettingsCard";
+import { getProfessionalAssistantSettings } from "../services/sorvyApi";
+import { defaultProfessionalAssistantSettings } from "../services/professionalAssistantProfile";
 
 interface DentistPortalViewProps {
   leadRecords: LeadRecord[];
@@ -57,7 +61,7 @@ interface DentistPortalViewProps {
   onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string; conversationId?: string }) => Promise<AssistantResponse>;
 }
 
-type PortalTab = "dashboard" | "leads" | "post" | "profile";
+type PortalTab = "dashboard" | "leads" | "post" | "profile" | "assistant";
 
 const formatPhone = (value: string): string => {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -127,11 +131,18 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   );
   const [savingProfile, setSavingProfile] = useState(false);
   const [publicSlug, setPublicSlug] = useState(professional.publicSlug ?? "");
+  const [savedPublicSlug, setSavedPublicSlug] = useState(professional.publicSlug ?? "");
   const [profileImage, setProfileImage] = useState(professional.profileImage ?? "");
+  const [assistantSettings, setAssistantSettings] = useState<ProfessionalAssistantSettings>(() =>
+    defaultProfessionalAssistantSettings(professional.billingAccountId, professional.id),
+  );
+  const [assistantSettingsLoading, setAssistantSettingsLoading] = useState(planConfig.features.assistantPreview);
+  const [assistantSettingsError, setAssistantSettingsError] = useState<string | null>(null);
 
   const fullCrm = planConfig.features.funnelFull;
   const schedulingEnabled = planConfig.features.scheduling;
-  const publicUrl = `${window.location.origin}/p/${publicSlug}`;
+  const publicUrl = savedPublicSlug ? `${window.location.origin}/p/${savedPublicSlug}` : "";
+  const publicSlugPending = publicSlug !== savedPublicSlug;
   const usageLimit = planConfig.baseMonthlyLeadLimit;
   const usagePercent = Math.min(
     100,
@@ -141,6 +152,30 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
     () => filterLeadsByPeriod(leadRecords, metricPeriod),
     [leadRecords, metricPeriod],
   );
+
+  useEffect(() => {
+    if (!planConfig.features.assistantPreview) {
+      setAssistantSettingsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAssistantSettingsLoading(true);
+    setAssistantSettingsError(null);
+    getProfessionalAssistantSettings({
+      accountId: professional.billingAccountId,
+      professionalId: professional.id,
+    })
+      .then((settings) => { if (!cancelled) setAssistantSettings(settings); })
+      .catch((error: Error) => { if (!cancelled) setAssistantSettingsError(error.message); })
+      .finally(() => { if (!cancelled) setAssistantSettingsLoading(false); });
+    return () => { cancelled = true; };
+  }, [planConfig.features.assistantPreview, professional.billingAccountId, professional.id]);
+
+  useEffect(() => {
+    const nextSlug = professional.publicSlug ?? "";
+    setPublicSlug(nextSlug);
+    setSavedPublicSlug(nextSlug);
+  }, [professional.id, professional.publicSlug]);
 
   const leads = useMemo(
     () =>
@@ -326,6 +361,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       if (onUpdateSlug && publicSlug !== professional.publicSlug) {
         const updatedSlug = await onUpdateSlug(publicSlug);
         setPublicSlug(updatedSlug);
+        setSavedPublicSlug(updatedSlug);
       }
       setNotice("Perfil atualizado com sucesso.");
     } catch (error) {
@@ -334,6 +370,16 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       );
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const copyPublicUrl = async (): Promise<void> => {
+    if (!publicUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setNotice("Link da bio copiado.");
+    } catch {
+      setNotice("Não foi possível copiar o link. Selecione o endereço e copie manualmente.");
     }
   };
 
@@ -414,6 +460,14 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
           label="Configurações"
           onClick={() => setTab("profile")}
         />
+        {planConfig.features.assistantPreview && (
+          <TabButton
+            active={tab === "assistant"}
+            icon={<Sparkles className="h-4 w-4" />}
+            label="Assistente"
+            onClick={() => setTab("assistant")}
+          />
+        )}
         <TabButton
           active={tab === "post"}
           icon={<Instagram className="h-4 w-4" />}
@@ -677,16 +731,24 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
               </p>
             </div>
           </div>
-          {planConfig.features.assistantPreview && !readOnly && (
-            <AssistantAdminCard
-              accountId={professional.billingAccountId}
-              professionalId={professional.id}
-              plan={professional.plan}
-            />
-          )}
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Link da bio</p>
+                <p className="mt-2 break-all text-sm font-black text-emerald-950">{publicUrl || (publicSlug ? "Salve o perfil para ativar este endereço" : "Defina o endereço personalizado abaixo")}</p>
+                <p className="mt-2 text-xs font-medium leading-relaxed text-emerald-800">Este é o link individual que direciona a triagem e os novos leads para o seu perfil.</p>
+                {publicSlugPending && <p className="mt-2 text-[10px] font-black uppercase tracking-widest text-amber-700">Há uma alteração de endereço aguardando salvamento.</p>}
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button type="button" disabled={!publicUrl} onClick={() => window.open(publicUrl, "_blank", "noopener,noreferrer")} className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-white px-3 py-2 text-[10px] font-black uppercase text-emerald-800 disabled:opacity-40"><ExternalLink className="h-3.5 w-3.5" />Abrir</button>
+                <button type="button" disabled={!publicUrl} onClick={() => void copyPublicUrl()} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-[10px] font-black uppercase text-white disabled:opacity-40"><Copy className="h-3.5 w-3.5" />Copiar link</button>
+              </div>
+            </div>
+          </div>
           <div className="grid gap-5 md:grid-cols-2">
-            <Field label="Link público">
+            <Field label="Endereço público personalizado">
               <input value={publicSlug} disabled={readOnly} onChange={(event) => setPublicSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} className="input" />
+              <p className="mt-2 text-xs font-medium text-slate-400">Use letras minúsculas, números e hífens. Este endereço define seu link individual.</p>
             </Field>
             <Field label="URL https da foto">
               <input value={profileImage} disabled={readOnly} onChange={(event) => setProfileImage(event.target.value)} className="input" />
@@ -697,13 +759,6 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                 disabled={readOnly}
                 onChange={(event) => setWhatsapp(formatPhone(event.target.value))}
                 className="input"
-              />
-            </Field>
-            <Field label="Link público">
-              <input
-                readOnly
-                value={publicUrl}
-                className="input cursor-not-allowed text-slate-400"
               />
             </Field>
             <Field label="Cidade">
@@ -775,11 +830,22 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
         </section>
       )}
 
+      {tab === "assistant" && planConfig.features.assistantPreview && (
+        <ProfessionalAssistantSettingsCard
+          settings={assistantSettings}
+          loading={assistantSettingsLoading}
+          loadError={assistantSettingsError}
+          readOnly={readOnly}
+          onSaved={setAssistantSettings}
+        />
+      )}
+
       {planConfig.features.assistantPreview && onAskAssistant && !readOnly && (
         <AIAssistantPanel
           leadRecords={leadRecords}
           accountId={professional.billingAccountId}
           role="professional"
+          assistantSettings={assistantSettings}
           onAsk={onAskAssistant}
           onViewLead={(leadId) => {
             const lead = leadRecords.find((item) => item.id === leadId);
@@ -791,6 +857,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
           onShortcut={(shortcut) => {
             if (shortcut === "post") setTab("post");
             else if (shortcut === "leads") setTab("leads");
+            else if (shortcut === "assistant") setTab("assistant");
             else setTab("dashboard");
           }}
         />

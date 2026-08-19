@@ -80,6 +80,8 @@ import {
   patientConversionActionSchema,
   professionalStatusSchema,
   professionalArchiveSchema,
+  professionalAssistantSettingsSchema,
+  professionalAssistantTargetSchema,
   professionalRestoreSchema,
   professionalSlugSchema,
   professionalTrialSchema,
@@ -286,6 +288,7 @@ type AdminAuditAction =
   | "assistant_requested"
   | "assistant_action_confirmed"
   | "assistant_settings_updated"
+  | "professional_assistant_settings_updated"
   | "custom_assistant_updated";
 
 type FirestoreWriter = { set: (...args: any[]) => unknown };
@@ -2220,7 +2223,14 @@ export const askBusinessAssistant = onCall(
     const uid = requireUid(request);
     const input = parseInput(assistantRequestSchema, request.data);
     const access = await resolveAssistantAccess(uid, input.accountId);
+    const operationalAssistant = await readProfessionalAssistantSettings(
+      access.accountId,
+      access.user.role === "professional" ? access.user.professionalId : undefined,
+    );
     const assistantId = definitionIdForMode(input.mode);
+    if (access.user.role === "professional" && !operationalAssistant.enabled) {
+      throw new HttpsError("failed-precondition", "Sua assistente está desativada nas configurações do perfil.");
+    }
     if (!access.entitlement.enabled) {
       await recordAssistantAudit({
         uid, accountId: access.accountId, professionalId: access.user.professionalId,
@@ -2238,7 +2248,7 @@ export const askBusinessAssistant = onCall(
         assistantId, mode: input.mode, eventType: "mode_blocked", status: "blocked",
         details: { role: access.user.role ?? "professional" },
       });
-      throw new HttpsError("permission-denied", "Este modo da Sofia não está disponível para o seu papel.");
+      throw new HttpsError("permission-denied", "Este modo da assistente não está disponível para o seu papel.");
     }
     const conversationRef = input.conversationId
       ? db.doc(`assistantConversations/${input.conversationId}`)
@@ -2267,6 +2277,7 @@ export const askBusinessAssistant = onCall(
     try {
       const result = await generateBusinessAssistant(
         GEMINI_API_KEY.value(), GEMINI_MODEL.value(), input.mode, context, input.question,
+        operationalAssistant,
       );
       const now = Date.now();
       const userMessageRef = conversationRef.collection("messages").doc();
@@ -2355,7 +2366,7 @@ export const askBusinessAssistant = onCall(
       ]);
       return {
         ...result,
-        assistantName: "Sofia",
+        assistantName: operationalAssistant.name,
         mode: input.mode,
         leadId: selectedLead?.id,
         conversationId: conversationRef.id,
@@ -2378,13 +2389,13 @@ export const askBusinessAssistant = onCall(
         generatedAt: now,
       };
     } catch (error) {
-      console.error("Falha na Sofia", describeAiFailure(error));
+      console.error("Falha na assistente profissional", describeAiFailure(error));
       await recordAssistantAudit({
         uid, accountId: access.accountId, professionalId: access.user.professionalId,
         assistantId, mode: input.mode, eventType: "assistant_error", status: "failed",
         conversationId: conversationRef.id,
       });
-      throw new HttpsError("internal", "A Sofia está temporariamente indisponível. Nenhuma ação foi executada.");
+      throw new HttpsError("internal", "A assistente está temporariamente indisponível. Nenhuma ação foi executada.");
     }
   },
 );
@@ -2507,26 +2518,135 @@ export const recordAssistantClientEvent = onCall(
   },
 );
 
+const PROFESSIONAL_ASSISTANT_TONES = [
+  "professional_warm",
+  "direct_clinical",
+  "empathetic_educational",
+  "casual_friendly",
+] as const;
+
+type ProfessionalAssistantTone = typeof PROFESSIONAL_ASSISTANT_TONES[number];
+
+interface ProfessionalAssistantSettingsRecord {
+  accountId: string;
+  professionalId: string;
+  enabled: boolean;
+  name: string;
+  tone: ProfessionalAssistantTone;
+  serviceContext: string;
+  updatedAt?: number;
+}
+
+function professionalAssistantSettingsFromData(
+  accountId: string,
+  professionalId: string,
+  data?: FirebaseFirestore.DocumentData,
+): ProfessionalAssistantSettingsRecord {
+  const tone = PROFESSIONAL_ASSISTANT_TONES.includes(data?.tone)
+    ? data?.tone as ProfessionalAssistantTone
+    : "professional_warm";
+  return {
+    accountId,
+    professionalId,
+    enabled: data?.enabled !== false,
+    name: String(data?.name ?? "Sofia").trim().slice(0, 40) || "Sofia",
+    tone,
+    serviceContext: String(data?.serviceContext ?? "").trim().slice(0, 2000),
+    updatedAt: Number(data?.updatedAtMs ?? 0) || undefined,
+  };
+}
+
+async function requireProfessionalAssistantTarget(
+  uid: string,
+  accountId: string,
+  professionalId: string,
+): Promise<void> {
+  const actor = await readUser(uid);
+  const ownsProfile = actor.role === "professional"
+    && actor.accountId === accountId
+    && actor.professionalId === professionalId;
+  if (actor.role !== "hq" && !ownsProfile) {
+    throw new HttpsError("permission-denied", "Você só pode configurar sua própria assistente.");
+  }
+  const [account, professional] = await Promise.all([
+    db.doc(`accounts/${accountId}`).get(),
+    db.doc(`professionals/${professionalId}`).get(),
+  ]);
+  if (!account.exists || !professional.exists || professional.data()?.accountId !== accountId) {
+    throw new HttpsError("not-found", "Conta ou profissional não encontrado.");
+  }
+  if (!planHasProfessionalAssistants(normalizePlan(account.data()?.plan))) {
+    throw new HttpsError("failed-precondition", "A assistente personalizada está disponível nos planos Pro e Network.");
+  }
+  if (ownsProfile && (account.data()?.status !== "active" || professional.data()?.isActive !== true)) {
+    throw new HttpsError("failed-precondition", "A conta e o perfil profissional precisam estar ativos.");
+  }
+}
+
+async function readProfessionalAssistantSettings(
+  accountId: string,
+  professionalId?: string,
+): Promise<ProfessionalAssistantSettingsRecord> {
+  if (!professionalId) return professionalAssistantSettingsFromData(accountId, "clinic");
+  const snap = await db.doc(`professionalAssistantSettings/${professionalId}`).get();
+  return professionalAssistantSettingsFromData(accountId, professionalId, snap.data());
+}
+
+export const getProfessionalAssistantSettings = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(professionalAssistantTargetSchema, request.data);
+    await requireProfessionalAssistantTarget(uid, input.accountId, input.professionalId);
+    return readProfessionalAssistantSettings(input.accountId, input.professionalId);
+  },
+);
+
+export const updateProfessionalAssistantSettings = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(professionalAssistantSettingsSchema, request.data);
+    await requireProfessionalAssistantTarget(uid, input.accountId, input.professionalId);
+    const now = Date.now();
+    const ref = db.doc(`professionalAssistantSettings/${input.professionalId}`);
+    const existing = await ref.get();
+    const batch = db.batch();
+    batch.set(ref, {
+      accountId: input.accountId,
+      professionalId: input.professionalId,
+      enabled: input.enabled,
+      name: input.name,
+      tone: input.tone,
+      serviceContext: input.serviceContext,
+      createdAtMs: existing.data()?.createdAtMs ?? FieldValue.serverTimestamp(),
+      createdBy: existing.data()?.createdBy ?? uid,
+      updatedAtMs: now,
+      updatedBy: uid,
+    }, { merge: true });
+    addAdminAudit(batch, {
+      actorUid: uid,
+      action: "professional_assistant_settings_updated",
+      accountId: input.accountId,
+      professionalId: input.professionalId,
+      details: { enabled: input.enabled, tone: input.tone, hasServiceContext: Boolean(input.serviceContext) },
+      now,
+    });
+    await batch.commit();
+    return professionalAssistantSettingsFromData(input.accountId, input.professionalId, {
+      ...input,
+      updatedAtMs: now,
+    });
+  },
+);
+
 export const getAssistantAdminSettings = onCall(
   { enforceAppCheck: ENFORCE_APP_CHECK },
   async (request) => {
     const uid = requireUid(request);
+    await requireHq(uid);
     const input = parseInput(assistantWorkspaceSchema, request.data ?? {});
     if (!input.accountId) throw new HttpsError("invalid-argument", "Selecione uma conta.");
-    const actor = await readUser(uid);
-    const ownsProfessionalProfile = actor.role === "professional"
-      && actor.accountId === input.accountId
-      && Boolean(actor.professionalId)
-      && actor.professionalId === input.professionalId;
-    if (actor.role !== "hq" && !ownsProfessionalProfile) {
-      throw new HttpsError("permission-denied", "Você só pode configurar a assistente do seu próprio perfil.");
-    }
-    if (ownsProfessionalProfile) {
-      const professional = await db.doc(`professionals/${input.professionalId}`).get();
-      if (!professional.exists || professional.data()?.isActive !== true) {
-        throw new HttpsError("failed-precondition", "O perfil profissional precisa estar ativo.");
-      }
-    }
     const customId = input.professionalId
       ? `custom_${input.accountId}_${input.professionalId}`
       : `custom_${input.accountId}`;
@@ -2651,15 +2771,8 @@ export const updateCustomAssistantProfile = onCall(
   { enforceAppCheck: ENFORCE_APP_CHECK },
   async (request) => {
     const uid = requireUid(request);
+    await requireHq(uid);
     const input = parseInput(customAssistantProfileSchema, request.data);
-    const actor = await readUser(uid);
-    const ownsProfessionalProfile = actor.role === "professional"
-      && actor.accountId === input.accountId
-      && Boolean(actor.professionalId)
-      && actor.professionalId === input.professionalId;
-    if (actor.role !== "hq" && !ownsProfessionalProfile) {
-      throw new HttpsError("permission-denied", "Você só pode atualizar a assistente do seu próprio perfil.");
-    }
     const account = await db.doc(`accounts/${input.accountId}`).get();
     if (!account.exists) throw new HttpsError("not-found", "Conta não encontrada.");
     if (input.enabled && !planHasProfessionalAssistants(normalizePlan(account.data()?.plan))) {
@@ -2667,7 +2780,7 @@ export const updateCustomAssistantProfile = onCall(
     }
     if (input.professionalId) {
       const professional = await db.doc(`professionals/${input.professionalId}`).get();
-      if (!professional.exists || professional.data()?.accountId !== input.accountId || (ownsProfessionalProfile && professional.data()?.isActive !== true)) {
+      if (!professional.exists || professional.data()?.accountId !== input.accountId) {
         throw new HttpsError("permission-denied", "Profissional fora da conta selecionada.");
       }
     }

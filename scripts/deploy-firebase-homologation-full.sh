@@ -254,7 +254,7 @@ npx --no-install firebase deploy \
 
 printf 'Publicando o segundo lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:getAssistantAdminSettings,functions:getAssistantAdminOverview,functions:updateAssistantSettings,functions:updateCustomAssistantProfile,functions:publishScheduledDailyPosts,functions:assignDailyPostsHourly,functions:expireProfessionalTrials,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
+  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:getAssistantAdminSettings,functions:getAssistantAdminOverview,functions:updateAssistantSettings,functions:updateCustomAssistantProfile,functions:getProfessionalAssistantSettings,functions:updateProfessionalAssistantSettings,functions:publishScheduledDailyPosts,functions:assignDailyPostsHourly,functions:expireProfessionalTrials,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
   --project "$PROJECT_ID" \
   --non-interactive
 
@@ -267,7 +267,9 @@ for service_name in \
   getassistantadminsettings \
   getassistantadminoverview \
   updateassistantsettings \
-  updatecustomassistantprofile; do
+  updatecustomassistantprofile \
+  getprofessionalassistantsettings \
+  updateprofessionalassistantsettings; do
   gcloud run services add-iam-policy-binding "$service_name" \
     --region southamerica-east1 \
     --project "$PROJECT_ID" \

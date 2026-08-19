@@ -7,7 +7,8 @@ const assistantCore = readFileSync("functions/src/assistant.ts", "utf8");
 const panel = readFileSync("components/AIAssistantPanel.tsx", "utf8");
 const routing = readFileSync("services/assistantRouting.ts", "utf8");
 const patientGuide = readFileSync("components/PatientAssistantGuide.tsx", "utf8");
-const assistantSettings = readFileSync("components/AssistantAdminCard.tsx", "utf8");
+const assistantSettings = readFileSync("components/ProfessionalAssistantSettingsCard.tsx", "utf8");
+const professionalPortal = readFileSync("components/DentistPortalView.tsx", "utf8");
 const entitlements = readFileSync("functions/src/assistantEntitlements.ts", "utf8");
 const app = readFileSync("App.tsx", "utf8");
 const rules = readFileSync("firestore.rules", "utf8");
@@ -24,7 +25,7 @@ describe("produto de assistentes SorvySmile", () => {
   });
 
   it("apresenta uma única Sofia com modos, atalhos e confirmação humana", () => {
-    expect(panel).toContain("Sofia · Assistente virtual");
+    expect(panel).toContain("assistantName");
     expect(panel).toContain("Quem devo contatar hoje?");
     expect(panel).toContain("Resumo dos últimos 30 dias");
     expect(panel).toContain("Aplicar alteração");
@@ -73,11 +74,15 @@ describe("produto de assistentes SorvySmile", () => {
     expect(backend).toContain('`custom_${input.accountId}_${input.professionalId}`');
     expect(storageRules).toContain("match /assistant-assets/{accountId}/{professionalId}/{fileName}");
     expect(storageRules).toContain("currentUser().data.role == 'hq'");
-    expect(storageRules).toContain("currentUser().data.professionalId == professionalId");
-    expect(backend).toContain("Você só pode configurar a assistente do seu próprio perfil.");
-    expect(backend).toContain("Você só pode atualizar a assistente do seu próprio perfil.");
-    expect(assistantSettings).toContain("Configurações da sua assistente");
-    expect(assistantSettings).toContain("if (adminMode) await updateAssistantSettings(settings)");
+    expect(backend).toContain("professionalAssistantSettings");
+    expect(backend).toContain("Você só pode configurar sua própria assistente.");
+    expect(assistantSettings).toContain("Configurações da Assistente IA");
+    for (const tone of ["Profissional e Acolhedora", "Direta e Clínica", "Empática e Educada", "Descontraída e Amigável"]) {
+      expect(readFileSync("services/professionalAssistantProfile.ts", "utf8")).toContain(tone);
+    }
+    expect(professionalPortal).toContain('label="Assistente"');
+    expect(professionalPortal).toContain("Link da bio");
+    expect(professionalPortal).toContain("Copiar link");
   });
 
   it("inclui callables e seeds no deploy de homologação", () => {
@@ -90,6 +95,8 @@ describe("produto de assistentes SorvySmile", () => {
       "getAssistantAdminOverview",
       "updateAssistantSettings",
       "updateCustomAssistantProfile",
+      "getProfessionalAssistantSettings",
+      "updateProfessionalAssistantSettings",
       "seedAssistantDefinitions.js",
     ]) expect(deploy).toContain(name);
   });

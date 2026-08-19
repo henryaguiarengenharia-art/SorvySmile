@@ -17,6 +17,7 @@ import {
   AssistantMode,
   AssistantResponse,
   LeadRecord,
+  ProfessionalAssistantSettings,
   WorkspaceUser,
 } from "../types";
 import {
@@ -41,7 +42,8 @@ interface AIAssistantPanelProps {
   }) => Promise<AssistantResponse>;
   onLeadActionApplied?: () => void;
   onViewLead?: (leadId: string) => void;
-  onShortcut?: (shortcut: "dashboard" | "leads" | "post") => void;
+  onShortcut?: (shortcut: "dashboard" | "leads" | "post" | "assistant") => void;
+  assistantSettings?: ProfessionalAssistantSettings;
 }
 
 interface ChatEntry {
@@ -61,12 +63,12 @@ const modeForRole = (role: WorkspaceUser["role"]): AssistantMode => (
 
 const newId = (prefix: string): string => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-const welcomeMessage = (role: WorkspaceUser["role"]): ChatEntry => ({
+const welcomeMessage = (role: WorkspaceUser["role"], assistantName: string): ChatEntry => ({
   id: "sofia-welcome",
   role: "assistant",
   text: role === "clinic"
-    ? "Olá! Sou a Sofia, assistente virtual do SorvySmile.\n\nPosso ajudar você a priorizar a operação, acompanhar a agenda, organizar os leads, usar o Post do Dia e entender o funil.\n\nVocê também pode perguntar: Quem devo contatar hoje? ou pedir um Resumo dos últimos 30 dias.\n\nPor onde começamos?"
-    : "Olá! Sou a Sofia, assistente virtual do SorvySmile.\n\nPosso ajudar você a priorizar seus leads, preparar o próximo contato, acompanhar a agenda, usar o Post do Dia e entender o funil.\n\nVocê também pode perguntar: Quem devo contatar hoje? ou pedir um Resumo dos últimos 30 dias.\n\nPor onde começamos?",
+    ? `Olá! Sou ${assistantName}, sua assistente virtual no SorvySmile.\n\nPosso ajudar você a priorizar a operação, acompanhar a agenda, organizar os leads, usar o Post do Dia e entender o funil.\n\nVocê também pode perguntar: Quem devo contatar hoje? ou pedir um Resumo dos últimos 30 dias.\n\nPor onde começamos?`
+    : `Olá! Sou ${assistantName}, sua assistente virtual no SorvySmile.\n\nPosso ajudar você a priorizar seus leads, preparar o próximo contato, acompanhar a agenda, usar o Post do Dia e entender o funil.\n\nVocê também pode perguntar: Quem devo contatar hoje? ou pedir um Resumo dos últimos 30 dias.\n\nPor onde começamos?`,
   actionKeys: [],
 });
 
@@ -77,10 +79,12 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
   onLeadActionApplied,
   onViewLead,
   onShortcut,
+  assistantSettings,
 }) => {
+  const assistantName = assistantSettings?.name.trim() || "Sofia";
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatEntry[]>([welcomeMessage(role)]);
+  const [messages, setMessages] = useState<ChatEntry[]>([welcomeMessage(role, assistantName)]);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
@@ -90,6 +94,12 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open]);
+
+  useEffect(() => {
+    setMessages((current) => current.length === 1 && current[0]?.id === "sofia-welcome"
+      ? [welcomeMessage(role, assistantName)]
+      : current);
+  }, [assistantName, role]);
 
   const copyText = async (value: string): Promise<void> => {
     try {
@@ -127,6 +137,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
       question,
       leads: leadRecords,
       role,
+      assistantSettings,
     });
     if (deterministic) {
       addDeterministicMessage(deterministic);
@@ -151,7 +162,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
         remote: response,
       }]);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "A Sofia está indisponível.");
+      setError(requestError instanceof Error ? requestError.message : `${assistantName} está indisponível.`);
     } finally {
       setBusy(false);
     }
@@ -177,6 +188,10 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     }
     if (actionKey === "open-dashboard") {
       onShortcut?.("dashboard");
+      return;
+    }
+    if (actionKey === "open-assistant") {
+      onShortcut?.("assistant");
       return;
     }
     if (actionKey === "copy-message" && entry.suggestedMessage) {
@@ -221,17 +236,19 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
     setError(null);
   };
 
+  if (assistantSettings?.enabled === false) return null;
+
   return (
     <>
       {!open && (
         <button
           type="button"
-          aria-label="Abrir Sofia"
+          aria-label={`Abrir ${assistantName}`}
           onClick={openAssistant}
           className="fixed bottom-5 right-5 z-[90] flex items-center gap-3 rounded-full bg-black px-4 py-3 text-left text-white shadow-2xl transition hover:-translate-y-0.5 hover:bg-slate-900"
         >
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#18AFA5] text-white shadow-inner"><Sparkles className="h-5 w-5" /></span>
-          <span><span className="block text-sm font-black">Sofia</span><span className="block text-[9px] font-black uppercase tracking-[.18em] text-slate-300">Assistente IA</span></span>
+          <span><span className="block text-sm font-black">{assistantName}</span><span className="block text-[9px] font-black uppercase tracking-[.18em] text-slate-300">Assistente IA</span></span>
         </button>
       )}
 
@@ -240,11 +257,11 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
           <header className="flex items-center justify-between bg-black px-5 py-4 text-white">
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#151515] text-[#18AFA5] ring-1 ring-white/10"><Sparkles className="h-6 w-6" /></span>
-              <div aria-label="Sofia · Assistente virtual"><p className="text-lg font-black leading-none">Sofia</p><p className="mt-1 text-xs font-medium text-slate-300">IA para apoiar sua rotina</p></div>
+              <div aria-label={`${assistantName} · Assistente virtual`}><p className="text-lg font-black leading-none">{assistantName}</p><p className="mt-1 text-xs font-medium text-slate-300">IA para apoiar sua rotina</p></div>
             </div>
             <div className="flex items-center gap-1">
-              <button type="button" aria-label="Minimizar Sofia" onClick={() => setOpen(false)} className="rounded-xl p-2 text-slate-300 hover:bg-white/10 hover:text-white"><ChevronDown className="h-6 w-6" /></button>
-              <button type="button" aria-label="Fechar Sofia" onClick={() => setOpen(false)} className="rounded-xl p-2 text-slate-300 hover:bg-white/10 hover:text-white"><X className="h-6 w-6" /></button>
+              <button type="button" aria-label={`Minimizar ${assistantName}`} onClick={() => setOpen(false)} className="rounded-xl p-2 text-slate-300 hover:bg-white/10 hover:text-white"><ChevronDown className="h-6 w-6" /></button>
+              <button type="button" aria-label={`Fechar ${assistantName}`} onClick={() => setOpen(false)} className="rounded-xl p-2 text-slate-300 hover:bg-white/10 hover:text-white"><X className="h-6 w-6" /></button>
             </div>
           </header>
 
@@ -254,6 +271,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                 <ChatBubble
                   key={entry.id}
                   entry={entry}
+                  assistantName={assistantName}
                   busy={actionBusy}
                   onAction={(action) => void runAction(entry, action)}
                   onConfirm={(decision) => void decideAction(entry, decision)}
@@ -261,7 +279,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
                   onCopy={(value) => void copyText(value)}
                 />
               ))}
-              {busy && <div className="mr-8 flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-medium text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin text-[#18AFA5]" />Consultando a Sofia...</div>}
+              {busy && <div className="mr-8 flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-3 text-sm font-medium text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin text-[#18AFA5]" />Consultando {assistantName}...</div>}
               <div ref={messagesEndRef} />
             </div>
 
@@ -291,6 +309,7 @@ export const AIAssistantPanel: React.FC<AIAssistantPanelProps> = ({
 
 const ChatBubble = ({
   entry,
+  assistantName,
   busy,
   onAction,
   onConfirm,
@@ -298,6 +317,7 @@ const ChatBubble = ({
   onCopy,
 }: {
   entry: ChatEntry;
+  assistantName: string;
   busy: boolean;
   onAction: (action: string) => void;
   onConfirm: (decision: "confirm" | "cancel") => void;
@@ -308,7 +328,7 @@ const ChatBubble = ({
   return (
     <div className={isUser ? "ml-10" : "mr-5"}>
       <div className={`whitespace-pre-line rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? "rounded-br-md bg-black text-white" : "rounded-bl-md border border-slate-200 bg-white text-slate-700 shadow-sm"}`}>
-        {!isUser && <div className="mb-2 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-[#18AFA5]"><Bot className="h-3.5 w-3.5" /> Sofia</div>}
+        {!isUser && <div className="mb-2 flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-[#18AFA5]"><Bot className="h-3.5 w-3.5" /> {assistantName}</div>}
         {entry.text}
       </div>
 
@@ -325,7 +345,7 @@ const ChatBubble = ({
           {entry.actionKeys.map((action) => (
             <button key={action} type="button" onClick={() => onAction(action)} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800 hover:bg-emerald-100">
               {action === "open-lead" ? <Users className="h-3.5 w-3.5" /> : action === "copy-message" ? <Copy className="h-3.5 w-3.5" /> : <MessageCircle className="h-3.5 w-3.5" />}
-              {action === "open-lead" ? "Abrir lead" : action === "open-leads" ? "Abrir leads prioritários" : action === "open-post" ? "Abrir Post do Dia" : action === "open-dashboard" ? "Ver visão geral" : "Copiar mensagem"}
+              {action === "open-lead" ? "Abrir lead" : action === "open-leads" ? "Abrir leads prioritários" : action === "open-post" ? "Abrir Post do Dia" : action === "open-assistant" ? "Configurar assistente" : action === "open-dashboard" ? "Ver visão geral" : "Copiar mensagem"}
             </button>
           ))}
         </div>

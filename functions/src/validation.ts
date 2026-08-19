@@ -261,6 +261,23 @@ export const assistantSettingsSchema = z.object({
   enabledAssistants: z.array(z.enum(["sofia-conversion", "sofia-management"])).min(1).max(2),
 });
 
+export const professionalAssistantTargetSchema = z.object({
+  accountId: z.string().min(3).max(160),
+  professionalId: z.string().min(3).max(160),
+});
+
+export const professionalAssistantSettingsSchema = professionalAssistantTargetSchema.extend({
+  enabled: z.boolean(),
+  name: z.string().trim().min(2).max(40),
+  tone: z.enum([
+    "professional_warm",
+    "direct_clinical",
+    "empathetic_educational",
+    "casual_friendly",
+  ]),
+  serviceContext: z.string().trim().max(2000),
+});
+
 export const customAssistantProfileSchema = z.object({
   accountId: z.string().min(3).max(160),
   professionalId: z.string().min(3).max(160).optional(),

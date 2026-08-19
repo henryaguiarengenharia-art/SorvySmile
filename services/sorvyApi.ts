@@ -28,6 +28,7 @@ import {
   AssistantAdminOverview,
   AssistantMode,
   AssistantResponse,
+  ProfessionalAssistantSettings,
   AssistantWorkspace,
   DailyPost,
   DailyPostAssignment,
@@ -694,6 +695,23 @@ export async function askBusinessAssistant(input: {
   conversationId?: string;
 }): Promise<AssistantResponse> {
   const callable = httpsCallable<typeof input, AssistantResponse>(functions, "askBusinessAssistant");
+  try { return (await callable(input)).data; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function getProfessionalAssistantSettings(input: {
+  accountId: string;
+  professionalId: string;
+}): Promise<ProfessionalAssistantSettings> {
+  const callable = httpsCallable<typeof input, ProfessionalAssistantSettings>(functions, "getProfessionalAssistantSettings");
+  try { return (await callable(input)).data; }
+  catch (error) { throw new Error(errorMessage(error)); }
+}
+
+export async function updateProfessionalAssistantSettings(
+  input: ProfessionalAssistantSettings,
+): Promise<ProfessionalAssistantSettings> {
+  const callable = httpsCallable<ProfessionalAssistantSettings, ProfessionalAssistantSettings>(functions, "updateProfessionalAssistantSettings");
   try { return (await callable(input)).data; }
   catch (error) { throw new Error(errorMessage(error)); }
 }

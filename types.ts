@@ -321,6 +321,22 @@ export interface SubscriptionHistoryEvent {
 
 export type AssistantMode = 'management' | 'conversion';
 
+export type ProfessionalAssistantTone =
+  | 'professional_warm'
+  | 'direct_clinical'
+  | 'empathetic_educational'
+  | 'casual_friendly';
+
+export interface ProfessionalAssistantSettings {
+  accountId: string;
+  professionalId: string;
+  enabled: boolean;
+  name: string;
+  tone: ProfessionalAssistantTone;
+  serviceContext: string;
+  updatedAt?: number;
+}
+
 export type AssistantDefinitionId =
   | 'aury-patient-guide'
   | 'sofia-conversion'
@@ -398,7 +414,7 @@ export interface AssistantResponse {
   answer: string;
   actions: string[];
   suggestedMessage?: string;
-  assistantName: 'Sofia';
+  assistantName: string;
   mode: AssistantMode;
   leadId?: string;
   conversationId: string;

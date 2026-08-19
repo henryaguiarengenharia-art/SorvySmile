@@ -44,4 +44,43 @@ describe("roteamento operacional da Sofia", () => {
       role: "clinic",
     })).toBeNull();
   });
+
+  it("responde informações de atendimento cadastradas sem chamar a IA", () => {
+    const result = routeAssistantQuestion({
+      question: "Quais são minhas informações de atendimento?",
+      leads: [],
+      role: "professional",
+      assistantSettings: {
+        accountId: "account-1",
+        professionalId: "professional-1",
+        enabled: true,
+        name: "Clara",
+        tone: "empathetic_educational",
+        serviceContext: "Atendimento de segunda a sexta, das 8h às 18h.",
+      },
+    });
+    expect(result?.headline).toBe("Informações do seu atendimento");
+    expect(result?.answer).toContain("segunda a sexta");
+    expect(result?.answer).toContain("Vamos organizar isso com clareza:");
+    expect(result?.actionKeys).toContain("open-assistant");
+  });
+
+  it("aplica o nome escolhido nas respostas locais sem invocar a IA", () => {
+    const result = routeAssistantQuestion({
+      question: "Mensagem para novos leads",
+      leads: [],
+      role: "professional",
+      assistantSettings: {
+        accountId: "account-1",
+        professionalId: "professional-1",
+        enabled: true,
+        name: "Clara",
+        tone: "casual_friendly",
+        serviceContext: "",
+      },
+    });
+    expect(result?.answer).toContain("Clara prepara o rascunho");
+    expect(result?.answer).toContain("Vamos lá!");
+    expect(result?.answer).not.toContain("Sofia");
+  });
 });
