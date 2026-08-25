@@ -13,7 +13,7 @@ describe("solicitação de assinatura pela InfinitePay", () => {
         email: "contato@exemplo.com",
         whatsapp: "5531999999999",
         plan: "pro",
-        termsVersion: "2026-07",
+        termsVersion: "2026-08",
       },
       1_785_000_000_000,
     );
@@ -77,7 +77,7 @@ describe("solicitação de assinatura pela InfinitePay", () => {
         email: "legado@exemplo.com",
         whatsapp: "5531888888888",
         plan: "elite",
-        termsVersion: "2026-07",
+        termsVersion: "2026-08",
       },
       1,
     );

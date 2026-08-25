@@ -5,7 +5,7 @@ import { deleteUser, getAuth, signInAnonymously } from "firebase/auth";
 import { getFunctions, httpsCallable } from "firebase/functions";
 
 const EXPECTED_PROJECT_ID = "sorvysmile-homologacao";
-const CONSENT_VERSION = "2026-07";
+const CONSENT_VERSION = "2026-08";
 const DEFAULT_SLUG = "clinica-demo-hml";
 
 function fail(message) {
