@@ -35,6 +35,7 @@ import {
   logoutWorkspace,
   manageDailyPost,
   recordDailyPostEvent,
+  recordSubscriptionIntent,
   requestPasswordReset,
   registerPendingSubscription,
   restoreWorkspaceSession,
@@ -436,6 +437,7 @@ const App: React.FC = () => {
       {view === "checkout-confirm" && pendingRegistration && (
         <PaymentInstructionsView
           registration={pendingRegistration}
+          onSubscriptionIntent={() => void recordSubscriptionIntent("pending").catch((error: Error) => setPageError(error.message))}
           onFinished={() => setView("checkout-done")}
         />
       )}
@@ -459,7 +461,10 @@ const App: React.FC = () => {
       {(view === "dentist-portal" || view === "admin-dashboard")
         && workspace && currentAccount && currentTrialExpired && (
         <DashboardShell title="Teste gratuito concluído" onLogout={handleLogout}>
-          <TrialExpiredView account={currentAccount} />
+          <TrialExpiredView
+            account={currentAccount}
+            onSubscriptionIntent={() => void recordSubscriptionIntent("trial_expired").catch((error: Error) => setPageError(error.message))}
+          />
         </DashboardShell>
       )}
 
@@ -495,6 +500,7 @@ const App: React.FC = () => {
               }
               onUpdateSlug={(slug) => updateProfessionalSlug({ slug })}
               onAskAssistant={(input) => askBusinessAssistant(input)}
+              onSubscriptionIntent={(context) => void recordSubscriptionIntent(context).catch((error: Error) => setPageError(error.message))}
             />
           </React.Suspense>
         </DashboardShell>
@@ -533,6 +539,7 @@ const App: React.FC = () => {
                   throw error;
                 })
               }
+              onSubscriptionIntent={(context) => void recordSubscriptionIntent(context).catch((error: Error) => setPageError(error.message))}
             />
           </React.Suspense>
         </DashboardShell>
@@ -607,6 +614,7 @@ const App: React.FC = () => {
               dailyPostEvents={workspace.dailyPostEvents}
               adminAuditLogs={workspace.adminAuditLogs}
               subscriptionHistory={workspace.subscriptionHistory}
+              funnelEvents={workspace.funnelEvents}
               onManageDailyPost={manageDailyPost}
             />
           </React.Suspense>
@@ -1041,9 +1049,11 @@ const CheckoutView = ({
 const PaymentInstructionsView = ({
   registration,
   onFinished,
+  onSubscriptionIntent,
 }: {
   registration: PendingRegistration;
   onFinished: () => void;
+  onSubscriptionIntent: () => void;
 }) => {
   const paymentUrl = paymentUrlFor(registration.plan);
   const [paymentOpened, setPaymentOpened] = useState(false);
@@ -1083,7 +1093,10 @@ const PaymentInstructionsView = ({
             href={paymentUrl}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => setPaymentOpened(true)}
+            onClick={() => {
+              setPaymentOpened(true);
+              onSubscriptionIntent();
+            }}
             className="flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 py-5 text-sm font-black uppercase tracking-widest text-white hover:bg-blue-700"
           >
             <CreditCard className="h-5 w-5" />
@@ -1135,7 +1148,13 @@ const CheckoutReturnView = ({ onLogin }: { onLogin: () => void }) => (
   </main>
 );
 
-const TrialExpiredView = ({ account }: { account: import("./types").BillingAccount }) => {
+const TrialExpiredView = ({
+  account,
+  onSubscriptionIntent,
+}: {
+  account: import("./types").BillingAccount;
+  onSubscriptionIntent: () => void;
+}) => {
   const paymentUrl = paymentUrlFor(account.tier);
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-center">
@@ -1159,6 +1178,7 @@ const TrialExpiredView = ({ account }: { account: import("./types").BillingAccou
             href={paymentUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={onSubscriptionIntent}
             className="mt-7 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 py-5 text-sm font-black uppercase tracking-widest text-white hover:bg-blue-700"
           >
             Assinar e reativar acesso <ExternalLink className="h-5 w-5" />

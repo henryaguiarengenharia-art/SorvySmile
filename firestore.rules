@@ -83,6 +83,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /funnelEvents/{eventId} {
+      allow read: if isHq();
+      allow write: if false;
+    }
+
     match /users/{uid} {
       allow read: if signedIn() && (request.auth.uid == uid || isHq());
       allow write: if false;

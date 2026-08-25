@@ -14,6 +14,19 @@ export type AppView =
   | "subscriber-terms";
 
 export type PlanTier = 'lite' | 'pro' | 'network';
+export type AcquisitionSource = 'bio' | 'organic' | 'paid' | 'partner' | 'prospecting';
+export type FunnelEventType = 'account_signup' | 'trial_prepared' | 'lead_captured' | 'trial_activated' | 'whatsapp_opened' | 'contact_requested' | 'subscription_cta_clicked' | 'subscription_activated' | 'trial_converted' | 'trial_expired';
+export interface FunnelEvent {
+  id: string;
+  eventType: FunnelEventType;
+  accountId: string;
+  professionalId?: string | null;
+  leadId?: string | null;
+  source: AcquisitionSource;
+  attribution?: Record<string, string>;
+  metadata?: Record<string, unknown>;
+  occurredAtMs: number;
+}
 export interface PlanConfig {
   tier: PlanTier;
   price: number;
@@ -83,6 +96,8 @@ export interface BillingAccount {
   paymentStatus?: PaymentStatus;
   billingMode?: 'recurring_link';
   billingInterval?: 'monthly';
+  acquisitionSource?: AcquisitionSource;
+  attributionFirstTouch?: Record<string, string>;
 }
 
 export interface SmileScores {
@@ -132,7 +147,8 @@ export interface LeadRecord {
   contactPreference?: 'patient_whatsapp' | 'professional_contact';
   intentCategory?: string;
   recommendedSpecialty?: string;
-  source?: 'direct' | 'bio';
+  source?: AcquisitionSource;
+  attribution?: Record<string, string>;
   accountId?: string;
   professionalId?: string;
   consentTimestamp: number;

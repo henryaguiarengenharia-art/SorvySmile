@@ -140,6 +140,14 @@ conta; a InfinitePay é responsável pelos e-mails e mensagens de cobrança.
 - Personalizações e eventos ficam isolados por profissional. Feed e Story são
   gerados em PNG com 1080 × 1350 e 1080 × 1920, sem publicação na vitrine.
 - Os painéis separam indicadores de 7, 30 e 90 dias da visão geral acumulada.
+- O funil de lançamento usa eventos idempotentes em `funnelEvents`. O backend
+  registra cadastro, trial preparado, primeiro lead/ativação, ações de contato,
+  clique de assinatura, pagamento, conversão e expiração. Apenas a HQ lê essa
+  coleção; clientes não têm acesso direto.
+- A primeira atribuição da conta é preservada com UTM, referenciador e página de
+  entrada. As origens são fechadas em `bio`, `organic`, `paid`, `partner` e
+  `prospecting`. O painel HQ calcula contas únicas, ativação, trial para pago,
+  leads e mediana do tempo entre preparo e primeiro lead, inclusive por origem.
 - Os painéis Pro e Network oferecem a Sofia conforme o papel autorizado. Ela gera apoio
   operacional revisável e não realizam atendimento, diagnóstico ou prescrição.
 - A alteração de slug é transacional e cria um alias público para que o endereço

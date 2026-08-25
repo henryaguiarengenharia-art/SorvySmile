@@ -21,11 +21,13 @@ import {
 } from "lucide-react";
 import {
   AccountStatus,
+  AcquisitionSource,
   AdminAuditLog,
   BillingAccount,
   DentistRecord,
   DailyPost,
   DailyPostEventRecord,
+  FunnelEvent,
   LeadRecord,
   PlanConfig,
   PlanTier,
@@ -37,6 +39,7 @@ import { PeriodFilter } from "./PeriodFilter";
 import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
 import { AssistantAdminCard } from "./AssistantAdminCard";
 import { AssistantHqOverview } from "./AssistantHqOverview";
+import { calculateLaunchFunnelMetrics, formatTimeToValue } from "../services/funnelMetrics";
 
 interface HQDashboardViewProps {
   leadRecords: LeadRecord[];
@@ -71,6 +74,7 @@ interface HQDashboardViewProps {
   dailyPostEvents: DailyPostEventRecord[];
   adminAuditLogs: AdminAuditLog[];
   subscriptionHistory: SubscriptionHistoryEvent[];
+  funnelEvents: FunnelEvent[];
   onManageDailyPost: (input: DailyPostManagerInput) => Promise<unknown>;
 }
 
@@ -99,6 +103,14 @@ const statusCopy: Record<
 const formatBillingDate = (timestamp: number): string =>
   timestamp > 0 ? new Date(timestamp).toLocaleDateString("pt-BR") : "Após ativação";
 
+const sourceCopy: Record<AcquisitionSource, string> = {
+  bio: "Bio / direto",
+  organic: "Orgânico",
+  paid: "Mídia paga",
+  partner: "Parceiro",
+  prospecting: "Prospecção",
+};
+
 const dateInputValue = (timestamp: number): string => {
   const date = new Date(timestamp > Date.now() ? timestamp : Date.now() + 30 * 24 * 60 * 60 * 1000);
   return [
@@ -125,6 +137,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   dailyPostEvents,
   adminAuditLogs,
   subscriptionHistory,
+  funnelEvents,
   onManageDailyPost,
 }) => {
   const [search, setSearch] = useState("");
@@ -152,6 +165,10 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   const metricLeads = useMemo(
     () => filterLeadsByPeriod(leadRecords, metricPeriod),
     [leadRecords, metricPeriod],
+  );
+  const funnel = useMemo(
+    () => calculateLaunchFunnelMetrics(funnelEvents, metricPeriod),
+    [funnelEvents, metricPeriod],
   );
 
   const stats = useMemo(() => {
@@ -355,6 +372,41 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
           label="Contas em risco"
           value={String(stats.atRisk)}
         />
+      </section>
+
+      <section className="space-y-4 rounded-[2rem] border border-slate-100 bg-white p-6">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">Funil de lançamento</p>
+          <h2 className="mt-1 text-xl font-black">Aquisição, ativação e receita</h2>
+          <p className="mt-1 text-xs font-medium text-slate-500">Contas únicas no período selecionado. O trial ativa no primeiro lead.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
+          <FunnelKpi label="Cadastros" value={String(funnel.signups)} />
+          <FunnelKpi label="Trials preparados" value={String(funnel.trialsPrepared)} />
+          <FunnelKpi label="Trials ativados" value={String(funnel.trialsActivated)} />
+          <FunnelKpi label="Ativação" value={`${funnel.activationRate}%`} />
+          <FunnelKpi label="Leads capturados" value={String(funnel.leadsCaptured)} />
+          <FunnelKpi label="Trial → pago" value={`${funnel.trialToPaidRate}%`} />
+          <FunnelKpi label="Tempo até valor" value={formatTimeToValue(funnel.medianTimeToValueMs)} />
+        </div>
+        <div className="overflow-x-auto rounded-2xl border border-slate-100">
+          <table className="min-w-full text-left text-xs">
+            <thead className="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-400">
+              <tr><th className="px-4 py-3">Origem</th><th className="px-4 py-3">Cadastros</th><th className="px-4 py-3">Trials ativados</th><th className="px-4 py-3">Leads</th><th className="px-4 py-3">Trial → pago</th></tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+              {funnel.bySource.map((row) => (
+                <tr key={row.source}>
+                  <td className="px-4 py-3 capitalize">{sourceCopy[row.source]}</td>
+                  <td className="px-4 py-3">{row.signups}</td>
+                  <td className="px-4 py-3">{row.trialsActivated}</td>
+                  <td className="px-4 py-3">{row.leads}</td>
+                  <td className="px-4 py-3">{row.trialConversions}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.4fr_.6fr]">
@@ -702,6 +754,13 @@ const Kpi = ({
     </p>
     <p className="mt-1 text-2xl font-black">{value}</p>
   </article>
+);
+
+const FunnelKpi = ({ label, value }: { label: string; value: string }) => (
+  <div className="rounded-2xl bg-slate-50 p-4">
+    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+    <p className="mt-2 text-xl font-black text-slate-900">{value}</p>
+  </div>
 );
 
 const Info = ({ label, value }: { label: string; value: string }) => (

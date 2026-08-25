@@ -14,6 +14,15 @@ const optionalHttpsUrl = z.string().trim().max(500).refine((value) => {
   try { return new URL(value).protocol === "https:"; } catch { return false; }
 }, "Use uma URL https válida.");
 
+const attributionSchema = z.object({
+  utmSource: z.string().trim().max(100).optional(),
+  utmMedium: z.string().trim().max(100).optional(),
+  utmCampaign: z.string().trim().max(160).optional(),
+  utmContent: z.string().trim().max(160).optional(),
+  referrer: z.string().trim().max(500).optional(),
+  landingPath: z.string().trim().max(300).optional(),
+}).optional().default({});
+
 export const slugSchema = z
   .string()
   .trim()
@@ -33,6 +42,7 @@ export const startTriageSchema = z.object({
   consentVersion: z.literal(CONSENT_VERSION),
   photoConsent: z.literal(true),
   adultAndOwnershipConfirmed: z.literal(true),
+  attribution: attributionSchema,
 });
 
 export const captureLeadSchema = z.object({
@@ -57,6 +67,11 @@ export const checkoutSchema = z.object({
   plan: z.enum(["lite", "pro", "network", "elite"]),
   checkoutMode: z.enum(["paid", "trial"]).default("paid"),
   termsVersion: z.literal(SUBSCRIBER_TERMS_VERSION),
+  attribution: attributionSchema,
+});
+
+export const subscriptionIntentSchema = z.object({
+  context: z.enum(["trial_ready", "trial_active", "trial_expired", "pending", "overdue"]),
 });
 
 export const profilePatchSchema = z.object({

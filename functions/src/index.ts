@@ -96,7 +96,19 @@ import {
   slugify,
   startTriageSchema,
   teamMemberSchema,
+  subscriptionIntentSchema,
 } from "./validation.js";
+import {
+  AcquisitionSource,
+  AttributionInput,
+  classifyAcquisitionSource,
+  sanitizeAttribution,
+} from "./attribution.js";
+import {
+  funnelEventFields,
+  funnelEventId,
+  FunnelEventInput,
+} from "./funnelMetrics.js";
 import { assertSlugAllowed } from "./slug.js";
 import {
   chooseDailyPostTemplate,
@@ -152,6 +164,8 @@ interface SessionRecord {
   };
   scores?: Record<string, unknown>;
   leadId?: string;
+  source?: AcquisitionSource;
+  attribution?: AttributionInput;
 }
 
 interface AccountRecord {
@@ -169,7 +183,10 @@ interface AccountRecord {
   subscriptionStatus?: string;
   paymentStatus?: string;
   renewAtMs?: number;
+  activatedAtMs?: number;
   statusBeforeArchive?: string;
+  acquisitionSource?: AcquisitionSource;
+  attributionFirstTouch?: AttributionInput;
 }
 
 interface UserRecord {
@@ -351,6 +368,14 @@ function addSubscriptionHistory(writer: FirestoreWriter, input: {
   });
 }
 
+function addFunnelEvent(writer: FirestoreWriter, input: FunnelEventInput): void {
+  writer.set(
+    db.doc(`funnelEvents/${funnelEventId(input.eventKey)}`),
+    funnelEventFields(input),
+    { merge: true },
+  );
+}
+
 function assertAdminTarget(
   accountId: string,
   professionalId: string,
@@ -466,6 +491,8 @@ export const startTriage = onCall(
 
     const sessionRef = db.collection("triageSessions").doc();
     const now = Date.now();
+    const attribution = sanitizeAttribution(input.attribution);
+    const source = classifyAcquisitionSource(attribution);
     await sessionRef.set({
       uid,
       accountId: profile.accountId,
@@ -478,6 +505,8 @@ export const startTriage = onCall(
       photoConsentVersion: input.consentVersion,
       photoConsentAtMs: now,
       validationAttempts: 0,
+      source,
+      attribution,
       createdAtMs: now,
       updatedAtMs: now,
       expiresAtMs: now + SESSION_TTL_MS,
@@ -857,6 +886,8 @@ export const captureLead = onCall(
         throw new HttpsError("failed-precondition", "O acesso deste profissional está inativo.");
       }
       const scores = session.scores as Record<string, unknown>;
+      const source = session.source ?? "bio";
+      const attribution = session.attribution ?? {};
       transaction.set(leadRef, {
         accountId: session.accountId,
         professionalId: session.professionalId,
@@ -871,7 +902,8 @@ export const captureLead = onCall(
         photoAdequate: true,
         matchStatus: session.professionalId ? "matched" : "idle",
         status: "new",
-        source: "bio",
+        source,
+        attribution,
         intentCategory: scores.intentCategory ?? "Avaliação estética",
         recommendedSpecialty:
           scores.recommendedSpecialty ?? "Cirurgião-dentista",
@@ -893,12 +925,24 @@ export const captureLead = onCall(
         capturedAtMs: now,
         updatedAtMs: now,
       });
+      addFunnelEvent(transaction, {
+        eventKey: `lead_captured:${leadRef.id}`,
+        eventType: "lead_captured",
+        accountId: session.accountId,
+        professionalId: session.professionalId,
+        leadId: leadRef.id,
+        source,
+        attribution,
+        occurredAtMs: now,
+      });
       const activatedTrial = activatePreparedTrialFields(account, now);
       if (activatedTrial) {
         const trial = activatedTrial;
         transaction.set(accountRef, {
           subscriptionStatus: "trial",
           trialActivatedBy: "first_lead",
+          firstLeadCapturedAtMs: now,
+          firstLeadId: leadRef.id,
           ...trial,
           updatedAtMs: now,
         }, { merge: true });
@@ -934,6 +978,17 @@ export const captureLead = onCall(
           toStatus: "trial",
           reason: "primeiro lead capturado",
           now,
+        });
+        addFunnelEvent(transaction, {
+          eventKey: `trial_activated:${session.accountId}`,
+          eventType: "trial_activated",
+          accountId: session.accountId,
+          professionalId: account.professionalId,
+          leadId: leadRef.id,
+          source: account.acquisitionSource ?? source,
+          attribution: account.attributionFirstTouch ?? attribution,
+          occurredAtMs: now,
+          metadata: { activationTrigger: "first_lead", trialEndsAtMs: trial.trialEndsAtMs },
         });
       }
       return { leadId: leadRef.id };
@@ -990,6 +1045,16 @@ export const recordPatientConversionAction = onCall(
         update.patientOpenedWhatsAppAtMs = lead.patientOpenedWhatsAppAtMs ?? now;
       }
       transaction.update(leadRef, update);
+      addFunnelEvent(transaction, {
+        eventKey: `${input.action}:${session.leadId}`,
+        eventType: input.action,
+        accountId: session.accountId,
+        professionalId: session.professionalId,
+        leadId: session.leadId,
+        source: (lead.source as AcquisitionSource | undefined) ?? session.source ?? "bio",
+        attribution: (lead.attribution as AttributionInput | undefined) ?? session.attribution,
+        occurredAtMs: now,
+      });
       return { ok: true };
     });
   },
@@ -1028,6 +1093,8 @@ export const createPendingSubscription = onCall(
     const subscription = isTrial
       ? trialSubscriptionFields(input, now)
       : pendingSubscriptionFields(input, now);
+    const incomingAttribution = sanitizeAttribution(input.attribution);
+    const incomingSource = classifyAcquisitionSource(incomingAttribution);
     const accessStatus = isTrial ? "active" : "pending";
     const professionalStatus = isTrial ? "trial" : "inactive";
     const userRef = db.doc(`users/${uid}`);
@@ -1074,6 +1141,8 @@ export const createPendingSubscription = onCall(
         );
       }
       const batch = db.batch();
+      const acquisitionSource = (account.data()?.acquisitionSource as AcquisitionSource | undefined) ?? incomingSource;
+      const attributionFirstTouch = (account.data()?.attributionFirstTouch as AttributionInput | undefined) ?? incomingAttribution;
       batch.set(
         userRef,
         {
@@ -1090,6 +1159,9 @@ export const createPendingSubscription = onCall(
         {
           accountName: input.name,
           paymentReference: accountId,
+          acquisitionSource,
+          attributionFirstTouch,
+          acquisitionCapturedAtMs: account.data()?.acquisitionCapturedAtMs ?? now,
           ...subscription,
         },
         { merge: true },
@@ -1126,6 +1198,28 @@ export const createPendingSubscription = onCall(
         },
         { merge: true },
       );
+      addFunnelEvent(batch, {
+        eventKey: `account_signup:${accountId}`,
+        eventType: "account_signup",
+        accountId,
+        professionalId,
+        source: acquisitionSource,
+        attribution: attributionFirstTouch,
+        occurredAtMs: Number(account.data()?.createdAtMs ?? now),
+        metadata: { plan, checkoutMode: input.checkoutMode },
+      });
+      if (isTrial) {
+        addFunnelEvent(batch, {
+          eventKey: `trial_prepared:${accountId}`,
+          eventType: "trial_prepared",
+          accountId,
+          professionalId,
+          source: acquisitionSource,
+          attribution: attributionFirstTouch,
+          occurredAtMs: now,
+          metadata: { plan },
+        });
+      }
       await batch.commit();
     } else {
       accountId = `acc_${uid}`;
@@ -1152,6 +1246,9 @@ export const createPendingSubscription = onCall(
         slug,
         accountName: input.name,
         paymentReference: accountId,
+        acquisitionSource: incomingSource,
+        attributionFirstTouch: incomingAttribution,
+        acquisitionCapturedAtMs: now,
         ...subscription,
         createdAtMs: now,
       });
@@ -1187,6 +1284,28 @@ export const createPendingSubscription = onCall(
         createdAtMs: now,
         updatedAtMs: now,
       });
+      addFunnelEvent(batch, {
+        eventKey: `account_signup:${accountId}`,
+        eventType: "account_signup",
+        accountId,
+        professionalId,
+        source: incomingSource,
+        attribution: incomingAttribution,
+        occurredAtMs: now,
+        metadata: { plan, checkoutMode: input.checkoutMode },
+      });
+      if (isTrial) {
+        addFunnelEvent(batch, {
+          eventKey: `trial_prepared:${accountId}`,
+          eventType: "trial_prepared",
+          accountId,
+          professionalId,
+          source: incomingSource,
+          attribution: incomingAttribution,
+          occurredAtMs: now,
+          metadata: { plan },
+        });
+      }
       await batch.commit();
     }
 
@@ -1208,6 +1327,44 @@ export const createPendingSubscription = onCall(
       status: isTrial ? "active" as const : "pending" as const,
       trialStatus: isTrial ? "ready" as const : "not_started" as const,
     };
+  },
+);
+
+export const recordSubscriptionIntent = onCall(
+  { enforceAppCheck: ENFORCE_APP_CHECK },
+  async (request) => {
+    const uid = requireUid(request);
+    const input = parseInput(subscriptionIntentSchema, request.data);
+    const user = await readUser(uid);
+    if (!user.accountId || !["professional", "clinic"].includes(user.role ?? "")) {
+      throw new HttpsError("permission-denied", "Conta profissional não encontrada.");
+    }
+    const accountRef = db.doc(`accounts/${user.accountId}`);
+    const accountSnap = await accountRef.get();
+    if (!accountSnap.exists || accountSnap.data()?.ownerUid !== uid) {
+      throw new HttpsError("permission-denied", "Apenas o responsável pela conta pode assinar.");
+    }
+    const account = accountSnap.data() as AccountRecord;
+    const now = Date.now();
+    const dateKey = new Date(now).toISOString().slice(0, 10);
+    const batch = db.batch();
+    batch.set(accountRef, {
+      lastSubscriptionIntentAtMs: now,
+      lastSubscriptionIntentContext: input.context,
+      updatedAtMs: now,
+    }, { merge: true });
+    addFunnelEvent(batch, {
+      eventKey: `subscription_cta_clicked:${user.accountId}:${input.context}:${dateKey}`,
+      eventType: "subscription_cta_clicked",
+      accountId: user.accountId,
+      professionalId: account.professionalId,
+      source: account.acquisitionSource ?? "bio",
+      attribution: account.attributionFirstTouch,
+      occurredAtMs: now,
+      metadata: { context: input.context },
+    });
+    await batch.commit();
+    return { ok: true };
   },
 );
 
@@ -1479,6 +1636,7 @@ export const setAccountStatus = onCall(
     const professional = (professionalSnap.data() ?? {}) as ProfessionalRecord;
     const wasTrial = professional.status === "trial"
       || ["ready", "active", "expired"].includes(account.trialStatus ?? "");
+    const isFirstActivation = active && !Number(account.activatedAtMs ?? 0);
     const nextProfessionalStatus = active ? "subscriber" : "inactive";
 
     const batch = db.batch();
@@ -1520,6 +1678,10 @@ export const setAccountStatus = onCall(
         ? uid
         : accountSnap.data()?.paymentConfirmedBy ?? null,
       renewAtMs,
+      trialConvertedAtMs: wasTrial && active ? now : accountSnap.data()?.trialConvertedAtMs ?? null,
+      timeToPaidMs: wasTrial && active && account.trialStartedAtMs
+        ? Math.max(0, now - account.trialStartedAtMs)
+        : accountSnap.data()?.timeToPaidMs ?? null,
       updatedAtMs: now,
     });
     batch.set(
@@ -1587,6 +1749,34 @@ export const setAccountStatus = onCall(
         : "alteração administrativa de assinatura",
       now,
     });
+    if (isFirstActivation) {
+      addFunnelEvent(batch, {
+        eventKey: `subscription_activated:${input.accountId}`,
+        eventType: "subscription_activated",
+        accountId: input.accountId,
+        professionalId: account.professionalId,
+        source: account.acquisitionSource ?? "bio",
+        attribution: account.attributionFirstTouch,
+        occurredAtMs: now,
+        metadata: { plan, provider: "infinitepay" },
+      });
+    }
+    if (wasTrial && active) {
+      addFunnelEvent(batch, {
+        eventKey: `trial_converted:${input.accountId}`,
+        eventType: "trial_converted",
+        accountId: input.accountId,
+        professionalId: account.professionalId,
+        source: account.acquisitionSource ?? "bio",
+        attribution: account.attributionFirstTouch,
+        occurredAtMs: now,
+        metadata: {
+          plan,
+          provider: "infinitepay",
+          timeToPaidMs: account.trialStartedAtMs ? Math.max(0, now - account.trialStartedAtMs) : null,
+        },
+      });
+    }
     await batch.commit();
     if (active) {
       await auth.updateUser(account.ownerUid, { disabled: false }).catch(() => undefined);
@@ -3419,6 +3609,16 @@ export const expireProfessionalTrials = onSchedule(
           toStatus: "trial_expired",
           reason: "fim automático do teste de 7 dias",
           now,
+        });
+        addFunnelEvent(batch, {
+          eventKey: `trial_expired:${professional.accountId}`,
+          eventType: "trial_expired",
+          accountId: professional.accountId,
+          professionalId: document.id,
+          source: account?.acquisitionSource ?? "bio",
+          attribution: account?.attributionFirstTouch,
+          occurredAtMs: now,
+          metadata: { trialEndsAtMs: professional.trialEndsAtMs ?? null },
         });
       }
       await batch.commit();

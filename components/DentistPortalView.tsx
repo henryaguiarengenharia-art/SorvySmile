@@ -62,6 +62,7 @@ interface DentistPortalViewProps {
   onDailyPostEvent?: (event: 'view' | 'customize' | 'copy_caption' | 'download_feed' | 'download_story' | 'mark_as_used' | 'request_alternative', format?: 'feed' | 'story' | 'carousel' | 'none', variant?: DailyPostVariant) => Promise<void>;
   onUpdateSlug?: (slug: string) => Promise<string>;
   onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string; conversationId?: string }) => Promise<AssistantResponse>;
+  onSubscriptionIntent?: (context: "trial_ready" | "trial_active" | "pending" | "overdue") => void;
 }
 
 type PortalTab = "dashboard" | "leads" | "post" | "profile" | "assistant";
@@ -109,6 +110,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   onDailyPostEvent,
   onUpdateSlug,
   onAskAssistant,
+  onSubscriptionIntent,
 }) => {
   const [tab, setTab] = useState<PortalTab>("dashboard");
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null);
@@ -493,7 +495,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
 
       {tab === "dashboard" && (
         <section className="space-y-6">
-          <BillingSummaryCard account={billingAccount} readOnly={readOnly} />
+          <BillingSummaryCard account={billingAccount} readOnly={readOnly} onSubscriptionIntent={onSubscriptionIntent} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Métricas do período</p>

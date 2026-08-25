@@ -245,7 +245,7 @@ done
 
 printf 'Publicando o primeiro lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:updateProfessionalSlug,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember,functions:manageDailyPost,functions:getDailyPostAssignment,functions:recordDailyPostEvent,functions:getAssistantWorkspace,functions:resolveAssistantAction,functions:recordAssistantFeedback,functions:recordAssistantClientEvent \
+  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:recordSubscriptionIntent,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:updateProfessionalSlug,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember,functions:manageDailyPost,functions:getDailyPostAssignment,functions:recordDailyPostEvent,functions:getAssistantWorkspace,functions:resolveAssistantAction,functions:recordAssistantFeedback,functions:recordAssistantClientEvent \
   --project "$PROJECT_ID" \
   --non-interactive
 

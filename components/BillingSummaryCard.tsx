@@ -39,11 +39,13 @@ const statusCopy: Record<AccountStatus, {
 interface BillingSummaryCardProps {
   account: BillingAccount;
   readOnly?: boolean;
+  onSubscriptionIntent?: (context: "trial_ready" | "trial_active" | "pending" | "overdue") => void;
 }
 
 export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
   account,
   readOnly = false,
+  onSubscriptionIntent,
 }) => {
   const status = account.status ?? "pending";
   const statusInfo = statusCopy[status];
@@ -61,6 +63,13 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
   const showPaymentLink = !readOnly
     && Boolean(paymentUrl)
     && (status === "pending" || status === "overdue" || isTrialReady || isTrial);
+  const intentContext = isTrialReady
+    ? "trial_ready" as const
+    : isTrial
+      ? "trial_active" as const
+      : status === "overdue"
+        ? "overdue" as const
+        : "pending" as const;
 
   return (
     <article className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
@@ -121,6 +130,7 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
             href={paymentUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => onSubscriptionIntent?.(intentContext)}
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white hover:bg-blue-700"
           >
             {isTrialReady || isTrial ? "Assinar plano" : "Abrir InfinitePay"} <ExternalLink className="h-4 w-4" />

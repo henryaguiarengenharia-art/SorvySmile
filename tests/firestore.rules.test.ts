@@ -124,6 +124,7 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
         setDoc(doc(db, "dailyPostAssignments", "pro_a_2026-08-17"), { professionalId: "pro_a", accountId: "acc_a", status: "assigned" }),
         setDoc(doc(db, "dailyPostAssignments", "pro_b_2026-08-17"), { professionalId: "pro_b", accountId: "acc_b", status: "assigned" }),
         setDoc(doc(db, "dailyPostEvents", "event_a"), { professionalId: "pro_a", accountId: "acc_a" }),
+        setDoc(doc(db, "funnelEvents", "funnel_a"), { accountId: "acc_a", eventType: "trial_activated", source: "paid" }),
         setDoc(doc(db, "adminAuditLogs", "audit_a"), {
           accountId: "acc_a",
           action: "account_status_changed",
@@ -328,6 +329,9 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
     await assertFails(getDoc(doc(professional, "subscriptionHistory", "history_a")));
     await assertSucceeds(getDoc(doc(hq, "adminAuditLogs", "audit_a")));
     await assertSucceeds(getDoc(doc(hq, "subscriptionHistory", "history_a")));
+    await assertFails(getDoc(doc(professional, "funnelEvents", "funnel_a")));
+    await assertSucceeds(getDoc(doc(hq, "funnelEvents", "funnel_a")));
+    await assertFails(setDoc(doc(hq, "funnelEvents", "manual"), { eventType: "trial_converted" }));
     await assertFails(getDoc(doc(professional, "assistantUsage", "user_a_2026-08-17")));
     await assertFails(getDoc(doc(hq, "assistantUsage", "user_a_2026-08-17")));
     for (const path of [

@@ -35,6 +35,7 @@ import {
   DailyPostEventRecord,
   DailyPostVariant,
   DentistRecord,
+  FunnelEvent,
   LeadRecord,
   PhotoValidation,
   PlanTier,
@@ -63,6 +64,7 @@ export interface WorkspaceData {
   dailyPostEvents: DailyPostEventRecord[];
   adminAuditLogs: AdminAuditLog[];
   subscriptionHistory: SubscriptionHistoryEvent[];
+  funnelEvents: FunnelEvent[];
 }
 
 interface CheckoutData {
@@ -81,6 +83,26 @@ function assertConfigured(): void {
       "O ambiente Firebase ainda não foi configurado. Use o arquivo .env.example.",
     );
   }
+}
+
+function browserAttribution(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const params = new URLSearchParams(window.location.search);
+  let referrer = "";
+  try {
+    const parsedReferrer = new URL(document.referrer);
+    referrer = `${parsedReferrer.origin}${parsedReferrer.pathname}`;
+  } catch {
+    referrer = "";
+  }
+  return {
+    utmSource: params.get("utm_source") ?? "",
+    utmMedium: params.get("utm_medium") ?? "",
+    utmCampaign: params.get("utm_campaign") ?? "",
+    utmContent: params.get("utm_content") ?? "",
+    referrer,
+    landingPath: window.location.pathname,
+  };
 }
 
 function errorMessage(error: unknown): string {
@@ -148,6 +170,8 @@ function mapAccount(id: string, data: DocumentData): BillingAccount {
     paymentStatus: data.paymentStatus,
     billingMode: data.billingMode,
     billingInterval: data.billingInterval,
+    acquisitionSource: data.acquisitionSource ?? "bio",
+    attributionFirstTouch: data.attributionFirstTouch ?? {},
   };
 }
 
@@ -333,6 +357,7 @@ export async function startTriage(
       consentVersion: string;
       photoConsent: true;
       adultAndOwnershipConfirmed: true;
+      attribution: Record<string, string>;
     },
     { sessionId: string }
   >(functions, "startTriage");
@@ -341,6 +366,7 @@ export async function startTriage(
       slug,
       consentVersion: CONSENT_VERSION,
       ...consent,
+      attribution: browserAttribution(),
     });
     return result.data.sessionId;
   } catch (error) {
@@ -514,7 +540,7 @@ export async function registerPendingSubscription(
   if (!user.email) throw new Error("Não foi possível confirmar o email da conta.");
 
   const callable = httpsCallable<
-    Omit<CheckoutData, "password"> & { termsVersion: string },
+    Omit<CheckoutData, "password"> & { termsVersion: string; attribution: Record<string, string> },
     {
       accountId: string;
       plan: PlanTier;
@@ -532,6 +558,7 @@ export async function registerPendingSubscription(
       plan: data.plan,
       checkoutMode: data.checkoutMode,
       termsVersion: SUBSCRIBER_TERMS_VERSION,
+      attribution: browserAttribution(),
     });
     if (!result.data.accountId || !["pending", "active"].includes(result.data.status)) {
       throw new Error("A solicitação de assinatura não foi registrada.");
@@ -541,6 +568,17 @@ export async function registerPendingSubscription(
       return { ...result.data, user: await currentWorkspaceUser(user) };
     }
     return result.data;
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
+export async function recordSubscriptionIntent(
+  context: "trial_ready" | "trial_active" | "trial_expired" | "pending" | "overdue",
+): Promise<void> {
+  const callable = httpsCallable<{ context: string }, { ok: true }>(functions, "recordSubscriptionIntent");
+  try {
+    await callable({ context });
   } catch (error) {
     throw new Error(errorMessage(error));
   }
@@ -919,6 +957,7 @@ export async function subscribeWorkspace(
     dailyPostEvents: [],
     adminAuditLogs: [],
     subscriptionHistory: [],
+    funnelEvents: [],
   };
   const emit = () => onChange({
     ...state,
@@ -930,6 +969,7 @@ export async function subscribeWorkspace(
     dailyPostEvents: [...state.dailyPostEvents],
     adminAuditLogs: [...state.adminAuditLogs],
     subscriptionHistory: [...state.subscriptionHistory],
+    funnelEvents: [...state.funnelEvents],
   });
   const handleError = (error: unknown) => onError(errorMessage(error));
   const subscriptions: Unsubscribe[] = [];
@@ -990,6 +1030,20 @@ export async function subscribeWorkspace(
   }
 
   if (user.role === "hq") {
+    subscriptions.push(onSnapshot(query(collection(db, "funnelEvents"), orderBy("occurredAtMs", "desc"), limit(2000)), (snapshot) => {
+      state.funnelEvents = snapshot.docs.map((item) => ({
+        id: item.id,
+        eventType: item.data().eventType,
+        accountId: String(item.data().accountId ?? ""),
+        professionalId: item.data().professionalId ?? null,
+        leadId: item.data().leadId ?? null,
+        source: item.data().source ?? "bio",
+        attribution: item.data().attribution ?? {},
+        metadata: item.data().metadata ?? {},
+        occurredAtMs: Number(item.data().occurredAtMs ?? item.data().createdAtMs ?? 0),
+      } as FunnelEvent));
+      emit();
+    }, handleError));
     subscriptions.push(onSnapshot(query(collection(db, "adminAuditLogs"), orderBy("createdAtMs", "desc"), limit(300)), (snapshot) => {
       state.adminAuditLogs = snapshot.docs.map((item) => ({
         id: item.id,
