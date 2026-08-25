@@ -38,12 +38,17 @@ for (const key of [
 const paymentUrls = [
   env.VITE_PAYMENT_URL_LITE,
   env.VITE_PAYMENT_URL_PRO,
-  env.VITE_PAYMENT_URL_NETWORK,
 ];
 for (const value of paymentUrls) {
   const url = new URL(value || "");
   if (url.protocol !== "https:" || url.hostname !== "invoice.infinitepay.io") {
     fail("Um link de pagamento da homologacao e invalido.");
+  }
+}
+if (env.VITE_PAYMENT_URL_NETWORK) {
+  const networkUrl = new URL(env.VITE_PAYMENT_URL_NETWORK);
+  if (networkUrl.protocol !== "https:" || networkUrl.hostname !== "invoice.infinitepay.io") {
+    fail("O link opcional do Network e invalido.");
   }
 }
 

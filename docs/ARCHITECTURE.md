@@ -98,13 +98,15 @@ persistência e auditoria próprias. Veja `docs/ASSISTENTES_IA.md`.
 
 Os links de pagamento são públicos e configurados por ambiente no frontend.
 A criação da conta pendente, o preço solicitado e a versão dos termos são
-registrados no servidor. A HQ confere o comprovante e usa uma Callable Function
-restrita para ativar, pausar ou marcar inadimplência.
+registrados no servidor. A HQ confirma o pagamento diretamente na InfinitePay
+e usa uma Callable Function restrita para registrar o próximo vencimento,
+ativar, pausar ou marcar inadimplência. O painel do cliente lê esses dados da
+conta; a InfinitePay é responsável pelos e-mails e mensagens de cobrança.
 
 ## Pendências para produção
 
 - revisão jurídica dos textos e identificação formal do controlador;
-- confirmar nome Network no checkout da InfinitePay sem alterar o link atual;
+- manter o Network indisponível publicamente até a decisão de lançamento;
 - projeto Firebase Blaze e região;
 - API paga do Gemini e Secret Manager;
 - App Check com reCAPTCHA Enterprise;

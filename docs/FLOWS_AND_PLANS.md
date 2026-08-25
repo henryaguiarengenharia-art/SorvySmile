@@ -43,11 +43,12 @@ modelo validado no Nutri.
 1. entender o benefício para o negócio;
 2. comparar Lite, Pro e Network;
 3. criar conta com aceite versionado;
-4. abrir o link de pagamento do plano;
-5. enviar o comprovante com a referência gerada;
-6. HQ localizar a conta pendente e conferir o pagamento;
-7. HQ ativar plano, usuário e link público;
-8. assinante receber confirmação e entrar no painel.
+4. abrir o link recorrente da InfinitePay;
+5. concluir o primeiro pagamento sem enviar comprovante à Sorvy;
+6. HQ localizar a conta pendente e confirmar o pagamento na InfinitePay;
+7. HQ registrar o próximo vencimento e ativar plano, usuário e link público;
+8. assinante acompanhar status e vencimento no painel. A InfinitePay envia os
+   lembretes de cobrança por e-mail e WhatsApp.
 
 A ativação é deliberadamente manual nesta primeira fase. Ela reproduz o fluxo
 já validado no Nutri e evita introduzir um novo gateway/webhook antes de haver
@@ -57,7 +58,8 @@ volume que justifique essa complexidade.
 
 | Recurso | Lite | Pro | Network |
 |---|---:|---:|---:|
-| Mensalidade confirmada | R$ 149 | R$ 297 | R$ 497 |
+| Mensalidade confirmada | R$ 97 | R$ 197 | R$ 297 |
+| Disponibilidade no lançamento | sim | sim | em breve |
 | Triagens mensais | 15 | 60 | 150 |
 | Link profissional | sim | sim | sim |
 | Preview visual | sim | sim | sim |
@@ -67,10 +69,10 @@ volume que justifique essa complexidade.
 | KPIs por dentista (7/30/90 dias) | não | não | sim |
 | Sofia — Conversão e Gestão | não | sim | sim |
 | Acessos incluídos | 1 | 1 | 2 |
-| Acesso adicional | — | — | R$ 79 |
+| Acesso adicional | — | — | não disponível |
 
-Add-ons confirmados: +50 leads por R$ 99 e +150 leads por R$ 249. Registros com
-o valor legado `elite` são normalizados para `network`.
+Add-ons e acessos adicionais não serão vendidos no lançamento. Registros com o
+valor legado `elite` são normalizados para `network`.
 
 ## Fora do escopo da primeira produção
 

@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { pendingSubscriptionFields } from "./subscriptions.js";
+import {
+  nextBillingDueAt,
+  pendingSubscriptionFields,
+} from "./subscriptions.js";
 
-describe("solicitação manual de assinatura", () => {
+describe("solicitação de assinatura pela InfinitePay", () => {
   it("registra preço e plano definidos no servidor", () => {
     const result = pendingSubscriptionFields(
       {
@@ -18,15 +21,27 @@ describe("solicitação manual de assinatura", () => {
       plan: "pro",
       tier: "pro",
       requestedPlan: "pro",
-      requestedPrice: 297,
+      requestedPrice: 197,
       monthlyLeadLimit: 60,
       status: "pending",
       isActive: false,
-      paymentProvider: "infinitepay_link",
-      paymentStatus: "awaiting_receipt",
+      paymentProvider: "infinitepay",
+      paymentStatus: "awaiting_first_payment",
+      billingMode: "recurring_link",
+      billingInterval: "monthly",
       checkoutEmail: "contato@exemplo.com",
       termsAcceptedAtMs: 1_785_000_000_000,
     });
+  });
+
+  it("aceita o vencimento confirmado na InfinitePay", () => {
+    expect(nextBillingDueAt(0, 2_000, 1_000)).toBe(2_000);
+  });
+
+  it("avança 30 dias sem reduzir um vencimento futuro", () => {
+    const cycle = 30 * 24 * 60 * 60 * 1000;
+    expect(nextBillingDueAt(5_000, undefined, 1_000)).toBe(5_000 + cycle);
+    expect(nextBillingDueAt(500, undefined, 1_000)).toBe(1_000 + cycle);
   });
 
   it("converte Elite legado para Network preservando a conta", () => {
@@ -44,8 +59,8 @@ describe("solicitação manual de assinatura", () => {
     expect(result.plan).toBe("network");
     expect(result.ownerType).toBe("clinic");
     expect(result.seatsTotal).toBe(2);
-    expect(result.extraSeatPrice).toBe(79);
-    expect(result.requestedPrice).toBe(497);
+    expect(result.extraSeatPrice).toBe(0);
+    expect(result.requestedPrice).toBe(297);
     expect(result.monthlyLeadLimit).toBe(150);
   });
 });

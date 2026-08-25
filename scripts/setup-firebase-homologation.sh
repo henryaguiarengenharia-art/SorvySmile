@@ -267,7 +267,6 @@ node -e '
     VITE_PAYMENT_URL_PRO: "",
     VITE_PAYMENT_URL_NETWORK: "",
     VITE_PAYMENT_URL_ELITE: "",
-    VITE_SALES_WHATSAPP: "",
     VITE_PRIVACY_CONTACT_EMAIL: ""
   };
   process.stdout.write(

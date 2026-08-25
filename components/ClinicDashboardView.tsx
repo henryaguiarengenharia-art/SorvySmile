@@ -29,6 +29,7 @@ import { DailyPostCard } from "./DailyPostCard";
 import { PeriodFilter } from "./PeriodFilter";
 import { PLAN_CONFIGS } from "../planCatalog";
 import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
+import { BillingSummaryCard } from "./BillingSummaryCard";
 
 interface TeamMemberInput {
   name: string;
@@ -293,6 +294,7 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
 
       {tab === "overview" && (
         <>
+          <BillingSummaryCard account={account} readOnly={readOnly} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Métricas da operação</p>

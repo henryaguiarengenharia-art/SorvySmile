@@ -49,6 +49,7 @@ import {
 } from "./services/sorvyApi";
 import { isFirebaseConfigured } from "./services/firebaseClient";
 import {
+  isPlanPubliclyAvailable,
   paymentUrlFor,
   PLAN_CONFIGS,
   PLAN_COPY,
@@ -430,6 +431,7 @@ const App: React.FC = () => {
             <DentistPortalView
               leadRecords={workspace.leads}
               professional={currentProfessional}
+              billingAccount={currentAccount}
               planConfig={PLAN_CONFIGS[currentAccount.tier]}
               currentUsage={currentUsage}
               dailyPost={dailyPostAssignment}
@@ -527,6 +529,7 @@ const App: React.FC = () => {
               <DentistPortalView
                 leadRecords={hqPreviewLeads}
                 professional={hqPreviewProfessional}
+                billingAccount={hqPreviewAccount}
                 planConfig={PLAN_CONFIGS[hqPreviewAccount.tier]}
                 currentUsage={hqPreviewUsage}
                 readOnly
@@ -550,8 +553,8 @@ const App: React.FC = () => {
               billingAccounts={workspace.accounts}
               usageByAccount={workspace.usageByAccount}
               planConfigs={PLAN_CONFIGS}
-              onUpdateBilling={(id, status, plan) =>
-                changeAccountStatus(id, status, plan).catch((error: Error) => {
+              onUpdateBilling={(id, status, plan, renewAtMs) =>
+                changeAccountStatus(id, status, plan, renewAtMs).catch((error: Error) => {
                   setPageError(error.message);
                   throw error;
                 })
@@ -776,6 +779,7 @@ const PricingView = ({
         const plan = PLAN_CONFIGS[tier];
         const copy = PLAN_COPY[tier];
         const highlighted = tier === "pro";
+        const available = isPlanPubliclyAvailable(tier);
         return (
           <article
             key={tier}
@@ -788,6 +792,11 @@ const PricingView = ({
             {highlighted && (
               <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1 text-[9px] font-black uppercase tracking-widest text-white">
                 Recomendado
+              </span>
+            )}
+            {!available && (
+              <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-slate-200 px-4 py-1 text-[9px] font-black uppercase tracking-widest text-slate-700">
+                Em breve
               </span>
             )}
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-500">
@@ -808,26 +817,19 @@ const PricingView = ({
               ))}
             </ul>
             <button
+              disabled={!available}
               onClick={() => onSelect(tier)}
-              className={`mt-9 w-full rounded-2xl py-4 text-xs font-black uppercase tracking-widest ${
+              className={`mt-9 w-full rounded-2xl py-4 text-xs font-black uppercase tracking-widest disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 ${
                 highlighted
                   ? "bg-blue-600 text-white hover:bg-blue-500"
                   : "bg-slate-900 text-white hover:bg-blue-600"
               }`}
             >
-              Escolher {copy.name}
+              {available ? `Escolher ${copy.name}` : "Indisponível no lançamento"}
             </button>
           </article>
         );
       })}
-    </div>
-    <div className="mx-auto mt-8 max-w-2xl rounded-2xl border border-slate-100 bg-white p-5 text-center">
-      <p className="text-xs font-black uppercase tracking-widest text-slate-700">
-        Precisa de mais volume?
-      </p>
-      <p className="mt-2 text-xs font-medium text-slate-500">
-        Adicionais disponíveis: +50 leads por R$ 99 ou +150 leads por R$ 249.
-      </p>
     </div>
   </main>
 );
@@ -854,6 +856,10 @@ const CheckoutView = ({
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!isPlanPubliclyAvailable(plan)) {
+      setError("O plano Network estará disponível em breve. Escolha Lite ou Pro.");
+      return;
+    }
     if (!accepted) {
       setError("Aceite os Termos do Assinante para continuar.");
       return;
@@ -899,7 +905,7 @@ const CheckoutView = ({
           <h1 className="mt-2 text-3xl font-black">Criar sua conta</h1>
           <p className="mt-2 text-sm font-medium text-slate-500">
             R$ {PLAN_CONFIGS[plan].price}/mês. Depois do cadastro você verá o
-            link de pagamento e enviará o comprovante para validação.
+            link do plano recorrente na InfinitePay.
           </p>
         </div>
         {[
@@ -982,28 +988,7 @@ const PaymentInstructionsView = ({
   onFinished: () => void;
 }) => {
   const paymentUrl = paymentUrlFor(registration.plan);
-  const salesWhatsapp = String(
-    import.meta.env.VITE_SALES_WHATSAPP ?? "",
-  ).replace(/\D/g, "");
   const [paymentOpened, setPaymentOpened] = useState(false);
-
-  const sendReceipt = (): void => {
-    if (!salesWhatsapp) return;
-    const message = [
-      "Olá! Fiz o pagamento da Sorvy Smile e quero solicitar a ativação.",
-      `Conta: ${registration.accountId}`,
-      `Nome: ${registration.name}`,
-      `Email: ${registration.email}`,
-      `Plano: ${PLAN_COPY[registration.plan].name}`,
-      "Vou anexar o comprovante nesta conversa.",
-    ].join("\n");
-    window.open(
-      `https://wa.me/${salesWhatsapp}?text=${encodeURIComponent(message)}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
-    onFinished();
-  };
 
   return (
     <main className="mx-auto max-w-xl px-6 py-12">
@@ -1017,9 +1002,9 @@ const PaymentInstructionsView = ({
           </p>
           <h1 className="mt-2 text-3xl font-black">Concluir pagamento</h1>
           <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500">
-            Pague o plano {PLAN_COPY[registration.plan].name} no ambiente
-            seguro do provedor. Depois, envie o comprovante para a Sorvy
-            conferir e liberar seu painel e link profissional.
+            Contrate o plano {PLAN_COPY[registration.plan].name} no ambiente
+            seguro da InfinitePay. A Sorvy confirmará o primeiro pagamento
+            diretamente no provedor antes de liberar o painel.
           </p>
         </div>
 
@@ -1055,15 +1040,15 @@ const PaymentInstructionsView = ({
 
         <button
           type="button"
-          disabled={!salesWhatsapp || !paymentOpened}
-          onClick={sendReceipt}
+          disabled={!paymentOpened}
+          onClick={onFinished}
           className="w-full rounded-2xl border-2 border-emerald-200 py-4 text-xs font-black uppercase tracking-widest text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Já paguei · enviar comprovante
+          Concluí na InfinitePay
         </button>
         <p className="text-center text-xs font-medium leading-relaxed text-slate-400">
-          A conta permanece bloqueada até a conferência. Nunca envie senha,
-          cartão ou código de segurança pelo WhatsApp.
+          A InfinitePay enviará as cobranças e os lembretes recorrentes por
+          e-mail e WhatsApp. A Sorvy não solicitará comprovante por mensagem.
         </p>
       </section>
     </main>
@@ -1076,10 +1061,11 @@ const CheckoutReturnView = ({ onLogin }: { onLogin: () => void }) => (
       <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600">
         <CheckCircle2 className="h-10 w-10" />
       </div>
-      <h1 className="mt-7 text-4xl font-black">Solicitação enviada</h1>
+      <h1 className="mt-7 text-4xl font-black">Contratação enviada</h1>
       <p className="mt-4 font-medium leading-relaxed text-slate-500">
-        A Sorvy conferirá o comprovante e ativará sua conta pelo painel
-        administrativo. Você receberá a confirmação pelo canal de atendimento.
+        A Sorvy confirmará o primeiro pagamento diretamente na InfinitePay e
+        ativará sua conta. Depois da ativação, o próximo vencimento ficará
+        visível no seu painel.
       </p>
       <button
         onClick={onLogin}
@@ -1199,10 +1185,11 @@ const LegalView = ({
             </LegalSection>
             <LegalSection title="3. Pagamento e ativação">
               A solicitação cria uma conta pendente. O pagamento ocorre no link
-              externo indicado e a ativação é feita pela Sorvy após conferência
-              do comprovante. Renovação, cancelamento, reembolso e vencimento
-              seguem as condições exibidas pelo provedor de pagamento e
-              confirmadas no atendimento comercial.
+              recorrente da InfinitePay e a ativação é feita pela Sorvy após a
+              confirmação do primeiro pagamento no provedor. Cobranças e
+              lembretes são enviados pela InfinitePay por e-mail e WhatsApp.
+              Renovação, cancelamento, reembolso e vencimento seguem as
+              condições exibidas pelo provedor de pagamento.
             </LegalSection>
             <LegalSection title="4. Responsabilidades do assinante">
               O assinante deve proteger suas credenciais, manter os dados do

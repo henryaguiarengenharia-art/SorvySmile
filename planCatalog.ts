@@ -7,11 +7,12 @@ export interface PlanCopy {
 }
 
 export const PLAN_ORDER: PlanTier[] = ["lite", "pro", "network"];
+export const PUBLIC_PLAN_TIERS: PlanTier[] = ["lite", "pro"];
 
 export const PLAN_CONFIGS: Record<PlanTier, PlanConfig> = {
   lite: {
     tier: "lite",
-    price: 149,
+    price: 97,
     baseMonthlyLeadLimit: 15,
     includedSeats: 1,
     extraSeatPrice: 0,
@@ -33,7 +34,7 @@ export const PLAN_CONFIGS: Record<PlanTier, PlanConfig> = {
   },
   pro: {
     tier: "pro",
-    price: 297,
+    price: 197,
     baseMonthlyLeadLimit: 60,
     includedSeats: 1,
     extraSeatPrice: 0,
@@ -55,10 +56,10 @@ export const PLAN_CONFIGS: Record<PlanTier, PlanConfig> = {
   },
   network: {
     tier: "network",
-    price: 497,
+    price: 297,
     baseMonthlyLeadLimit: 150,
     includedSeats: 2,
-    extraSeatPrice: 79,
+    extraSeatPrice: 0,
     features: {
       aiBasic: true,
       aiFull: true,
@@ -113,13 +114,12 @@ export const PLAN_COPY: Record<PlanTier, PlanCopy> = {
   },
 };
 
-export const LEAD_ADD_ONS = [
-  { leads: 50, price: 99 },
-  { leads: 150, price: 249 },
-] as const;
-
 export function planName(tier: PlanTier): string {
   return PLAN_COPY[tier].name;
+}
+
+export function isPlanPubliclyAvailable(tier: PlanTier): boolean {
+  return PUBLIC_PLAN_TIERS.includes(tier);
 }
 
 export function paymentUrlFor(tier: PlanTier): string {

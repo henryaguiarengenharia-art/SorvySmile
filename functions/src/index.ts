@@ -46,13 +46,17 @@ import {
   cachedAnalysisScores,
 } from "./analysisCache.js";
 import {
+  isPlanPubliclyAvailable,
   monthKey,
   normalizePlan,
   photoValidationLimit,
   PLANS,
   PlanTier,
 } from "./plans.js";
-import { pendingSubscriptionFields } from "./subscriptions.js";
+import {
+  nextBillingDueAt,
+  pendingSubscriptionFields,
+} from "./subscriptions.js";
 import {
   canStartTrial,
   startTrialFields,
@@ -162,6 +166,7 @@ interface AccountRecord {
   trialEligible?: boolean;
   subscriptionStatus?: string;
   paymentStatus?: string;
+  renewAtMs?: number;
   statusBeforeArchive?: string;
 }
 
@@ -938,6 +943,12 @@ export const createPendingSubscription = onCall(
     }
 
     const plan = normalizePlan(input.plan);
+    if (!isPlanPubliclyAvailable(plan)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "O plano Network estará disponível em breve. Escolha Lite ou Pro para continuar.",
+      );
+    }
     const accessRole = plan === "network" ? "clinic" : "professional";
     const now = Date.now();
     const subscription = pendingSubscriptionFields(input, now);
@@ -1340,18 +1351,23 @@ export const setAccountStatus = onCall(
     const active = input.status === "active";
     const accessRole = plan === "network" ? "clinic" : "professional";
     const now = Date.now();
+    const currentRenewAtMs = Number(account.renewAtMs ?? 0);
+    if (active && input.renewAtMs !== undefined && input.renewAtMs <= now) {
+      throw new HttpsError(
+        "invalid-argument",
+        "O próximo vencimento deve ser uma data futura.",
+      );
+    }
+    const renewAtMs = active
+      ? nextBillingDueAt(currentRenewAtMs, input.renewAtMs, now)
+      : currentRenewAtMs || null;
     const professionalRef = db.doc(
       `professionals/${account.professionalId}`,
     );
     const professionalSnap = await professionalRef.get();
     const professional = (professionalSnap.data() ?? {}) as ProfessionalRecord;
-    const startsTrial = active
-      && account.trialEligible === true
-      && canStartTrial(account)
-      && canStartTrial(professional);
-    const trial = startsTrial ? startTrialFields(now) : null;
     const wasTrial = professional.status === "trial" || account.trialStatus === "active";
-    const nextProfessionalStatus = startsTrial ? "trial" : active ? "subscriber" : "inactive";
+    const nextProfessionalStatus = active ? "subscriber" : "inactive";
 
     const batch = db.batch();
     batch.update(accountRef, {
@@ -1364,10 +1380,9 @@ export const setAccountStatus = onCall(
       extraSeatPrice: PLANS[plan].extraSeatPrice,
       status: input.status,
       isActive: active,
-      subscriptionStatus: startsTrial ? "trial" : active ? "active" : input.status,
-      trialStatus: startsTrial ? "active" : wasTrial && active ? "converted" : account.trialStatus ?? "not_started",
-      trialEligible: startsTrial ? false : account.trialEligible ?? false,
-      ...(trial ?? {}),
+      subscriptionStatus: active ? "active" : input.status,
+      trialStatus: wasTrial && active ? "converted" : account.trialStatus ?? "not_started",
+      trialEligible: active ? false : account.trialEligible ?? false,
       activatedAtMs: active
         ? Number(accountSnap.data()?.activatedAtMs ?? now)
         : accountSnap.data()?.activatedAtMs ?? null,
@@ -1383,15 +1398,16 @@ export const setAccountStatus = onCall(
         : input.status === "overdue"
           ? "overdue"
           : "paused",
+      paymentProvider: "infinitepay",
+      billingMode: "recurring_link",
+      billingInterval: "monthly",
       paymentConfirmedAtMs: active
         ? now
         : accountSnap.data()?.paymentConfirmedAtMs ?? null,
       paymentConfirmedBy: active
         ? uid
         : accountSnap.data()?.paymentConfirmedBy ?? null,
-      renewAtMs: active
-        ? now + 30 * 24 * 60 * 60 * 1000
-        : accountSnap.data()?.renewAtMs ?? null,
+      renewAtMs,
       updatedAtMs: now,
     });
     batch.set(
@@ -1409,8 +1425,7 @@ export const setAccountStatus = onCall(
         plan,
         isActive: active,
         status: nextProfessionalStatus,
-        trialStatus: startsTrial ? "active" : wasTrial && active ? "converted" : professional.trialStatus ?? "not_started",
-        ...(trial ?? {}),
+        trialStatus: wasTrial && active ? "converted" : professional.trialStatus ?? "not_started",
         updatedAtMs: now,
       },
       { merge: true },
@@ -1440,7 +1455,13 @@ export const setAccountStatus = onCall(
       action: "account_status_changed",
       accountId: input.accountId,
       professionalId: account.professionalId,
-      details: { fromStatus: account.status, toStatus: input.status, plan },
+      details: {
+        fromStatus: account.status,
+        toStatus: input.status,
+        plan,
+        paymentProvider: "infinitepay",
+        renewAtMs,
+      },
       now,
     });
     addSubscriptionHistory(batch, {
@@ -1448,8 +1469,10 @@ export const setAccountStatus = onCall(
       accountId: input.accountId,
       professionalId: account.professionalId,
       fromStatus: account.subscriptionStatus ?? account.status,
-      toStatus: startsTrial ? "trial" : active ? "subscriber" : input.status,
-      reason: "alteração administrativa de assinatura",
+      toStatus: active ? "subscriber" : input.status,
+      reason: active
+        ? "pagamento confirmado na InfinitePay"
+        : "alteração administrativa de assinatura",
       now,
     });
     await batch.commit();

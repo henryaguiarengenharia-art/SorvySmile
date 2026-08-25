@@ -46,9 +46,8 @@ Copie `.env.example` para `.env.local` e preencha:
 
 - configuração pública do Firebase;
 - chave pública do App Check;
-- links atuais da InfinitePay para Lite, Pro e Network;
-- confirme que o checkout de R$ 497 está identificado como Network antes do corte;
-- WhatsApp comercial;
+- links recorrentes atuais da InfinitePay para Lite e Pro;
+- link do Network é opcional enquanto o plano estiver marcado como “Em breve”;
 - email público de privacidade;
 - slug padrão opcional. Deixe vazio para manter a raiz como página comercial;
   o cliente piloto continuará em `/p/clinica-saude-integrada-bh`.
@@ -133,7 +132,8 @@ credenciais temporárias diretamente no Shell e não as salve no repositório.
 - criação, pausa e reativação de acesso da equipe;
 - exclusão de lead;
 - cadastro de assinante;
-- link de pagamento e mensagem do comprovante;
+- links recorrentes Lite e Pro, sem envio de comprovante à Sorvy;
+- confirmação na InfinitePay, registro do vencimento e exibição no painel;
 - ativação, pausa e reativação pela HQ;
 - isolamento entre duas contas de teste;
 - navegação móvel;

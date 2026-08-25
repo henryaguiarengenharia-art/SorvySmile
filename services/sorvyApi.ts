@@ -126,7 +126,7 @@ function mapAccount(id: string, data: DocumentData): BillingAccount {
     tier,
     isActive: data.status === "active",
     startAt: Number(data.createdAtMs ?? Date.now()),
-    renewAt: Number(data.renewAtMs ?? Date.now() + 30 * 24 * 3600 * 1000),
+    renewAt: Number(data.renewAtMs ?? 0),
     status: data.status ?? "pending",
     riskLevel: data.riskLevel ?? "ok",
     accountName: data.accountName ?? "",
@@ -143,6 +143,10 @@ function mapAccount(id: string, data: DocumentData): BillingAccount {
     checkoutWhatsapp: data.checkoutWhatsapp,
     seatsTotal: Number(data.seatsTotal ?? 1),
     seatsUsed: Number(data.seatsUsed ?? 1),
+    paymentProvider: data.paymentProvider,
+    paymentStatus: data.paymentStatus,
+    billingMode: data.billingMode,
+    billingInterval: data.billingInterval,
   };
 }
 
@@ -823,12 +827,13 @@ export async function changeAccountStatus(
   accountId: string,
   status: "active" | "overdue" | "paused",
   plan?: PlanTier,
+  renewAtMs?: number,
 ): Promise<void> {
   const callable = httpsCallable<
-    { accountId: string; status: string; plan?: PlanTier },
+    { accountId: string; status: string; plan?: PlanTier; renewAtMs?: number },
     { ok: true }
   >(functions, "setAccountStatus");
-  await callable({ accountId, status, plan });
+  await callable({ accountId, status, plan, renewAtMs });
 }
 
 export async function createTeamMember(input: {

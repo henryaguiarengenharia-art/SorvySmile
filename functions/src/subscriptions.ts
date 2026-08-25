@@ -1,5 +1,16 @@
 import { normalizePlan, PLANS, PlanTier } from "./plans.js";
 
+const BILLING_CYCLE_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function nextBillingDueAt(
+  currentDueAt: number,
+  requestedDueAt: number | undefined,
+  now: number,
+): number {
+  if (requestedDueAt !== undefined) return requestedDueAt;
+  return (currentDueAt > now ? currentDueAt : now) + BILLING_CYCLE_MS;
+}
+
 interface PendingSubscriptionInput {
   name: string;
   email: string;
@@ -25,8 +36,10 @@ export function pendingSubscriptionFields(
     extraSeatPrice: PLANS[plan].extraSeatPrice,
     status: "pending" as const,
     isActive: false,
-    paymentProvider: "infinitepay_link" as const,
-    paymentStatus: "awaiting_receipt" as const,
+    paymentProvider: "infinitepay" as const,
+    paymentStatus: "awaiting_first_payment" as const,
+    billingMode: "recurring_link" as const,
+    billingInterval: "monthly" as const,
     paymentRequestedAtMs: now,
     trialStatus: "not_started" as const,
     trialEligible: true,

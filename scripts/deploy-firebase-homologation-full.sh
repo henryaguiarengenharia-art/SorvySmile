@@ -75,7 +75,6 @@ const overrides = {
   VITE_PAYMENT_URL_LITE: process.env.HML_PAYMENT_URL_LITE,
   VITE_PAYMENT_URL_PRO: process.env.HML_PAYMENT_URL_PRO,
   VITE_PAYMENT_URL_NETWORK: process.env.HML_PAYMENT_URL_NETWORK,
-  VITE_SALES_WHATSAPP: process.env.HML_SALES_WHATSAPP,
   VITE_PRIVACY_CONTACT_EMAIL: process.env.HML_PRIVACY_CONTACT_EMAIL,
 };
 for (const [key, value] of Object.entries(overrides)) {
@@ -99,7 +98,6 @@ if (values.VITE_FIREBASE_PROJECT_ID !== expectedProject) {
 for (const key of [
   "VITE_PAYMENT_URL_LITE",
   "VITE_PAYMENT_URL_PRO",
-  "VITE_PAYMENT_URL_NETWORK",
 ]) {
   if (!values[key]) throw new Error("Configuracao publica ausente: " + key);
   const url = new URL(values[key]);
@@ -107,12 +105,12 @@ for (const key of [
     throw new Error(key + " deve apontar para invoice.infinitepay.io.");
   }
 }
-
-const whatsapp = String(values.VITE_SALES_WHATSAPP || "").replace(/\D/g, "");
-if (whatsapp.length < 10 || whatsapp.length > 15) {
-  throw new Error("VITE_SALES_WHATSAPP precisa conter DDI, DDD e numero.");
+if (values.VITE_PAYMENT_URL_NETWORK) {
+  const networkUrl = new URL(values.VITE_PAYMENT_URL_NETWORK);
+  if (networkUrl.protocol !== "https:" || networkUrl.hostname !== "invoice.infinitepay.io") {
+    throw new Error("VITE_PAYMENT_URL_NETWORK deve apontar para invoice.infinitepay.io.");
+  }
 }
-values.VITE_SALES_WHATSAPP = whatsapp;
 
 if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(values.VITE_PRIVACY_CONTACT_EMAIL || "")) {
   throw new Error("VITE_PRIVACY_CONTACT_EMAIL e obrigatorio e deve ser valido.");
@@ -132,7 +130,6 @@ const order = [
   "VITE_PAYMENT_URL_PRO",
   "VITE_PAYMENT_URL_NETWORK",
   "VITE_PAYMENT_URL_ELITE",
-  "VITE_SALES_WHATSAPP",
   "VITE_PRIVACY_CONTACT_EMAIL",
 ];
 fs.writeFileSync(

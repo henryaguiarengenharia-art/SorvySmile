@@ -13,26 +13,30 @@ export interface PlanDefinition {
 export const PLANS: Record<PlanTier, PlanDefinition> = {
   lite: {
     label: "Lite",
-    price: 149,
+    price: 97,
     monthlyLeadLimit: 15,
     includedSeats: 1,
     extraSeatPrice: 0,
   },
   pro: {
     label: "Pro",
-    price: 297,
+    price: 197,
     monthlyLeadLimit: 60,
     includedSeats: 1,
     extraSeatPrice: 0,
   },
   network: {
     label: "Network",
-    price: 497,
+    price: 297,
     monthlyLeadLimit: 150,
     includedSeats: 2,
-    extraSeatPrice: 79,
+    extraSeatPrice: 0,
   },
 };
+
+export function isPlanPubliclyAvailable(plan: PlanTier): boolean {
+  return plan === "lite" || plan === "pro";
+}
 
 export function normalizePlan(value: unknown): PlanTier {
   if (value === "elite") return "network";

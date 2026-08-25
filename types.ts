@@ -38,6 +38,12 @@ export interface PlanConfig {
 }
 
 export type AccountStatus = 'active' | 'pending' | 'overdue' | 'paused';
+export type PaymentStatus =
+  | 'awaiting_first_payment'
+  | 'confirmed'
+  | 'overdue'
+  | 'paused'
+  | 'awaiting_receipt';
 export type ProfessionalStatus =
   | 'active'
   | 'trial'
@@ -72,6 +78,10 @@ export interface BillingAccount {
   checkoutWhatsapp?: string;
   seatsTotal?: number;
   seatsUsed?: number;
+  paymentProvider?: 'infinitepay' | 'infinitepay_link';
+  paymentStatus?: PaymentStatus;
+  billingMode?: 'recurring_link';
+  billingInterval?: 'monthly';
 }
 
 export interface SmileScores {

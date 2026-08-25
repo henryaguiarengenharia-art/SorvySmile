@@ -47,6 +47,7 @@ interface HQDashboardViewProps {
     id: string,
     status: "active" | "overdue" | "paused",
     plan?: PlanTier,
+    renewAtMs?: number,
   ) => Promise<void>;
   onOpenWhatsApp: (number: string, message: string) => void;
   professionals: DentistRecord[];
@@ -95,6 +96,18 @@ const statusCopy: Record<
   },
 };
 
+const formatBillingDate = (timestamp: number): string =>
+  timestamp > 0 ? new Date(timestamp).toLocaleDateString("pt-BR") : "Após ativação";
+
+const dateInputValue = (timestamp: number): string => {
+  const date = new Date(timestamp > Date.now() ? timestamp : Date.now() + 30 * 24 * 60 * 60 * 1000);
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+};
+
 export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   leadRecords,
   billingAccounts,
@@ -120,6 +133,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   );
   const [selected, setSelected] = useState<BillingAccount | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<PlanTier>("pro");
+  const [selectedRenewAt, setSelectedRenewAt] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedProfessional, setSelectedProfessional] = useState<DentistRecord | null>(null);
@@ -213,6 +227,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
   const openActivation = (account: BillingAccount): void => {
     setSelected(account);
     setSelectedPlan(account.requestedPlan ?? account.tier);
+    setSelectedRenewAt(dateInputValue(account.renewAt));
     setNotice(null);
   };
 
@@ -220,11 +235,12 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
     account: BillingAccount,
     status: "active" | "overdue" | "paused",
     plan?: PlanTier,
+    renewAtMs?: number,
   ): Promise<void> => {
     setBusyId(account.id);
     setNotice(null);
     try {
-      await onUpdateBilling(account.id, status, plan);
+      await onUpdateBilling(account.id, status, plan, renewAtMs);
       setSelected(null);
       setNotice(
         status === "active"
@@ -361,7 +377,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
             <div><p className="text-4xl font-black">{stats.monthLeads}</p><p className="mt-1 text-xs font-bold text-slate-300">leads no mês</p></div>
             <div><p className="text-4xl font-black">{leadRecords.length}</p><p className="mt-1 text-xs font-bold text-slate-300">leads gerais</p></div>
           </div>
-          <div className="mt-6 border-t border-white/10 pt-4"><p className="text-2xl font-black">{stats.pending}</p><p className="text-xs font-bold text-slate-400">pagamentos aguardando conferência</p></div>
+          <div className="mt-6 border-t border-white/10 pt-4"><p className="text-2xl font-black">{stats.pending}</p><p className="text-xs font-bold text-slate-400">pagamentos aguardando confirmação na InfinitePay</p></div>
         </article>
       </section>
 
@@ -463,7 +479,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
                     </p>
                     <p className="text-xs font-bold text-slate-500">{professionalLeads.length ? Math.round((conversions / professionalLeads.length) * 100) : 0}% convertido</p>
                   </div>
-                  <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Renovação</p><p className="mt-1 font-black">{new Date(account.renewAt).toLocaleDateString("pt-BR")}</p></div>
+                  <div><p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Renovação</p><p className="mt-1 font-black">{formatBillingDate(account.renewAt)}</p></div>
                   <div>
                     <button onClick={() => setManagedProfessional(professional)} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white">
                       Gerenciar <ChevronRight className="h-4 w-4" />
@@ -527,7 +543,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
                 <Info label="Status" value={statusCopy[account.status ?? "pending"].label} />
                 <Info label="Plano" value={planName(account.tier)} />
                 <Info label="Mensalidade" value={planConfigs[account.tier].price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} />
-                <Info label="Renovação" value={new Date(account.renewAt).toLocaleDateString("pt-BR")} />
+                <Info label="Renovação" value={formatBillingDate(account.renewAt)} />
                 <Info label="Uso do mês" value={`${usageByAccount[account.id]?.[month] ?? 0} / ${planConfigs[account.tier].baseMonthlyLeadLimit}`} />
                 <Info label="Trial" value={professional.trialEndsAt ? `até ${new Date(professional.trialEndsAt).toLocaleDateString("pt-BR")}` : "não ativo"} />
               </div>
@@ -592,8 +608,8 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
               Confirmar pagamento e ativar
             </h2>
             <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
-              Confira o comprovante e o pagamento na InfinitePay antes de
-              liberar o acesso de{" "}
+              Confirme o primeiro pagamento diretamente na InfinitePay antes
+              de liberar o acesso de{" "}
               <strong>{selected.accountName || selected.checkoutName}</strong>.
             </p>
             <p className="mt-3 break-all rounded-xl bg-slate-50 p-3 text-xs font-black text-slate-500">
@@ -617,10 +633,27 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
                 ))}
               </select>
             </label>
+            <label className="mt-4 block">
+              <span className="mb-2 block text-[9px] font-black uppercase tracking-widest text-slate-400">
+                Próximo vencimento
+              </span>
+              <input
+                type="date"
+                required
+                value={selectedRenewAt}
+                onChange={(event) => setSelectedRenewAt(event.target.value)}
+                className="input"
+              />
+            </label>
             <button
-              disabled={busyId === selected.id}
+              disabled={busyId === selected.id || !selectedRenewAt}
               onClick={() =>
-                void changeStatus(selected, "active", selectedPlan)
+                void changeStatus(
+                  selected,
+                  "active",
+                  selectedPlan,
+                  new Date(`${selectedRenewAt}T12:00:00`).getTime(),
+                )
               }
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-4 text-xs font-black uppercase tracking-widest text-white disabled:opacity-50"
             >

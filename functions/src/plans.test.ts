@@ -6,6 +6,7 @@ import {
 } from "./constants.js";
 import {
   monthKey,
+  isPlanPubliclyAvailable,
   normalizePlan,
   photoValidationLimit,
   PLANS,
@@ -41,14 +42,20 @@ describe("planos", () => {
   });
 
   it("mantém os preços atuais do Smile", () => {
-    expect(PLANS.lite.price).toBe(149);
-    expect(PLANS.pro.price).toBe(297);
-    expect(PLANS.network.price).toBe(497);
+    expect(PLANS.lite.price).toBe(97);
+    expect(PLANS.pro.price).toBe(197);
+    expect(PLANS.network.price).toBe(297);
   });
 
-  it("mantém dois acessos incluídos e o valor do acesso adicional no Network", () => {
+  it("mantém dois acessos incluídos sem vender acesso adicional", () => {
     expect(PLANS.network.includedSeats).toBe(2);
-    expect(PLANS.network.extraSeatPrice).toBe(79);
+    expect(PLANS.network.extraSeatPrice).toBe(0);
+  });
+
+  it("libera contratação pública somente para Lite e Pro", () => {
+    expect(isPlanPubliclyAvailable("lite")).toBe(true);
+    expect(isPlanPubliclyAvailable("pro")).toBe(true);
+    expect(isPlanPubliclyAvailable("network")).toBe(false);
   });
 
   it("gera a chave mensal em UTC", () => {

@@ -31,13 +31,14 @@ de triagem quando o link possui um responsável ativo.
 
 | Plano | Mensalidade | Triagens/mês | Principal evolução |
 |---|---:|---:|---|
-| Lite | R$ 149 | 15 | preview, bio link e captação |
-| Pro | R$ 297 | 60 | relatório completo, CRM e agendamento |
-| Network | R$ 497 | 150 | equipe, atribuição e KPIs por dentista |
+| Lite | R$ 97 | 15 | preview, bio link e captação |
+| Pro | R$ 197 | 60 | relatório completo, CRM e agendamento |
+| Network | R$ 297 | 150 | em breve; equipe, atribuição e KPIs por dentista |
 
-O Network inclui 2 acessos; acesso adicional custa R$ 79. Add-ons de volume:
-+50 leads por R$ 99 e +150 leads por R$ 249. O valor `elite` é tratado apenas
-como alias legado e normalizado para `network`.
+No lançamento, somente Lite e Pro podem ser contratados. O Network aparece
+como indisponível e mantém a arquitetura interna para uma fase futura. Não há
+venda pública de add-ons ou acessos adicionais. O valor `elite` é tratado
+apenas como alias legado e normalizado para `network`.
 
 ## Fluxos
 
@@ -56,9 +57,12 @@ Assinante:
 
 1. escolhe o plano e cria a conta;
 2. a solicitação fica pendente no painel HQ;
-3. abre o link de pagamento já usado pela operação;
-4. envia o comprovante por WhatsApp com a referência da conta;
-5. a HQ confere e ativa o plano e o link profissional.
+3. abre o link recorrente da InfinitePay já usado pela operação;
+4. conclui o primeiro pagamento sem enviar comprovante à Sorvy;
+5. a HQ confirma o pagamento diretamente na InfinitePay, informa o próximo
+   vencimento e ativa o plano e o link profissional;
+6. o painel do cliente exibe status e vencimento; cobranças e lembretes são
+   enviados pela InfinitePay por e-mail e WhatsApp.
 
 ## Arquitetura
 

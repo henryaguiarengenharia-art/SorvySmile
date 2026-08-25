@@ -73,6 +73,7 @@ export const accountStatusSchema = z.object({
   accountId: z.string().min(3).max(160),
   status: z.enum(["active", "overdue", "paused"]),
   plan: z.enum(["lite", "pro", "network", "elite"]).optional(),
+  renewAtMs: z.number().int().positive().optional(),
 });
 
 export const leadIdSchema = z.object({

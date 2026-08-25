@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import {
   AssistantResponse,
+  BillingAccount,
   DailyPostAssignment,
   DailyPostVariant,
   DentistRecord,
@@ -39,10 +40,12 @@ import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
 import { ProfessionalAssistantSettingsCard } from "./ProfessionalAssistantSettingsCard";
 import { getProfessionalAssistantSettings } from "../services/sorvyApi";
 import { defaultProfessionalAssistantSettings } from "../services/professionalAssistantProfile";
+import { BillingSummaryCard } from "./BillingSummaryCard";
 
 interface DentistPortalViewProps {
   leadRecords: LeadRecord[];
   professional: DentistRecord;
+  billingAccount: BillingAccount;
   planConfig: PlanConfig;
   currentUsage: number;
   onUpdateLead: (
@@ -94,6 +97,7 @@ const statusClass: Record<LeadStatus, string> = {
 export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   leadRecords,
   professional,
+  billingAccount,
   planConfig,
   currentUsage,
   onUpdateLead,
@@ -478,6 +482,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
 
       {tab === "dashboard" && (
         <section className="space-y-6">
+          <BillingSummaryCard account={billingAccount} readOnly={readOnly} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Métricas do período</p>
