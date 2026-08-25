@@ -1,5 +1,5 @@
-export const CONSENT_VERSION = "2026-07";
-export const SUBSCRIBER_TERMS_VERSION = "2026-07";
+export const CONSENT_VERSION = "2026-08";
+export const SUBSCRIBER_TERMS_VERSION = "2026-08";
 export const SESSION_TTL_MS = 30 * 60 * 1000;
 export const MAX_VALIDATION_ATTEMPTS = 3;
 export const LEAD_RETENTION_DAYS = 365;

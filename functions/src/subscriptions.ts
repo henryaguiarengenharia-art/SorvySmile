@@ -19,10 +19,9 @@ interface PendingSubscriptionInput {
   termsVersion: string;
 }
 
-export function pendingSubscriptionFields(
-  input: PendingSubscriptionInput,
-  now: number,
-) {
+export type CheckoutMode = "paid" | "trial";
+
+function subscriptionPlanFields(input: PendingSubscriptionInput, now: number) {
   const plan = normalizePlan(input.plan);
   return {
     plan,
@@ -34,20 +33,49 @@ export function pendingSubscriptionFields(
     seatsTotal: PLANS[plan].includedSeats,
     seatsUsed: 1,
     extraSeatPrice: PLANS[plan].extraSeatPrice,
-    status: "pending" as const,
-    isActive: false,
     paymentProvider: "infinitepay" as const,
-    paymentStatus: "awaiting_first_payment" as const,
     billingMode: "recurring_link" as const,
     billingInterval: "monthly" as const,
-    paymentRequestedAtMs: now,
-    trialStatus: "not_started" as const,
-    trialEligible: true,
     checkoutName: input.name,
     checkoutEmail: input.email,
     checkoutWhatsapp: input.whatsapp,
     termsVersion: input.termsVersion,
     termsAcceptedAtMs: now,
     updatedAtMs: now,
+  };
+}
+
+export function pendingSubscriptionFields(
+  input: PendingSubscriptionInput,
+  now: number,
+) {
+  return {
+    ...subscriptionPlanFields(input, now),
+    status: "pending" as const,
+    isActive: false,
+    paymentStatus: "awaiting_first_payment" as const,
+    subscriptionStatus: "pending" as const,
+    paymentRequestedAtMs: now,
+    trialStatus: "not_started" as const,
+    trialEligible: true,
+  };
+}
+
+export function trialSubscriptionFields(
+  input: PendingSubscriptionInput,
+  now: number,
+) {
+  return {
+    ...subscriptionPlanFields(input, now),
+    status: "active" as const,
+    isActive: true,
+    paymentStatus: "trial" as const,
+    subscriptionStatus: "trial_ready" as const,
+    trialStatus: "ready" as const,
+    trialEligible: false,
+    trialPreparedAtMs: now,
+    trialStartedAtMs: null,
+    trialEndsAtMs: null,
+    trialUntil: null,
   };
 }

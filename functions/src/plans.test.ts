@@ -135,6 +135,19 @@ describe("consentimentos versionados", () => {
     expect(SUBSCRIBER_TERMS_VERSION).toBe(CONSENT_VERSION);
     expect(MAX_VALIDATION_ATTEMPTS).toBe(3);
   });
+
+  it("distingue contratação paga e teste gratuito", () => {
+    const base = {
+      name: "Clínica",
+      email: "clinica@example.com",
+      whatsapp: "31999999999",
+      specialty: "",
+      plan: "pro" as const,
+      termsVersion: SUBSCRIBER_TERMS_VERSION,
+    };
+    expect(checkoutSchema.parse(base).checkoutMode).toBe("paid");
+    expect(checkoutSchema.parse({ ...base, checkoutMode: "trial" }).checkoutMode).toBe("trial");
+  });
 });
 
 describe("ações de conversão do paciente", () => {

@@ -47,13 +47,20 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
 }) => {
   const status = account.status ?? "pending";
   const statusInfo = statusCopy[status];
+  const isTrialReady = account.subscriptionStatus === "trial_ready" || account.trialStatus === "ready";
   const isTrial = account.subscriptionStatus === "trial" || account.trialStatus === "active";
   const dueAt = isTrial ? account.trialUntil ?? 0 : account.renewAt;
-  const dueLabel = isTrial ? "Fim do teste" : "Próximo vencimento";
+  const dueLabel = isTrialReady ? "Início da contagem" : isTrial ? "Fim do teste" : "Próximo vencimento";
+  const lifecycleLabel = isTrialReady ? "Teste preparado" : isTrial ? "Teste em andamento" : statusInfo.label;
+  const lifecycleDetail = isTrialReady
+    ? "Sem cobrança e sem dias consumidos"
+    : isTrial
+      ? "Período gratuito ativo"
+      : statusInfo.detail;
   const paymentUrl = paymentUrlFor(account.tier);
   const showPaymentLink = !readOnly
     && Boolean(paymentUrl)
-    && (status === "pending" || status === "overdue");
+    && (status === "pending" || status === "overdue" || isTrialReady || isTrial);
 
   return (
     <article className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
@@ -72,8 +79,8 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
             <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
               Cobrança · InfinitePay
             </p>
-            <h2 className="mt-1 text-lg font-black">{statusInfo.label}</h2>
-            <p className="mt-1 text-xs font-bold text-slate-500">{statusInfo.detail}</p>
+            <h2 className="mt-1 text-lg font-black">{lifecycleLabel}</h2>
+            <p className="mt-1 text-xs font-bold text-slate-500">{lifecycleDetail}</p>
           </div>
         </div>
 
@@ -91,7 +98,11 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
               <CalendarClock className="h-3.5 w-3.5" /> {dueLabel}
             </p>
             <p className="mt-1 font-black">
-              {dueAt ? new Date(dueAt).toLocaleDateString("pt-BR") : "Após a ativação"}
+              {isTrialReady
+                ? "No primeiro lead capturado"
+                : dueAt
+                  ? new Date(dueAt).toLocaleDateString("pt-BR")
+                  : "Após a ativação"}
             </p>
           </div>
         </div>
@@ -99,7 +110,11 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
 
       <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs font-medium leading-relaxed text-slate-500">
-          E-mails e mensagens de cobrança são enviados diretamente pela InfinitePay.
+          {isTrialReady
+            ? "Você pode configurar e divulgar seu link com calma. A contagem ainda não começou."
+            : isTrial
+              ? "Você pode assinar antes do encerramento sem perder seus dados."
+              : "E-mails e mensagens de cobrança são enviados diretamente pela InfinitePay."}
         </p>
         {showPaymentLink && (
           <a
@@ -108,7 +123,7 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
             rel="noopener noreferrer"
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white hover:bg-blue-700"
           >
-            Abrir InfinitePay <ExternalLink className="h-4 w-4" />
+            {isTrialReady || isTrial ? "Assinar plano" : "Abrir InfinitePay"} <ExternalLink className="h-4 w-4" />
           </a>
         )}
       </div>

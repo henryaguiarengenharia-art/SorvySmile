@@ -5,6 +5,7 @@ import {
   Check,
   CheckCircle2,
   CreditCard,
+  ExternalLink,
   LoaderCircle,
   LockKeyhole,
   LogOut,
@@ -106,6 +107,8 @@ interface PendingRegistration {
   plan: PlanTier;
 }
 
+type CheckoutMode = "paid" | "trial";
+
 function dashboardViewFor(user: WorkspaceUser): AppView {
   if (user.role === "hq") return "hq-dashboard";
   if (user.role === "clinic") return "admin-dashboard";
@@ -122,11 +125,13 @@ const App: React.FC = () => {
   const [workspace, setWorkspace] = useState<WorkspaceData | null>(null);
   const workspaceUnsubscribe = useRef<(() => void) | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<PlanTier>("pro");
+  const [checkoutMode, setCheckoutMode] = useState<CheckoutMode>("paid");
   const [pendingRegistration, setPendingRegistration] =
     useState<PendingRegistration | null>(null);
   const [hqPreviewProfessionalId, setHqPreviewProfessionalId] = useState<string | null>(null);
   const [dailyPostAssignment, setDailyPostAssignment] = useState<DailyPostAssignment | null>(null);
   const [dailyPostHistory, setDailyPostHistory] = useState<DailyPostAssignment[]>([]);
+  const [lifecycleNow, setLifecycleNow] = useState(Date.now());
 
   const slug = useMemo(resolveSlug, []);
 
@@ -186,6 +191,11 @@ const App: React.FC = () => {
   );
 
   useEffect(() => {
+    const timer = window.setInterval(() => setLifecycleNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
     const initialView = resolveInitialView();
     if (
@@ -223,8 +233,7 @@ const App: React.FC = () => {
     );
   };
 
-  const handleLogin = async (email: string, password: string) => {
-    const user = await loginWorkspace(email, password);
+  const openWorkspace = async (user: WorkspaceUser) => {
     setWorkspaceUser(user);
     workspaceUnsubscribe.current?.();
     workspaceUnsubscribe.current = await subscribeWorkspace(
@@ -233,6 +242,10 @@ const App: React.FC = () => {
       setPageError,
     );
     setView(dashboardViewFor(user));
+  };
+
+  const handleLogin = async (email: string, password: string) => {
+    await openWorkspace(await loginWorkspace(email, password));
   };
 
   const handleLogout = async () => {
@@ -253,6 +266,18 @@ const App: React.FC = () => {
   const currentAccount = workspaceUser?.accountId
     ? workspace?.accounts[workspaceUser.accountId]
     : undefined;
+  const currentTrialExpired = Boolean(
+    currentAccount
+    && (
+      currentAccount.trialStatus === "expired"
+      || currentAccount.subscriptionStatus === "trial_expired"
+      || (
+        currentAccount.trialStatus === "active"
+        && Boolean(currentAccount.trialUntil)
+        && Number(currentAccount.trialUntil) <= lifecycleNow
+      )
+    ),
+  );
   const currentMonth = useMemo(() => {
     const now = new Date();
     return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -384,8 +409,9 @@ const App: React.FC = () => {
 
       {view === "pricing" && (
         <PricingView
-          onSelect={(plan) => {
+          onSelect={(plan, mode) => {
             setSelectedPlan(plan);
+            setCheckoutMode(mode);
             setView("checkout-pix");
           }}
         />
@@ -394,8 +420,13 @@ const App: React.FC = () => {
       {view === "checkout-pix" && (
         <CheckoutView
           plan={selectedPlan}
+          mode={checkoutMode}
           onBack={() => setView("pricing")}
-          onCreated={(registration) => {
+          onCreated={async (registration, user) => {
+            if (checkoutMode === "trial" && user) {
+              await openWorkspace(user);
+              return;
+            }
             setPendingRegistration(registration);
             setView("checkout-confirm");
           }}
@@ -425,7 +456,14 @@ const App: React.FC = () => {
         <LoginView onLogin={handleLogin} onBack={() => setView("landing")} />
       )}
 
-      {view === "dentist-portal" && workspace && currentProfessional && currentAccount && (
+      {(view === "dentist-portal" || view === "admin-dashboard")
+        && workspace && currentAccount && currentTrialExpired && (
+        <DashboardShell title="Teste gratuito concluído" onLogout={handleLogout}>
+          <TrialExpiredView account={currentAccount} />
+        </DashboardShell>
+      )}
+
+      {view === "dentist-portal" && workspace && currentProfessional && currentAccount && !currentTrialExpired && (
         <DashboardShell title={currentProfessional.name} onLogout={handleLogout}>
           <React.Suspense fallback={<DashboardLoading />}>
             <DentistPortalView
@@ -462,7 +500,7 @@ const App: React.FC = () => {
         </DashboardShell>
       )}
 
-      {view === "admin-dashboard" && workspace && currentAccount && (
+      {view === "admin-dashboard" && workspace && currentAccount && !currentTrialExpired && (
         <DashboardShell
           title={currentAccount.accountName || "Administração da clínica"}
           onLogout={handleLogout}
@@ -759,7 +797,7 @@ const LandingView = ({
 const PricingView = ({
   onSelect,
 }: {
-  onSelect: (plan: PlanTier) => void;
+  onSelect: (plan: PlanTier, mode: CheckoutMode) => void;
 }) => (
   <main className="mx-auto max-w-6xl px-6 py-16">
     <div className="text-center">
@@ -818,7 +856,7 @@ const PricingView = ({
             </ul>
             <button
               disabled={!available}
-              onClick={() => onSelect(tier)}
+              onClick={() => onSelect(tier, "paid")}
               className={`mt-9 w-full rounded-2xl py-4 text-xs font-black uppercase tracking-widest disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 ${
                 highlighted
                   ? "bg-blue-600 text-white hover:bg-blue-500"
@@ -827,6 +865,23 @@ const PricingView = ({
             >
               {available ? `Escolher ${copy.name}` : "Indisponível no lançamento"}
             </button>
+            {available && tier !== "network" && (
+              <>
+                <button
+                  onClick={() => onSelect(tier, "trial")}
+                  className={`mt-3 w-full rounded-2xl border-2 py-4 text-xs font-black uppercase tracking-widest ${
+                    highlighted
+                      ? "border-white/20 text-white hover:border-blue-400 hover:text-blue-300"
+                      : "border-blue-100 text-blue-700 hover:border-blue-300"
+                  }`}
+                >
+                  Testar grátis por 7 dias
+                </button>
+                <p className={`mt-3 text-center text-[11px] font-bold leading-relaxed ${highlighted ? "text-slate-400" : "text-slate-500"}`}>
+                  Os 7 dias começam somente após a captura do primeiro lead.
+                </p>
+              </>
+            )}
           </article>
         );
       })}
@@ -836,12 +891,14 @@ const PricingView = ({
 
 const CheckoutView = ({
   plan,
+  mode,
   onBack,
   onCreated,
 }: {
   plan: PlanTier;
+  mode: CheckoutMode;
   onBack: () => void;
-  onCreated: (registration: PendingRegistration) => void;
+  onCreated: (registration: PendingRegistration, user?: WorkspaceUser) => Promise<void> | void;
 }) => {
   const [form, setForm] = useState({
     name: "",
@@ -871,14 +928,14 @@ const CheckoutView = ({
     setBusy(true);
     setError(null);
     try {
-      const subscription = await registerPendingSubscription({ ...form, plan });
-      onCreated({
+      const subscription = await registerPendingSubscription({ ...form, plan, checkoutMode: mode });
+      await onCreated({
         accountId: subscription.accountId,
         name: form.name.trim(),
         email: form.email.trim().toLowerCase(),
         whatsapp: form.whatsapp,
         plan,
-      });
+      }, subscription.user);
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -904,8 +961,9 @@ const CheckoutView = ({
           </p>
           <h1 className="mt-2 text-3xl font-black">Criar sua conta</h1>
           <p className="mt-2 text-sm font-medium text-slate-500">
-            R$ {PLAN_CONFIGS[plan].price}/mês. Depois do cadastro você verá o
-            link do plano recorrente na InfinitePay.
+            {mode === "trial"
+              ? "Cadastre sua conta sem cobrança. Os 7 dias só começam quando seu primeiro lead for capturado."
+              : `R$ ${PLAN_CONFIGS[plan].price}/mês. Depois do cadastro você verá o link do plano recorrente na InfinitePay.`}
           </p>
         </div>
         {[
@@ -947,7 +1005,7 @@ const CheckoutView = ({
             >
               Termos do Assinante
             </a>
-            , a contratação mensal e a{" "}
+            , {mode === "trial" ? "as regras do teste gratuito" : "a contratação mensal"} e a{" "}
             <a
               href="/privacidade"
               className="text-blue-600 underline"
@@ -971,9 +1029,9 @@ const CheckoutView = ({
           {busy ? (
             <LoaderCircle className="h-5 w-5 animate-spin" />
           ) : (
-            <CreditCard className="h-5 w-5" />
+            mode === "trial" ? <Sparkles className="h-5 w-5" /> : <CreditCard className="h-5 w-5" />
           )}
-          Criar conta e ver pagamento
+          {mode === "trial" ? "Criar conta e iniciar experiência" : "Criar conta e ver pagamento"}
         </button>
       </form>
     </main>
@@ -1077,6 +1135,43 @@ const CheckoutReturnView = ({ onLogin }: { onLogin: () => void }) => (
   </main>
 );
 
+const TrialExpiredView = ({ account }: { account: import("./types").BillingAccount }) => {
+  const paymentUrl = paymentUrlFor(account.tier);
+  return (
+    <main className="mx-auto max-w-2xl px-6 py-16 text-center">
+      <section className="rounded-[3rem] border border-amber-100 bg-white p-10 shadow-xl">
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-amber-50 text-amber-700">
+          <LockKeyhole className="h-9 w-9" />
+        </div>
+        <p className="mt-7 text-[10px] font-black uppercase tracking-widest text-amber-700">
+          Experiência concluída
+        </p>
+        <h1 className="mt-2 text-4xl font-black">Seu teste de 7 dias terminou</h1>
+        <p className="mx-auto mt-4 max-w-lg font-medium leading-relaxed text-slate-500">
+          Seus dados e leads continuam preservados. Para voltar a usar o painel e reativar seu link público, assine o plano {PLAN_COPY[account.tier].name}.
+        </p>
+        <div className="mx-auto mt-7 max-w-sm rounded-2xl bg-slate-50 p-5">
+          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Plano selecionado</p>
+          <p className="mt-2 text-2xl font-black">R$ {PLAN_CONFIGS[account.tier].price}/mês</p>
+        </div>
+        {paymentUrl && (
+          <a
+            href={paymentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-7 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 py-5 text-sm font-black uppercase tracking-widest text-white hover:bg-blue-700"
+          >
+            Assinar e reativar acesso <ExternalLink className="h-5 w-5" />
+          </a>
+        )}
+        <p className="mt-4 text-xs font-medium leading-relaxed text-slate-400">
+          A cobrança e os lembretes serão processados diretamente pela InfinitePay.
+        </p>
+      </section>
+    </main>
+  );
+};
+
 const LegalView = ({
   type,
   onBack,
@@ -1096,7 +1191,7 @@ const LegalView = ({
       </button>
       <article className="rounded-[2.5rem] border border-slate-100 bg-white p-8 shadow-xl md:p-12">
         <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
-          Versão 2026-07
+          Versão 2026-08
         </p>
         <h1 className="mt-3 text-4xl font-black tracking-tight">
           {isPrivacy ? "Política de Privacidade" : "Termos do Assinante"}
@@ -1181,7 +1276,11 @@ const LegalView = ({
               contratação. O Network inclui gestão de equipe, atribuição de
               leads e indicadores por profissional. Funcionalidades ainda em
               validação são identificadas no produto e não devem ser tratadas
-              como ativas.
+              como ativas. O teste gratuito está disponível apenas para Lite e
+              Pro, uma única vez por conta. Seus sete dias começam na primeira
+              captura de lead concluída com consentimento, e não no cadastro.
+              Ao final, o painel operacional e o link público são pausados,
+              preservando os dados para eventual assinatura.
             </LegalSection>
             <LegalSection title="3. Pagamento e ativação">
               A solicitação cria uma conta pendente. O pagamento ocorre no link

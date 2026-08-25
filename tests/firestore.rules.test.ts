@@ -233,6 +233,27 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
     );
   });
 
+  it("preserva leitura, mas bloqueia escrita operacional após o trial", async () => {
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "accounts", "acc_a"), {
+        status: "paused",
+        trialStatus: "expired",
+        subscriptionStatus: "trial_expired",
+      });
+    });
+    const professional = environment.authenticatedContext("user_a").firestore();
+    await assertSucceeds(getDoc(doc(professional, "leads", "lead_a")));
+    await assertFails(updateDoc(doc(professional, "leads", "lead_a"), {
+      status: "in_chat",
+      updatedAtMs: 125,
+    }));
+    await assertFails(updateDoc(doc(professional, "professionals", "pro_a"), {
+      city: "Recife",
+      state: "PE",
+      updatedAtMs: 126,
+    }));
+  });
+
   it("protege plano e vínculo do perfil profissional", async () => {
     const professional = environment
       .authenticatedContext("user_a")

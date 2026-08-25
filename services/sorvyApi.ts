@@ -50,8 +50,8 @@ import {
   isFirebaseConfigured,
 } from "./firebaseClient";
 
-export const CONSENT_VERSION = "2026-07";
-export const SUBSCRIBER_TERMS_VERSION = "2026-07";
+export const CONSENT_VERSION = "2026-08";
+export const SUBSCRIBER_TERMS_VERSION = "2026-08";
 
 export interface WorkspaceData {
   user: WorkspaceUser;
@@ -72,6 +72,7 @@ interface CheckoutData {
   specialty: string;
   password: string;
   plan: PlanTier;
+  checkoutMode: "paid" | "trial";
 }
 
 function assertConfigured(): void {
@@ -428,7 +429,7 @@ export async function loginWorkspace(
   try {
     const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
     const user = await currentWorkspaceUser(credential.user);
-    if (user.role !== "hq" && user.status !== "active") {
+    if (user.role !== "hq" && !["active", "trial_expired"].includes(user.status ?? "")) {
       await signOut(auth);
       throw new Error(
         user.status === "pending"
@@ -472,7 +473,7 @@ export async function restoreWorkspaceSession(): Promise<WorkspaceUser | null> {
       }
       try {
         const user = await currentWorkspaceUser(firebaseUser);
-        if (user.role !== "hq" && user.status !== "active") {
+        if (user.role !== "hq" && !["active", "trial_expired"].includes(user.status ?? "")) {
           resolve(null);
           return;
         }
@@ -490,7 +491,14 @@ export async function logoutWorkspace(): Promise<void> {
 
 export async function registerPendingSubscription(
   data: CheckoutData,
-): Promise<{ accountId: string; plan: PlanTier; status: "pending" }> {
+): Promise<{
+  accountId: string;
+  plan: PlanTier;
+  slug: string;
+  status: "pending" | "active";
+  trialStatus: "not_started" | "ready";
+  user?: WorkspaceUser;
+}> {
   assertConfigured();
   const email = data.email.trim().toLowerCase();
   let user: User;
@@ -507,7 +515,13 @@ export async function registerPendingSubscription(
 
   const callable = httpsCallable<
     Omit<CheckoutData, "password"> & { termsVersion: string },
-    { accountId: string; plan: PlanTier; status: "pending" }
+    {
+      accountId: string;
+      plan: PlanTier;
+      slug: string;
+      status: "pending" | "active";
+      trialStatus: "not_started" | "ready";
+    }
   >(functions, "createPendingSubscription");
   try {
     const result = await callable({
@@ -516,10 +530,15 @@ export async function registerPendingSubscription(
       whatsapp: data.whatsapp,
       specialty: data.specialty,
       plan: data.plan,
+      checkoutMode: data.checkoutMode,
       termsVersion: SUBSCRIBER_TERMS_VERSION,
     });
-    if (!result.data.accountId || result.data.status !== "pending") {
+    if (!result.data.accountId || !["pending", "active"].includes(result.data.status)) {
       throw new Error("A solicitação de assinatura não foi registrada.");
+    }
+    if (result.data.status === "active" && result.data.trialStatus === "ready") {
+      await user.getIdToken(true);
+      return { ...result.data, user: await currentWorkspaceUser(user) };
     }
     return result.data;
   } catch (error) {

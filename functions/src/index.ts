@@ -56,8 +56,10 @@ import {
 import {
   nextBillingDueAt,
   pendingSubscriptionFields,
+  trialSubscriptionFields,
 } from "./subscriptions.js";
 import {
+  activatePreparedTrialFields,
   canStartTrial,
   startTrialFields,
   trialStatusAt,
@@ -159,7 +161,7 @@ interface AccountRecord {
   status: "pending" | "active" | "overdue" | "paused";
   slug: string;
   ownerType?: "dentist" | "clinic";
-  trialStatus?: "not_started" | "active" | "expired" | "converted";
+  trialStatus?: "not_started" | "ready" | "active" | "expired" | "converted";
   trialStartedAtMs?: number;
   trialEndsAtMs?: number;
   trialUntil?: number;
@@ -198,7 +200,7 @@ interface ProfessionalRecord {
   publicSlug?: string;
   isActive?: boolean;
   status?: "active" | "trial" | "subscriber" | "inactive" | "archived";
-  trialStatus?: "not_started" | "active" | "expired" | "converted";
+  trialStatus?: "not_started" | "ready" | "active" | "expired" | "converted";
   trialStartedAtMs?: number;
   trialEndsAtMs?: number;
   trialUntil?: number;
@@ -251,6 +253,19 @@ async function readUser(uid: string): Promise<UserRecord> {
   return user.data() as UserRecord;
 }
 
+function hasActiveAccountAccess(
+  account: FirebaseFirestore.DocumentData | undefined,
+  now = Date.now(),
+): boolean {
+  if (!account || account.status !== "active") return false;
+  return trialStatusAt({
+    trialStatus: account.trialStatus,
+    trialStartedAtMs: account.trialStartedAtMs,
+    trialEndsAtMs: account.trialEndsAtMs,
+    trialUntil: account.trialUntil,
+  }, now) !== "expired";
+}
+
 async function requireHq(uid: string): Promise<void> {
   const user = await readUser(uid);
   if (user.role !== "hq") {
@@ -271,7 +286,7 @@ async function requireClinicManager(uid: string): Promise<
   const account = await db.doc(`accounts/${user.accountId}`).get();
   if (
     !account.exists
-    || account.data()?.status !== "active"
+    || !hasActiveAccountAccess(account.data())
     || normalizePlan(account.data()?.plan) !== "network"
   ) {
     throw new HttpsError(
@@ -442,7 +457,7 @@ export const startTriage = onCall(
       ownerType?: "dentist" | "clinic";
     };
     const accountSnap = await db.doc(`accounts/${profile.accountId}`).get();
-    if (!accountSnap.exists || accountSnap.data()?.status !== "active") {
+    if (!accountSnap.exists || !hasActiveAccountAccess(accountSnap.data())) {
       throw new HttpsError(
         "failed-precondition",
         "A assinatura deste link está inativa.",
@@ -522,7 +537,7 @@ export const validateSmilePhoto = onCall(
         transaction.get(accountRef),
         transaction.get(usageRef),
       ]);
-      if (!accountSnap.exists || accountSnap.data()?.status !== "active") {
+      if (!accountSnap.exists || !hasActiveAccountAccess(accountSnap.data())) {
         throw new HttpsError("failed-precondition", "Assinatura inativa.");
       }
       const plan = normalizePlan(accountSnap.data()?.plan);
@@ -642,7 +657,7 @@ export const analyzeSmilePhoto = onCall(
         throw new HttpsError("not-found", "Conta não encontrada.");
       }
       const account = accountSnap.data() as AccountRecord;
-      if (account.status !== "active") {
+      if (!hasActiveAccountAccess(account)) {
         throw new HttpsError("failed-precondition", "Assinatura inativa.");
       }
       const plan = PLANS[normalizePlan(account.plan)];
@@ -826,6 +841,21 @@ export const captureLead = onCall(
 
       const leadRef = db.collection("leads").doc();
       const now = Date.now();
+      const accountRef = db.doc(`accounts/${session.accountId}`);
+      const accountSnap = await transaction.get(accountRef);
+      if (!accountSnap.exists) {
+        throw new HttpsError("not-found", "Conta não encontrada.");
+      }
+      const account = accountSnap.data() as AccountRecord;
+      const currentTrialStatus = trialStatusAt({
+        trialStatus: account.trialStatus,
+        trialStartedAtMs: account.trialStartedAtMs,
+        trialEndsAtMs: account.trialEndsAtMs,
+        trialUntil: account.trialUntil,
+      }, now);
+      if (account.status !== "active" || currentTrialStatus === "expired") {
+        throw new HttpsError("failed-precondition", "O acesso deste profissional está inativo.");
+      }
       const scores = session.scores as Record<string, unknown>;
       transaction.set(leadRef, {
         accountId: session.accountId,
@@ -863,6 +893,49 @@ export const captureLead = onCall(
         capturedAtMs: now,
         updatedAtMs: now,
       });
+      const activatedTrial = activatePreparedTrialFields(account, now);
+      if (activatedTrial) {
+        const trial = activatedTrial;
+        transaction.set(accountRef, {
+          subscriptionStatus: "trial",
+          trialActivatedBy: "first_lead",
+          ...trial,
+          updatedAtMs: now,
+        }, { merge: true });
+        transaction.set(db.doc(`professionals/${account.professionalId}`), {
+          status: "trial",
+          isActive: true,
+          ...trial,
+          updatedAtMs: now,
+        }, { merge: true });
+        transaction.set(db.doc(`users/${account.ownerUid}`), {
+          status: "active",
+          lifecycleStatus: "trial",
+          updatedAtMs: now,
+        }, { merge: true });
+        transaction.set(db.doc(`publicProfiles/${account.slug}`), {
+          active: true,
+          status: "trial",
+          updatedAtMs: now,
+        }, { merge: true });
+        addAdminAudit(transaction, {
+          actorUid: account.ownerUid,
+          action: "professional_trial_started",
+          accountId: session.accountId,
+          professionalId: account.professionalId,
+          details: { source: "first_lead", leadId: leadRef.id, trialEndsAtMs: trial.trialEndsAtMs },
+          now,
+        });
+        addSubscriptionHistory(transaction, {
+          actorUid: account.ownerUid,
+          accountId: session.accountId,
+          professionalId: account.professionalId,
+          fromStatus: "trial_ready",
+          toStatus: "trial",
+          reason: "primeiro lead capturado",
+          now,
+        });
+      }
       return { leadId: leadRef.id };
     });
   },
@@ -950,8 +1023,13 @@ export const createPendingSubscription = onCall(
       );
     }
     const accessRole = plan === "network" ? "clinic" : "professional";
+    const isTrial = input.checkoutMode === "trial";
     const now = Date.now();
-    const subscription = pendingSubscriptionFields(input, now);
+    const subscription = isTrial
+      ? trialSubscriptionFields(input, now)
+      : pendingSubscriptionFields(input, now);
+    const accessStatus = isTrial ? "active" : "pending";
+    const professionalStatus = isTrial ? "trial" : "inactive";
     const userRef = db.doc(`users/${uid}`);
     const existingUser = await userRef.get();
     if (
@@ -978,10 +1056,21 @@ export const createPendingSubscription = onCall(
           "A conta vinculada a este email é inválida.",
         );
       }
-      if (account.data()?.status === "active") {
+      if (!isTrial && account.data()?.status === "active") {
         throw new HttpsError(
           "already-exists",
           "Esta conta já possui uma assinatura ativa.",
+        );
+      }
+      if (isTrial && (
+        account.data()?.trialEligible === false
+        || ![undefined, null, "not_started"].includes(account.data()?.trialStatus)
+        || account.data()?.paymentStatus === "confirmed"
+        || account.data()?.subscriptionStatus === "active"
+      )) {
+        throw new HttpsError(
+          "already-exists",
+          "Este acesso já utilizou o teste gratuito ou possui uma assinatura.",
         );
       }
       const batch = db.batch();
@@ -990,7 +1079,8 @@ export const createPendingSubscription = onCall(
         {
           email: input.email,
           role: accessRole,
-          status: "pending",
+          status: accessStatus,
+          lifecycleStatus: isTrial ? "trial_ready" : "pending",
           updatedAtMs: now,
         },
         { merge: true },
@@ -1012,7 +1102,9 @@ export const createPendingSubscription = onCall(
           whatsapp: input.whatsapp,
           specialty: input.specialty,
           plan,
-          isActive: false,
+          isActive: isTrial,
+          status: professionalStatus,
+          trialStatus: isTrial ? "ready" : "not_started",
           updatedAtMs: now,
         },
         { merge: true },
@@ -1028,7 +1120,8 @@ export const createPendingSubscription = onCall(
           specialty: input.specialty,
           plan,
           ownerType: plan === "network" ? "clinic" : "dentist",
-          active: false,
+          active: isTrial,
+          status: isTrial ? "trial" : "pending",
           updatedAtMs: now,
         },
         { merge: true },
@@ -1047,7 +1140,8 @@ export const createPendingSubscription = onCall(
         accountId,
         professionalId,
         slug,
-        status: "pending",
+        status: accessStatus,
+        lifecycleStatus: isTrial ? "trial_ready" : "pending",
         createdAtMs: now,
         updatedAtMs: now,
       });
@@ -1072,7 +1166,9 @@ export const createPendingSubscription = onCall(
         publicSlug: slug,
         plan,
         role: "dentist",
-        isActive: false,
+        isActive: isTrial,
+        status: professionalStatus,
+        trialStatus: isTrial ? "ready" : "not_started",
         createdAt: now,
         createdAtMs: now,
         updatedAtMs: now,
@@ -1086,7 +1182,8 @@ export const createPendingSubscription = onCall(
         specialty: input.specialty,
         plan,
         ownerType: plan === "network" ? "clinic" : "dentist",
-        active: false,
+        active: isTrial,
+        status: isTrial ? "trial" : "pending",
         createdAtMs: now,
         updatedAtMs: now,
       });
@@ -1096,7 +1193,21 @@ export const createPendingSubscription = onCall(
     if (!accountId || !professionalId || !slug) {
       throw new HttpsError("internal", "Não foi possível preparar a conta.");
     }
-    return { accountId, plan, status: "pending" as const };
+    await auth.updateUser(uid, { disabled: false }).catch(() => undefined);
+    await auth.setCustomUserClaims(uid, {
+      role: accessRole,
+      accountId,
+      professionalId,
+      accountStatus: accessStatus,
+      professionalStatus,
+    });
+    return {
+      accountId,
+      plan,
+      slug,
+      status: isTrial ? "active" as const : "pending" as const,
+      trialStatus: isTrial ? "ready" as const : "not_started" as const,
+    };
   },
 );
 
@@ -1120,7 +1231,7 @@ export const updateProfessionalProfile = onCall(
       );
     }
     const accountSnap = await db.doc(`accounts/${user.accountId}`).get();
-    if (!accountSnap.exists || accountSnap.data()?.status !== "active") {
+    if (!accountSnap.exists || !hasActiveAccountAccess(accountSnap.data())) {
       throw new HttpsError("failed-precondition", "Esta conta está inativa.");
     }
 
@@ -1366,7 +1477,8 @@ export const setAccountStatus = onCall(
     );
     const professionalSnap = await professionalRef.get();
     const professional = (professionalSnap.data() ?? {}) as ProfessionalRecord;
-    const wasTrial = professional.status === "trial" || account.trialStatus === "active";
+    const wasTrial = professional.status === "trial"
+      || ["ready", "active", "expired"].includes(account.trialStatus ?? "");
     const nextProfessionalStatus = active ? "subscriber" : "inactive";
 
     const batch = db.batch();
@@ -1476,6 +1588,9 @@ export const setAccountStatus = onCall(
       now,
     });
     await batch.commit();
+    if (active) {
+      await auth.updateUser(account.ownerUid, { disabled: false }).catch(() => undefined);
+    }
     await auth.setCustomUserClaims(account.ownerUid, {
       role: accessRole,
       accountId: input.accountId,
@@ -3246,7 +3361,7 @@ export const assignDailyPostsHourly = onSchedule(
 
 export const expireProfessionalTrials = onSchedule(
   {
-    schedule: "every day 03:15",
+    schedule: "every 60 minutes",
     timeZone: "America/Sao_Paulo",
   },
   async () => {
@@ -3259,6 +3374,11 @@ export const expireProfessionalTrials = onSchedule(
       .get();
     for (const document of snapshot.docs) {
       const professional = document.data() as ProfessionalRecord;
+      const accountRef = professional.accountId
+        ? db.doc(`accounts/${professional.accountId}`)
+        : null;
+      const accountSnap = accountRef ? await accountRef.get() : null;
+      const account = accountSnap?.data() as AccountRecord | undefined;
       const batch = db.batch();
       batch.set(document.ref, {
         status: "inactive",
@@ -3268,21 +3388,48 @@ export const expireProfessionalTrials = onSchedule(
       }, { merge: true });
       if (professional.ownerUid) {
         batch.set(db.doc(`users/${professional.ownerUid}`), {
-          status: "paused",
-          lifecycleStatus: "inactive",
+          status: "trial_expired",
+          lifecycleStatus: "trial_expired",
           updatedAtMs: now,
         }, { merge: true });
       }
-      if (professional.publicSlug) {
-        batch.set(db.doc(`publicProfiles/${professional.publicSlug}`), {
-          active: false,
-          status: "inactive",
+      if (accountRef) {
+        batch.set(accountRef, {
+          status: "paused",
+          isActive: false,
+          subscriptionStatus: "trial_expired",
+          trialStatus: "expired",
           updatedAtMs: now,
         }, { merge: true });
+      }
+      const publicSlug = professional.publicSlug ?? account?.slug;
+      if (publicSlug) {
+        batch.set(db.doc(`publicProfiles/${publicSlug}`), {
+          active: false,
+          status: "trial_expired",
+          updatedAtMs: now,
+        }, { merge: true });
+      }
+      if (professional.accountId) {
+        addSubscriptionHistory(batch, {
+          actorUid: "system",
+          accountId: professional.accountId,
+          professionalId: document.id,
+          fromStatus: "trial",
+          toStatus: "trial_expired",
+          reason: "fim automático do teste de 7 dias",
+          now,
+        });
       }
       await batch.commit();
       if (professional.ownerUid) {
-        await auth.updateUser(professional.ownerUid, { disabled: true }).catch(() => undefined);
+        await auth.setCustomUserClaims(professional.ownerUid, {
+          role: account?.ownerType === "clinic" ? "clinic" : "professional",
+          accountId: professional.accountId,
+          professionalId: document.id,
+          accountStatus: "paused",
+          professionalStatus: "inactive",
+        }).catch(() => undefined);
       }
     }
   },

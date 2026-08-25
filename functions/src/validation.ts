@@ -55,6 +55,7 @@ export const checkoutSchema = z.object({
   whatsapp: phoneSchema,
   specialty: z.string().trim().max(100).optional().default(""),
   plan: z.enum(["lite", "pro", "network", "elite"]),
+  checkoutMode: z.enum(["paid", "trial"]).default("paid"),
   termsVersion: z.literal(SUBSCRIBER_TERMS_VERSION),
 });
 

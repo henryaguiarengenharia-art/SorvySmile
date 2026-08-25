@@ -158,11 +158,12 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
     const all = Object.values(billingAccounts);
     const subscribers = all.filter((account) =>
       account.status === "active"
-      && account.subscriptionStatus !== "trial"
-      && account.trialStatus !== "active"
+      && !["trial_ready", "trial"].includes(account.subscriptionStatus ?? "")
+      && !["ready", "active"].includes(account.trialStatus ?? "")
     );
     const trials = all.filter((account) =>
-      account.subscriptionStatus === "trial" || account.trialStatus === "active"
+      ["trial_ready", "trial"].includes(account.subscriptionStatus ?? "")
+      || ["ready", "active"].includes(account.trialStatus ?? "")
     );
     const terminal = metricLeads.filter(
       (lead) => lead.status === "closed" || lead.status === "lost",

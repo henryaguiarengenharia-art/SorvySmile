@@ -118,10 +118,15 @@ conta; a InfinitePay é responsável pelos e-mails e mensagens de cobrança.
 
 - Toda alteração administrativa recebe `accountId` e `professionalId` explícitos;
   o UID do administrador nunca é usado como alvo do cliente.
-- O trial do profissional dura sete dias e fica persistido em
-  `trialStartedAtMs`, `trialEndsAtMs` e `trialStatus`. A tarefa
-  `expireProfessionalTrials` desativa acessos vencidos e o perfil público sem
-  apagar leads.
+- O trial self-service de Lite e Pro nasce em `trialStatus: ready`, com painel
+  e perfil público ativos, mas sem datas de início ou fim. A mesma transação que
+  persiste o primeiro lead muda o estado para `active` e grava
+  `trialStartedAtMs` e `trialEndsAtMs` com sete dias exatos. A operação é
+  idempotente: novas capturas nunca reiniciam a janela.
+- `expireProfessionalTrials` roda a cada hora, marca conta, profissional e
+  perfil público como expirados e preserva leads. O usuário continua podendo
+  autenticar somente para acessar a tela de assinatura; operações de triagem,
+  CRM e assistentes validam a expiração também no servidor.
 - Arquivar é reversível: marca `status: archived`, desativa o acesso e preserva
   leads, sessões de conversa, pagamentos e histórico. Restaurar recompõe o
   estado anterior quando a conta ainda está ativa.

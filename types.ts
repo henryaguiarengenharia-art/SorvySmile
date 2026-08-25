@@ -43,7 +43,8 @@ export type PaymentStatus =
   | 'confirmed'
   | 'overdue'
   | 'paused'
-  | 'awaiting_receipt';
+  | 'awaiting_receipt'
+  | 'trial';
 export type ProfessionalStatus =
   | 'active'
   | 'trial'
@@ -66,10 +67,10 @@ export interface BillingAccount {
   requestedPlan?: PlanTier;
   activatedAt?: number;
   activatedBy?: string;
-  trialStatus?: 'not_started' | 'active' | 'expired' | 'converted';
+  trialStatus?: 'not_started' | 'ready' | 'active' | 'expired' | 'converted';
   trialStartedAt?: number;
   trialUntil?: number;
-  subscriptionStatus?: 'pending' | 'trial' | 'active' | 'overdue' | 'paused';
+  subscriptionStatus?: 'pending' | 'trial_ready' | 'trial' | 'trial_expired' | 'active' | 'overdue' | 'paused';
   archivedAt?: number;
   archivedBy?: string;
   overrideUntil?: number;
@@ -475,6 +476,6 @@ export interface WorkspaceUser {
   role: 'hq' | 'clinic' | 'professional';
   accountId?: string;
   professionalId?: string;
-  status?: AccountStatus;
+  status?: AccountStatus | 'trial_expired';
   slug?: string;
 }

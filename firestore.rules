@@ -18,6 +18,21 @@ service cloud.firestore {
       return signedIn() && currentUser().data.accountId == accountId;
     }
 
+    function accountAccessActive(accountId) {
+      let account = get(/databases/$(database)/documents/accounts/$(accountId));
+      return account.data.status == 'active'
+        && (
+          !('trialStatus' in account.data)
+          || (
+            account.data.trialStatus != 'expired'
+            && (
+              account.data.trialStatus != 'active'
+              || account.data.trialEndsAtMs > request.time.toMillis()
+            )
+          )
+        );
+    }
+
     function isClinicManager() {
       return signedIn() && currentUser().data.role == 'clinic';
     }
@@ -85,6 +100,7 @@ service cloud.firestore {
       allow create, delete: if false;
       allow update: if isAssignedProfessional(professionalId)
         && belongsTo(resource.data.accountId)
+        && accountAccessActive(resource.data.accountId)
         && request.resource.data.accountId == resource.data.accountId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'whatsapp',
@@ -114,6 +130,7 @@ service cloud.firestore {
             && isAssignedProfessional(resource.data.professionalId)
           )
         )
+        && accountAccessActive(resource.data.accountId)
         && request.resource.data.accountId == resource.data.accountId
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'status',

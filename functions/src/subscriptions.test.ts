@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   nextBillingDueAt,
   pendingSubscriptionFields,
+  trialSubscriptionFields,
 } from "./subscriptions.js";
 
 describe("solicitação de assinatura pela InfinitePay", () => {
@@ -36,6 +37,31 @@ describe("solicitação de assinatura pela InfinitePay", () => {
 
   it("aceita o vencimento confirmado na InfinitePay", () => {
     expect(nextBillingDueAt(0, 2_000, 1_000)).toBe(2_000);
+  });
+
+  it("prepara o teste sem iniciar a janela de sete dias", () => {
+    const result = trialSubscriptionFields(
+      {
+        name: "Dra. Teste",
+        email: "teste@exemplo.com",
+        whatsapp: "5531999999999",
+        plan: "pro",
+        termsVersion: "2026-08",
+      },
+      1_785_000_000_000,
+    );
+
+    expect(result).toMatchObject({
+      status: "active",
+      isActive: true,
+      subscriptionStatus: "trial_ready",
+      trialStatus: "ready",
+      trialEligible: false,
+      paymentStatus: "trial",
+      trialPreparedAtMs: 1_785_000_000_000,
+      trialStartedAtMs: null,
+      trialEndsAtMs: null,
+    });
   });
 
   it("avança 30 dias sem reduzir um vencimento futuro", () => {

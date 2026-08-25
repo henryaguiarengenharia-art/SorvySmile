@@ -152,6 +152,9 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
     100,
     Math.round((currentUsage / Math.max(1, usageLimit)) * 100),
   );
+  const trialDaysRemaining = professional.trialEndsAt
+    ? Math.max(0, Math.ceil((professional.trialEndsAt - Date.now()) / 86_400_000))
+    : 0;
   const metricLeads = useMemo(
     () => filterLeadsByPeriod(leadRecords, metricPeriod),
     [leadRecords, metricPeriod],
@@ -435,10 +438,18 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
         </div>
       )}
 
-      {professional.status === "trial" && professional.trialEndsAt && (
-        <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm font-bold text-amber-900">
+      {(billingAccount.trialStatus === "ready" || billingAccount.subscriptionStatus === "trial_ready") && (
+        <div className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-bold text-blue-900">
           <Clock className="h-5 w-5 shrink-0" />
-          Seu período de demonstração termina em {new Date(professional.trialEndsAt).toLocaleDateString("pt-BR")}. Aproveite para configurar seu perfil e conversar com seus leads.
+          Seu teste está preparado. Configure e divulgue seu link: os 7 dias começam automaticamente somente quando o primeiro lead for capturado.
+        </div>
+      )}
+      {professional.status === "trial" && professional.trialEndsAt && (
+        <div className={`flex items-center gap-3 rounded-2xl border px-5 py-4 text-sm font-bold ${trialDaysRemaining <= 2 ? "border-amber-300 bg-amber-50 text-amber-950" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}>
+          <Clock className="h-5 w-5 shrink-0" />
+          {trialDaysRemaining > 0
+            ? `Seu teste tem ${trialDaysRemaining} ${trialDaysRemaining === 1 ? "dia restante" : "dias restantes"} e termina em ${new Date(professional.trialEndsAt).toLocaleDateString("pt-BR")}.`
+            : "Seu teste chegou ao fim. Assine para continuar usando o painel."}
         </div>
       )}
       {professional.status === "inactive" && (
