@@ -226,6 +226,8 @@ export interface PublicPatientAssistant {
   ctaText: string;
   ctaLink: string;
   isCustom: boolean;
+  tone?: ProfessionalAssistantTone;
+  serviceContext?: string;
 }
 
 export type DailyPostStatus = 'draft' | 'scheduled' | 'published' | 'inactive' | 'archived';

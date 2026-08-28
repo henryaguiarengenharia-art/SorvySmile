@@ -54,6 +54,13 @@ import {
   PlanTier,
 } from "./plans.js";
 import {
+  canStartAnotherTriage,
+  nextTriageUsage,
+  previousTriageUsage,
+  triageUsageFields,
+  triageUsageFromData,
+} from "./triageUsage.js";
+import {
   nextBillingDueAt,
   pendingSubscriptionFields,
   trialSubscriptionFields,
@@ -570,9 +577,9 @@ export const validateSmilePhoto = onCall(
         throw new HttpsError("failed-precondition", "Assinatura inativa.");
       }
       const plan = normalizePlan(accountSnap.data()?.plan);
-      const completedTriages = Number(usageSnap.data()?.triages ?? 0);
+      const triageUsage = triageUsageFromData(usageSnap.data());
       const validations = Number(usageSnap.data()?.photoValidations ?? 0);
-      if (completedTriages >= PLANS[plan].monthlyLeadLimit) {
+      if (!canStartAnotherTriage(triageUsage, PLANS[plan].monthlyLeadLimit)) {
         throw new HttpsError(
           "resource-exhausted",
           "O limite mensal de triagens deste plano foi atingido.",
@@ -690,21 +697,22 @@ export const analyzeSmilePhoto = onCall(
         throw new HttpsError("failed-precondition", "Assinatura inativa.");
       }
       const plan = PLANS[normalizePlan(account.plan)];
-      const used = Number(usageSnap.data()?.triages ?? 0);
+      const triageUsage = triageUsageFromData(usageSnap.data());
       const cached = cachedAnalysisScores(cacheSnap.data());
-      if (used >= plan.monthlyLeadLimit) {
+      if (!canStartAnotherTriage(triageUsage, plan.monthlyLeadLimit)) {
         throw new HttpsError(
           "resource-exhausted",
           "O limite mensal de triagens deste plano foi atingido.",
         );
       }
+      const nextUsage = nextTriageUsage(triageUsage);
 
       transaction.set(
         usageRef,
         {
           accountId: session.accountId,
           month: usageMonth,
-          triages: used + 1,
+          ...triageUsageFields(nextUsage.next),
           updatedAtMs: Date.now(),
         },
         { merge: true },
@@ -716,6 +724,7 @@ export const analyzeSmilePhoto = onCall(
           sessionId: input.sessionId,
           month: usageMonth,
           state: cached ? "consumed" : "reserved",
+          chargedThisTriage: nextUsage.chargedThisTriage,
           createdAtMs: Date.now(),
           updatedAtMs: Date.now(),
         },
@@ -806,13 +815,17 @@ async function releaseUsageReservation(
       : null;
     const usageRef = db.doc(`usage/${accountId}_${month}`);
     const usageSnap = await transaction.get(usageRef);
-    const used = Number(usageSnap.data()?.triages ?? 1);
+    const currentUsage = triageUsageFromData(usageSnap.data());
+    const restoredUsage = previousTriageUsage(
+      currentUsage,
+      reservation?.chargedThisTriage === true,
+    );
     transaction.set(
       usageRef,
       {
         accountId,
         month,
-        triages: Math.max(0, used - 1),
+        ...triageUsageFields(restoredUsage),
         updatedAtMs: Date.now(),
       },
       { merge: true },
@@ -1192,6 +1205,10 @@ export const createPendingSubscription = onCall(
           specialty: input.specialty,
           plan,
           ownerType: plan === "network" ? "clinic" : "dentist",
+          patientAssistant: publicPatientAssistantForProfile(professionalId, {
+            name: input.name,
+            specialty: input.specialty,
+          }),
           active: isTrial,
           status: isTrial ? "trial" : "pending",
           updatedAtMs: now,
@@ -1279,6 +1296,10 @@ export const createPendingSubscription = onCall(
         specialty: input.specialty,
         plan,
         ownerType: plan === "network" ? "clinic" : "dentist",
+        patientAssistant: publicPatientAssistantForProfile(professionalId, {
+          name: input.name,
+          specialty: input.specialty,
+        }),
         active: isTrial,
         status: isTrial ? "trial" : "pending",
         createdAtMs: now,
@@ -2127,8 +2148,11 @@ export const recordDailyPostEvent = onCall(
     const now = Date.now();
     if (input.eventType === "request_alternative") {
       const replacement = await createOrReadDailyPostAssignment(professionalId, professional, now, true);
-      await db.collection("dailyPostEvents").add({ professionalId, assignmentId: input.assignmentId, templateId: assignment.templateId, eventType: input.eventType, format: input.format, createdAtMs: now });
+      await db.collection("dailyPostEvents").add({ professionalId, accountId: professional.accountId ?? "", assignmentId: input.assignmentId, templateId: assignment.templateId, eventType: input.eventType, format: input.format, createdAtMs: now });
       return { ok: true, assignment: replacement };
+    }
+    if (input.eventType === "mark_as_used" && assignment.status === "used") {
+      return { ok: true, assignment: { id: assignmentRef.id, ...assignment } };
     }
     const statusByEvent: Record<string, string> = {
       view: "opened", customize: "customized", copy_caption: "copied",
@@ -2148,7 +2172,13 @@ export const recordDailyPostEvent = onCall(
       updatedAtMs: now,
     }, { merge: true });
     await batch.commit();
-    return { ok: true };
+    const updated = await assignmentRef.get();
+    return {
+      ok: true,
+      assignment: updated.exists
+        ? { id: updated.id, ...updated.data() }
+        : { id: assignmentRef.id, ...assignment },
+    };
   },
 );
 
@@ -2884,6 +2914,41 @@ function professionalAssistantSettingsFromData(
   };
 }
 
+function publicPatientAssistantForProfile(
+  professionalId: string,
+  professional: Pick<ProfessionalRecord, "name" | "specialty">,
+  settings?: Pick<ProfessionalAssistantSettingsRecord, "tone" | "serviceContext">,
+): Record<string, unknown> {
+  const professionalName = String(professional.name ?? "o profissional responsável").trim()
+    || "o profissional responsável";
+  const specialty = String(professional.specialty ?? "").trim();
+  const tone = settings?.tone ?? "professional_warm";
+  const greetingByTone: Record<ProfessionalAssistantTone, string> = {
+    professional_warm: `Olá, eu sou a Aury, assistente virtual de ${professionalName}. Vou explicar a experiência e ajudar você a seguir com tranquilidade antes de falar com ${professionalName}.`,
+    direct_clinical: `Olá, eu sou a Aury, assistente virtual de ${professionalName}. Vou orientar os próximos passos da sua triagem e como falar com ${professionalName}.`,
+    empathetic_educational: `Olá, eu sou a Aury, assistente virtual de ${professionalName}. Estou aqui para explicar cada etapa com calma e ajudar você a chegar à conversa com mais clareza.`,
+    casual_friendly: `Oi, eu sou a Aury, assistente virtual de ${professionalName}. Posso explicar a experiência e mostrar como falar com ${professionalName} quando você quiser.`,
+  };
+  return {
+    id: `aury_${professionalId}`,
+    name: "Aury",
+    roleName: `Assistente virtual de ${professionalName}`,
+    description: `Esta é a experiência de ${professionalName}${specialty ? ` · ${specialty}` : ""}.`,
+    greeting: greetingByTone[tone],
+    avatarUrl: "",
+    fullImageUrl: "",
+    primaryColor: "#18AFA5",
+    secondaryColor: "#DDF4F6",
+    ctaText: `Falar com ${professionalName}`,
+    // Deliberately blank. The client always builds the destination from the
+    // profile WhatsApp tied to the current public slug.
+    ctaLink: "",
+    isCustom: false,
+    tone,
+    serviceContext: String(settings?.serviceContext ?? "").trim().slice(0, 2000),
+  };
+}
+
 async function requireProfessionalAssistantTarget(
   uid: string,
   accountId: string,
@@ -2938,7 +3003,21 @@ export const updateProfessionalAssistantSettings = onCall(
     await requireProfessionalAssistantTarget(uid, input.accountId, input.professionalId);
     const now = Date.now();
     const ref = db.doc(`professionalAssistantSettings/${input.professionalId}`);
-    const existing = await ref.get();
+    const [existing, professionalSnap] = await Promise.all([
+      ref.get(),
+      db.doc(`professionals/${input.professionalId}`).get(),
+    ]);
+    if (!professionalSnap.exists) {
+      throw new HttpsError("not-found", "Profissional não encontrado.");
+    }
+    const professional = professionalSnap.data() as ProfessionalRecord;
+    const publicSlug = String(professional.publicSlug ?? "").trim();
+    const publicProfileRef = publicSlug
+      ? db.doc(`publicProfiles/${publicSlug}`)
+      : null;
+    const publicProfile = publicProfileRef
+      ? await publicProfileRef.get()
+      : null;
     const batch = db.batch();
     batch.set(ref, {
       accountId: input.accountId,
@@ -2952,6 +3031,12 @@ export const updateProfessionalAssistantSettings = onCall(
       updatedAtMs: now,
       updatedBy: uid,
     }, { merge: true });
+    if (publicProfileRef && publicProfile?.exists && publicProfile.data()?.patientAssistant?.isCustom !== true) {
+      batch.set(publicProfileRef, {
+        patientAssistant: publicPatientAssistantForProfile(input.professionalId, professional, input),
+        updatedAtMs: now,
+      }, { merge: true });
+    }
     addAdminAudit(batch, {
       actorUid: uid,
       action: "professional_assistant_settings_updated",

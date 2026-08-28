@@ -126,6 +126,17 @@ export const DailyPostCard: React.FC<Props> = ({
     setVariantState({ key: currentTemplateKey, value });
   };
 
+  const emitEvent = async (
+    event: DailyPostEvent,
+    format?: "feed" | "story" | "carousel" | "none",
+    variant?: DailyPostVariant,
+  ): Promise<void> => {
+    if (!onEvent) {
+      throw new Error("A ação do Post do Dia não está disponível neste painel.");
+    }
+    await onEvent(event, format, variant);
+  };
+
   useEffect(() => {
     setVariantState({
       key: currentTemplateKey,
@@ -136,8 +147,11 @@ export const DailyPostCard: React.FC<Props> = ({
   }, [currentTemplateKey, post?.customizedVariant]);
 
   useEffect(() => {
-    if (!post || readOnly) return;
-    void onEvent?.("view");
+    if (!post || readOnly || !onEvent) return;
+    void emitEvent("view").catch(() => undefined);
+    // Register one opening per assigned post. `onEvent` is recreated by the
+    // parent after state updates, so depending on it here would create an
+    // event loop and repeatedly mark the same post as viewed.
   }, [currentTemplateKey, readOnly]);
 
   useEffect(() => {
@@ -218,7 +232,7 @@ export const DailyPostCard: React.FC<Props> = ({
     act("download-" + format, async () => {
       setPreviewFormat(format);
       await downloadDailyPostPng(post, format, active);
-      await onEvent?.(
+      await emitEvent(
         format === "feed" ? "download_feed" : "download_story",
         format,
       );
@@ -232,7 +246,7 @@ export const DailyPostCard: React.FC<Props> = ({
     act("download-carousel", async () => {
       setPreviewFormat("feed");
       await downloadDailyPostCarousel(post, active);
-      await onEvent?.("download_feed", "carousel");
+      await emitEvent("download_feed", "carousel");
       setNotice(
         "Carrossel baixado em ZIP com "
           + carouselSlides.length
@@ -247,7 +261,7 @@ export const DailyPostCard: React.FC<Props> = ({
         hashtags.join(" "),
       ].filter(Boolean).join("\n\n");
       await navigator.clipboard.writeText(completeCaption);
-      await onEvent?.("copy_caption");
+      await emitEvent("copy_caption");
       setNotice("Legenda completa, CTA e hashtags copiados.");
     });
 
@@ -484,7 +498,7 @@ export const DailyPostCard: React.FC<Props> = ({
               disabled={Boolean(busy)}
               onClick={() =>
                 void act("used", async () => {
-                  await onEvent?.("mark_as_used");
+                  await emitEvent("mark_as_used");
                   setNotice("Conteúdo marcado como utilizado.");
                 })
               }
@@ -498,7 +512,7 @@ export const DailyPostCard: React.FC<Props> = ({
               disabled={Boolean(busy)}
               onClick={() =>
                 void act("alternative", async () => {
-                  await onEvent?.("request_alternative");
+                  await emitEvent("request_alternative");
                   setNotice("Nova opção carregada com sucesso.");
                 })
               }
@@ -703,7 +717,7 @@ export const DailyPostCard: React.FC<Props> = ({
                 }
                 onClick={() =>
                   void act("customize", async () => {
-                    await onEvent?.("customize", "none", active);
+                    await emitEvent("customize", "none", active);
                     setVariant(active);
                     setEditing(false);
                     setNotice("Personalização salva somente neste post.");

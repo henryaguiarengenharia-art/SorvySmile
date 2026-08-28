@@ -140,6 +140,17 @@ function normalizeTier(value: unknown): PlanTier {
   return "lite";
 }
 
+function consumedTriageQuota(data?: DocumentData): number {
+  const charged = Number(data?.triagesCharged);
+  if (Number.isFinite(charged) && charged >= 0) return Math.floor(charged);
+  // Documents created before the complimentary first-triage rule stored every
+  // completed analysis in `triages`. Credit that first analysis in the UI too.
+  const legacyCompleted = Number(data?.triages ?? 0);
+  return Number.isFinite(legacyCompleted)
+    ? Math.max(0, Math.floor(legacyCompleted) - 1)
+    : 0;
+}
+
 function mapAccount(id: string, data: DocumentData): BillingAccount {
   const tier = normalizeTier(data.plan ?? data.tier);
   return {
@@ -312,7 +323,7 @@ export async function getPublicProfile(
       active: true,
       status: snap.data().status ?? "active",
       profileImage: snap.data().profileImage ?? "",
-      patientAssistant: normalizeTier(snap.data().plan) !== "lite" && snap.data().patientAssistant
+      patientAssistant: snap.data().patientAssistant
         ? {
             id: String(snap.data().patientAssistant.id ?? "aury-patient-guide"),
             name: String(snap.data().patientAssistant.name ?? "Aury"),
@@ -326,6 +337,8 @@ export async function getPublicProfile(
             ctaText: String(snap.data().patientAssistant.ctaText ?? "Falar com a clínica"),
             ctaLink: String(snap.data().patientAssistant.ctaLink ?? ""),
             isCustom: snap.data().patientAssistant.isCustom === true,
+            tone: snap.data().patientAssistant.tone,
+            serviceContext: String(snap.data().patientAssistant.serviceContext ?? ""),
           }
         : undefined,
     };
@@ -1083,7 +1096,7 @@ export async function subscribeWorkspace(
         const month = String(data.month ?? "");
         if (!accountId || !month) return;
         usageByAccount[accountId] ??= {};
-        usageByAccount[accountId][month] = Number(data.triages ?? 0);
+        usageByAccount[accountId][month] = consumedTriageQuota(data);
       });
       state.usageByAccount = usageByAccount;
       emit();
@@ -1108,7 +1121,7 @@ export async function subscribeWorkspace(
         (snapshot) => {
           state.usageByAccount = {
             [user.accountId as string]: {
-              [month]: Number(snapshot.data()?.triages ?? 0),
+              [month]: consumedTriageQuota(snapshot.data()),
             },
           };
           emit();

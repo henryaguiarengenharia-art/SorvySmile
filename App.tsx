@@ -319,17 +319,18 @@ const App: React.FC = () => {
     ? workspace?.usageByAccount[hqPreviewAccount.id]?.[currentMonth] ?? 0
     : 0;
   const handleDailyPostEvent = async (eventType: Parameters<typeof recordDailyPostEvent>[0]["eventType"], format: Parameters<typeof recordDailyPostEvent>[0]["format"] = "none", customizedVariant?: Parameters<typeof recordDailyPostEvent>[0]["customizedVariant"]) => {
-    if (!dailyPostAssignment) return;
-    const replacement = await recordDailyPostEvent({ assignmentId: dailyPostAssignment.id, eventType, format, customizedVariant });
-    if (replacement) {
-      setDailyPostAssignment(replacement);
-      setDailyPostHistory((current) => [
-        replacement,
-        ...current.filter((item) => item.id !== replacement.id),
-      ]);
+    if (!dailyPostAssignment) {
+      throw new Error("O Post do Dia ainda está sendo carregado. Aguarde alguns segundos e tente novamente.");
     }
-    else if (customizedVariant) setDailyPostAssignment({ ...dailyPostAssignment, status: "customized", customizedVariant });
-    else setDailyPostAssignment({ ...dailyPostAssignment, status: eventType === "mark_as_used" ? "used" : eventType.startsWith("download") ? "downloaded" : eventType === "copy_caption" ? "copied" : dailyPostAssignment.status });
+    const updatedAssignment = await recordDailyPostEvent({ assignmentId: dailyPostAssignment.id, eventType, format, customizedVariant });
+    if (!updatedAssignment) {
+      throw new Error("Não foi possível confirmar a atualização do Post do Dia.");
+    }
+    setDailyPostAssignment(updatedAssignment);
+    setDailyPostHistory((current) => [
+      updatedAssignment,
+      ...current.filter((item) => item.id !== updatedAssignment.id),
+    ]);
   };
 
   const showPublicNav = ![

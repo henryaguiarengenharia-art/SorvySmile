@@ -1,4 +1,5 @@
 import { MAX_VALIDATION_ATTEMPTS } from "./constants.js";
+import { COMPLIMENTARY_TRIAGES_PER_MONTH } from "./triageUsage.js";
 
 export type PlanTier = "lite" | "pro" | "network";
 
@@ -49,5 +50,8 @@ export function monthKey(date = new Date()): string {
 }
 
 export function photoValidationLimit(plan: PlanTier): number {
-  return PLANS[plan].monthlyLeadLimit * MAX_VALIDATION_ATTEMPTS;
+  return (
+    (PLANS[plan].monthlyLeadLimit + COMPLIMENTARY_TRIAGES_PER_MONTH)
+    * MAX_VALIDATION_ATTEMPTS
+  );
 }

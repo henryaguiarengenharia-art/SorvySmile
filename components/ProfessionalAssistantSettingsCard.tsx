@@ -112,7 +112,7 @@ export const ProfessionalAssistantSettingsCard: React.FC<ProfessionalAssistantSe
               </div>
             </label>
 
-            <p className="flex items-start gap-2 rounded-2xl bg-slate-50 p-4 text-xs font-medium leading-relaxed text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />A assistente usa primeiro os atalhos e dados do seu funil. A IA avançada só é acionada quando a resposta local não atende à pergunta.</p>
+            <p className="flex items-start gap-2 rounded-2xl bg-slate-50 p-4 text-xs font-medium leading-relaxed text-slate-600"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />A assistente usa primeiro os atalhos e dados do seu funil. A IA avançada só é acionada quando a resposta local não atende à pergunta. As informações de atendimento também deixam a Aury mais contextual no seu link público, sem substituir sua avaliação profissional.</p>
 
             {!readOnly && <button disabled={saving || Boolean(loadError)} onClick={() => void save()} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-black py-4 text-xs font-black uppercase tracking-widest text-white shadow-lg transition hover:bg-slate-900 disabled:opacity-40">{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Salvar configurações da IA</button>}
           </>

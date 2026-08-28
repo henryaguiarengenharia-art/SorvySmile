@@ -35,10 +35,10 @@ describe("planos", () => {
     expect(PLANS.lite.monthlyLeadLimit).toBe(15);
   });
 
-  it("limita validações de foto a três tentativas por triagem contratada", () => {
-    expect(photoValidationLimit("lite")).toBe(45);
-    expect(photoValidationLimit("pro")).toBe(180);
-    expect(photoValidationLimit("network")).toBe(450);
+  it("preserva três tentativas por triagem, incluindo a primeira cortesia", () => {
+    expect(photoValidationLimit("lite")).toBe(48);
+    expect(photoValidationLimit("pro")).toBe(183);
+    expect(photoValidationLimit("network")).toBe(453);
   });
 
   it("mantém os preços atuais do Smile", () => {

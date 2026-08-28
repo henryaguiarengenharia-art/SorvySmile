@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  ArrowRight,
   BarChart3,
   CalendarClock,
   CheckCircle2,
@@ -208,12 +209,19 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
 
   const counts = useMemo(
     () => ({
-      new: metricLeads.filter((lead) => lead.status === "new").length,
-      in_chat: metricLeads.filter((lead) => lead.status === "in_chat").length,
-      scheduled: metricLeads.filter((lead) => lead.status === "scheduled").length,
-      closed: metricLeads.filter((lead) => lead.status === "closed").length,
+      new: leadRecords.filter((lead) => lead.status === "new").length,
+      in_chat: leadRecords.filter((lead) => lead.status === "in_chat").length,
+      scheduled: leadRecords.filter((lead) => lead.status === "scheduled").length,
+      closed: leadRecords.filter((lead) => lead.status === "closed").length,
     }),
-    [metricLeads],
+    [leadRecords],
+  );
+
+  const leadsNeedingFirstContact = useMemo(
+    () => leadRecords.filter(
+      (lead) => lead.status === "new" && !lead.firstContactAt,
+    ).length,
+    [leadRecords],
   );
 
   const responseStats = useMemo(() => {
@@ -253,6 +261,13 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
         })[0] ?? null,
     [leadRecords],
   );
+
+  const openLeadList = (nextFilter: LeadStatus | "all" = "all"): void => {
+    setSearch("");
+    setFilter(nextFilter);
+    setSelectedLead(null);
+    setTab("leads");
+  };
 
   const updateLead = async (
     id: string,
@@ -413,7 +428,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                 Plano {planName(planConfig.tier)}
               </p>
               <p className="mt-1 text-sm font-black text-blue-900">
-                {currentUsage} de {usageLimit} triagens
+                {currentUsage} de {usageLimit} triagens da franquia
               </p>
             </div>
             <BarChart3 className="h-6 w-6 text-blue-600" />
@@ -495,41 +510,50 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
 
       {tab === "dashboard" && (
         <section className="space-y-6">
-          <BillingSummaryCard account={billingAccount} readOnly={readOnly} onSubscriptionIntent={onSubscriptionIntent} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Métricas do período</p>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Gestão dos seus leads</p>
+              <h2 className="mt-1 text-2xl font-black text-slate-950">O que precisa da sua atenção agora</h2>
               <p className="mt-1 text-sm font-bold text-slate-600">
-                {metricLeads.length} no período · {leadRecords.length} no geral
+                {leadsNeedingFirstContact > 0
+                  ? `${leadsNeedingFirstContact} ${leadsNeedingFirstContact === 1 ? "lead aguarda" : "leads aguardam"} seu primeiro contato.`
+                  : "Nenhum lead novo aguarda o primeiro contato."}
               </p>
             </div>
-            <PeriodFilter value={metricPeriod} onChange={setMetricPeriod} />
+            <button
+              type="button"
+              onClick={() => openLeadList("new")}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-xs font-black text-white transition hover:bg-slate-700"
+            >
+              Ver novos leads <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <Kpi label="Novos" value={counts.new} color="text-blue-600" />
+            <Kpi label="Novos" value={counts.new} color="text-blue-600" onClick={() => openLeadList("new")} />
             <Kpi
               label="Em conversa"
               value={counts.in_chat}
               color="text-indigo-600"
+              onClick={() => openLeadList("in_chat")}
             />
             <Kpi
               label="Agendados"
               value={counts.scheduled}
               color="text-emerald-600"
+              onClick={() => openLeadList("scheduled")}
             />
             <Kpi
               label="Convertidos"
               value={counts.closed}
               color="text-violet-600"
+              onClick={() => openLeadList("closed")}
             />
           </div>
 
-          <div className="grid gap-5 lg:grid-cols-3">
-            <DailyPostCard post={dailyPost} history={dailyPostHistory} compact readOnly={readOnly} onEvent={onDailyPostEvent} />
-
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.65fr)]">
             <article className="rounded-[2rem] border border-slate-100 bg-white p-7">
               <Clock className="h-6 w-6 text-amber-500" />
-              <h2 className="mt-5 text-xl font-black">Contato pendente</h2>
+              <h2 className="mt-5 text-xl font-black">Próxima ação recomendada</h2>
               {priorityLead ? (
                 <>
                   <p className="mt-3 text-lg font-black">
@@ -550,6 +574,13 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                   >
                     <Phone className="h-4 w-4" /> Abrir WhatsApp
                   </button>}
+                  <button
+                    type="button"
+                    onClick={() => openLeadList("new")}
+                    className="mt-3 flex items-center gap-2 text-xs font-black text-blue-700 hover:text-blue-900"
+                  >
+                    Ver fila de novos leads <ArrowRight className="h-4 w-4" />
+                  </button>
                 </>
               ) : (
                 <p className="mt-3 text-sm font-medium text-slate-500">
@@ -559,22 +590,56 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             </article>
 
             <article className="rounded-[2rem] border border-slate-100 bg-white p-7">
+              <Instagram className="h-6 w-6 text-pink-600" />
+              <h2 className="mt-5 text-xl font-black">Post do Dia</h2>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
+                {dailyPost
+                  ? `Seu conteúdo de hoje está pronto: ${dailyPost.contentSnapshot.title}`
+                  : "Abra o conteúdo pronto para publicar hoje."}
+              </p>
+              <button
+                type="button"
+                onClick={() => setTab("post")}
+                className="mt-5 flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700 transition hover:bg-slate-50"
+              >
+                Preparar publicação <ArrowRight className="h-4 w-4" />
+              </button>
+            </article>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(280px,.65fr)]">
+            <article className="rounded-[2rem] border border-slate-100 bg-white p-7">
               <Link2 className="h-6 w-6 text-blue-600" />
               <h2 className="mt-5 text-xl font-black">Seu link de captação</h2>
               <p className="mt-3 break-all rounded-xl bg-slate-50 p-3 text-xs font-bold text-slate-500">
                 {publicUrl}
               </p>
               <button
-                onClick={() => {
-                  void navigator.clipboard.writeText(publicUrl);
-                  setNotice("Link copiado.");
-                }}
+                type="button"
+                onClick={() => void copyPublicUrl()}
                 className="mt-5 flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-xs font-black uppercase tracking-widest text-white"
               >
                 <Copy className="h-4 w-4" /> Copiar link
               </button>
             </article>
+            <article className="rounded-[2rem] border border-blue-100 bg-blue-50 p-7">
+              <BarChart3 className="h-6 w-6 text-blue-600" />
+              <h2 className="mt-5 text-xl font-black text-slate-950">Uso da franquia</h2>
+              <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
+                {currentUsage} de {usageLimit} triagens incluídas. A primeira triagem do mês é uma cortesia da Sorvy e não entra nesta conta.
+              </p>
+            </article>
           </div>
+
+          <div className="flex flex-col gap-3 rounded-[2rem] border border-slate-100 bg-white p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Resumo do período</p>
+              <p className="mt-1 text-sm font-bold text-slate-600">{metricLeads.length} leads no período selecionado · {leadRecords.length} no total</p>
+            </div>
+            <PeriodFilter value={metricPeriod} onChange={setMetricPeriod} />
+          </div>
+
+          <BillingSummaryCard account={billingAccount} readOnly={readOnly} onSubscriptionIntent={onSubscriptionIntent} />
 
           {fullCrm && (
             <div className="grid gap-5 md:grid-cols-2">
@@ -1004,17 +1069,27 @@ const Kpi = ({
   label,
   value,
   color,
+  onClick,
 }: {
   label: string;
   value: number;
   color: string;
+  onClick: () => void;
 }) => (
-  <article className="rounded-[1.5rem] border border-slate-100 bg-white p-5">
+  <button
+    type="button"
+    onClick={onClick}
+    className="rounded-[1.5rem] border border-slate-100 bg-white p-5 text-left transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+    aria-label={`Ver leads ${label.toLowerCase()}`}
+  >
     <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
       {label}
     </p>
-    <p className={`mt-2 text-3xl font-black ${color}`}>{value}</p>
-  </article>
+    <div className="mt-2 flex items-end justify-between gap-3">
+      <p className={`text-3xl font-black ${color}`}>{value}</p>
+      <ArrowRight className="h-4 w-4 text-slate-300" />
+    </div>
+  </button>
 );
 
 const IconButton = ({
