@@ -86,6 +86,7 @@ const firebaseKeys = [
   "VITE_FIREBASE_API_KEY",
   "VITE_FIREBASE_AUTH_DOMAIN",
   "VITE_FIREBASE_PROJECT_ID",
+  "VITE_FIREBASE_STORAGE_BUCKET",
   "VITE_FIREBASE_APP_ID",
 ];
 for (const key of firebaseKeys) {
@@ -93,6 +94,16 @@ for (const key of firebaseKeys) {
 }
 if (values.VITE_FIREBASE_PROJECT_ID !== expectedProject) {
   throw new Error("A configuracao do frontend nao pertence a homologacao.");
+}
+const allowedStorageBuckets = new Set([
+  `${expectedProject}.appspot.com`,
+  `${expectedProject}.firebasestorage.app`,
+]);
+if (!allowedStorageBuckets.has(values.VITE_FIREBASE_STORAGE_BUCKET)) {
+  throw new Error(
+    "O bucket do Storage nao pertence a homologacao: "
+      + (values.VITE_FIREBASE_STORAGE_BUCKET || "ausente"),
+  );
 }
 
 for (const key of [

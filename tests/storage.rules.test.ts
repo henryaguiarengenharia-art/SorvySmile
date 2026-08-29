@@ -42,6 +42,30 @@ describe.skipIf(!hasEmulators)("regras de imagens do perfil profissional", () =>
     await assertSucceeds(target.put(new Uint8Array([1, 2, 3]), { contentType: "image/webp" }));
   });
 
+  it("permite ao titular do cadastro direto enviar imagem mesmo sem documentos auxiliares", async () => {
+    const uid = "aNwSY7r7w5SwlgE0NdvEzeKp5v73";
+    const target = environment
+      .authenticatedContext(uid)
+      .storage()
+      .ref(`professional-assets/acc_${uid}/pro_${uid}/cover-1788029644590.png`);
+
+    await assertSucceeds(
+      target.put(new Uint8Array([1, 2, 3]), { contentType: "image/png" }),
+    );
+  });
+
+  it("não permite usar o padrão determinístico de outro usuário", async () => {
+    const ownerUid = "aNwSY7r7w5SwlgE0NdvEzeKp5v73";
+    const target = environment
+      .authenticatedContext("different-user")
+      .storage()
+      .ref(`professional-assets/acc_${ownerUid}/pro_${ownerUid}/cover-1788029644590.png`);
+
+    await assertFails(
+      target.put(new Uint8Array([1]), { contentType: "image/png" }),
+    );
+  });
+
   it("nega arquivo em conta divergente e acesso de outro profissional", async () => {
     const wrongAccount = environment.authenticatedContext("owner").storage().ref("professional-assets/acc_b/pro_a/cover-test.webp");
     const outsider = environment.authenticatedContext("outsider").storage().ref("professional-assets/acc_a/pro_a/cover-test.webp");

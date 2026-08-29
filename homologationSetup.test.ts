@@ -105,6 +105,10 @@ describe("deploy funcional da homologacao", () => {
     expect(geminiSource).toContain("new GoogleGenAI({ apiKey })");
     expect(geminiSource).not.toContain("enterprise: true");
     expect(script).toContain("VITE_PAYMENT_URL_NETWORK");
+    expect(script).toContain('"VITE_FIREBASE_STORAGE_BUCKET"');
+    expect(script).toContain("firebasestorage.app");
+    expect(script).toContain("appspot.com");
+    expect(script).toContain("O bucket do Storage nao pertence a homologacao");
     expect(script).toContain(
       "functions:validateSmilePhoto,functions:analyzeSmilePhoto",
     );
