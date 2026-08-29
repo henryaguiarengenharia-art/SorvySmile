@@ -6,6 +6,8 @@ const dailyPost = readFileSync("components/DailyPostCard.tsx", "utf8");
 const app = readFileSync("App.tsx", "utf8");
 const patientGuide = readFileSync("components/PatientAssistantGuide.tsx", "utf8");
 const backend = readFileSync("functions/src/index.ts", "utf8");
+const profileAssets = readFileSync("services/professionalProfileAssets.ts", "utf8");
+const storageRules = readFileSync("storage.rules", "utf8");
 
 describe("gestão individual do dentista", () => {
   it("abre a lista correta ao clicar nos indicadores de lead", () => {
@@ -35,5 +37,21 @@ describe("gestão individual do dentista", () => {
     expect(patientGuide).not.toContain("assistant.ctaLink ||");
     expect(backend).toContain("publicPatientAssistantForProfile");
     expect(backend).toContain("patientAssistant: publicPatientAssistantForProfile");
+  });
+
+  it("publica uma vitrine individual com capa, foto, Instagram e CTA de triagem", () => {
+    expect(app).toContain("profile.coverImage");
+    expect(app).toContain("profile.instagramHandle");
+    expect(app).toContain("profile.bioLink");
+    expect(app).toContain("Inicie sua experiência");
+    expect(portal).toContain("Alterar capa");
+    expect(portal).toContain("Alterar foto");
+  });
+
+  it("isola os arquivos do perfil por conta e professionalId", () => {
+    expect(profileAssets).toContain("professional-assets/${accountId}/${professionalId}");
+    expect(profileAssets).toContain("safePathPart(input.professionalId)");
+    expect(storageRules).toContain("match /professional-assets/{accountId}/{professionalId}/{fileName}");
+    expect(storageRules).toContain("currentUser().data.professionalId == professionalId");
   });
 });

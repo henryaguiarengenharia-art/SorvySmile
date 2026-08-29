@@ -212,11 +212,14 @@ interface ProfessionalRecord {
   email?: string;
   whatsapp?: string;
   specialty?: string;
+  registrationNumber?: string;
   city?: string;
   state?: string;
   bio?: string;
   bioLink?: string;
   profileImage?: string;
+  coverImage?: string;
+  instagramHandle?: string;
   standardMessage?: string;
   templates?: string[];
   teamTag?: string;
@@ -1429,13 +1432,17 @@ export const updateProfessionalProfile = onCall(
         slug: user.slug,
         accountId: user.accountId,
         professionalId: user.professionalId,
-        name: professional?.name ?? "",
-        specialty: professional?.specialty ?? "",
+        name: input.name ?? professional?.name ?? "",
+        specialty: input.specialty ?? professional?.specialty ?? "",
+        registrationNumber: input.registrationNumber ?? professional?.registrationNumber ?? "",
         whatsapp: input.whatsapp,
         city: input.city,
         state: input.state,
         bio: input.bio,
         profileImage: input.profileImage,
+        coverImage: input.coverImage ?? professional?.coverImage ?? "",
+        instagramHandle: input.instagramHandle ?? professional?.instagramHandle ?? "",
+        bioLink: input.bioLink,
         plan: normalizePlan(accountSnap.data()?.plan),
         active: true,
         updatedAtMs: now,
@@ -1464,7 +1471,7 @@ export const updateProfessionalByHq = onCall(
     const current = professionalSnap.data() as ProfessionalRecord;
     assertAdminTarget(input.accountId, input.professionalId, account, current);
     const now = Date.now();
-    const fields = ["name", "specialty", "whatsapp", "city", "state", "bio", "bioLink", "standardMessage", "templates", "teamTag", "isOnDuty", "profileImage"] as const;
+    const fields = ["name", "specialty", "registrationNumber", "whatsapp", "city", "state", "bio", "bioLink", "standardMessage", "templates", "teamTag", "isOnDuty", "profileImage", "coverImage", "instagramHandle"] as const;
     const patch: Record<string, unknown> = { updatedAtMs: now };
     for (const field of fields) if (input[field] !== undefined) patch[field] = input[field];
     const batch = db.batch();
@@ -1478,10 +1485,14 @@ export const updateProfessionalByHq = onCall(
         name: String(patch.name ?? current.name ?? ""),
         whatsapp: String(patch.whatsapp ?? current.whatsapp ?? ""),
         specialty: String(patch.specialty ?? current.specialty ?? ""),
+        registrationNumber: String(patch.registrationNumber ?? current.registrationNumber ?? ""),
         city: String(patch.city ?? current.city ?? ""),
         state: String(patch.state ?? current.state ?? ""),
         bio: String(patch.bio ?? current.bio ?? ""),
         profileImage: String(patch.profileImage ?? current.profileImage ?? ""),
+        coverImage: String(patch.coverImage ?? current.coverImage ?? ""),
+        instagramHandle: String(patch.instagramHandle ?? current.instagramHandle ?? ""),
+        bioLink: String(patch.bioLink ?? current.bioLink ?? ""),
         plan: normalizePlan(account.plan),
         ownerType: account.ownerType === "clinic" ? "clinic" : "dentist",
         status: current.status ?? "subscriber",
@@ -1862,10 +1873,14 @@ export const updateProfessionalSlug = onCall(
         name: professionalSnap.data()?.name ?? "",
         whatsapp: professionalSnap.data()?.whatsapp ?? "",
         specialty: professionalSnap.data()?.specialty ?? "",
+        registrationNumber: professionalSnap.data()?.registrationNumber ?? "",
         city: professionalSnap.data()?.city ?? "",
         state: professionalSnap.data()?.state ?? "",
         bio: professionalSnap.data()?.bio ?? "",
         profileImage: professionalSnap.data()?.profileImage ?? "",
+        coverImage: professionalSnap.data()?.coverImage ?? "",
+        instagramHandle: professionalSnap.data()?.instagramHandle ?? "",
+        bioLink: professionalSnap.data()?.bioLink ?? "",
         plan: accountSnap.data()?.plan,
         ownerType: accountSnap.data()?.ownerType === "clinic" ? "clinic" : "dentist",
         active: professionalSnap.data()?.isActive === true,

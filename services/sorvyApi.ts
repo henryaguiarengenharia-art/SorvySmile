@@ -198,6 +198,7 @@ function mapProfessional(id: string, data: DocumentData): DentistRecord {
     isActive: data.isActive === true,
     createdAt: Number(data.createdAtMs ?? data.createdAt ?? Date.now()),
     specialty: data.specialty ?? "",
+    registrationNumber: data.registrationNumber ?? "",
     city: data.city ?? "",
     state: data.state ?? "",
     publicSlug: data.publicSlug ?? "",
@@ -208,6 +209,8 @@ function mapProfessional(id: string, data: DocumentData): DentistRecord {
     teamTag: data.teamTag ?? "Dentista",
     isOnDuty: data.isOnDuty !== false,
     profileImage: data.profileImage ?? "",
+    coverImage: data.coverImage ?? "",
+    instagramHandle: data.instagramHandle ?? "",
     status: data.status ?? (data.isActive === true ? "active" : "inactive"),
     trialStartedAt: data.trialStartedAtMs,
     trialEndsAt: data.trialEndsAtMs,
@@ -316,6 +319,7 @@ export async function getPublicProfile(
       name: snap.data().name ?? "",
       whatsapp: snap.data().whatsapp ?? "",
       specialty: snap.data().specialty ?? "",
+      registrationNumber: snap.data().registrationNumber ?? "",
       city: snap.data().city ?? "",
       state: snap.data().state ?? "",
       bio: snap.data().bio ?? "",
@@ -323,6 +327,9 @@ export async function getPublicProfile(
       active: true,
       status: snap.data().status ?? "active",
       profileImage: snap.data().profileImage ?? "",
+      coverImage: snap.data().coverImage ?? "",
+      instagramHandle: snap.data().instagramHandle ?? "",
+      bioLink: snap.data().bioLink ?? "",
       patientAssistant: snap.data().patientAssistant
         ? {
             id: String(snap.data().patientAssistant.id ?? "aury-patient-guide"),
@@ -618,6 +625,9 @@ export async function saveProfessionalProfile(
     "updateProfessionalProfile",
   );
   await callable({
+    ...(patch.name !== undefined ? { name: patch.name } : {}),
+    ...(patch.specialty !== undefined ? { specialty: patch.specialty } : {}),
+    ...(patch.registrationNumber !== undefined ? { registrationNumber: patch.registrationNumber } : {}),
     whatsapp: patch.whatsapp ?? "",
     city: patch.city ?? "",
     state: patch.state ?? "",
@@ -626,6 +636,8 @@ export async function saveProfessionalProfile(
     standardMessage: patch.standardMessage ?? "",
     templates: patch.templates ?? [],
     profileImage: patch.profileImage ?? "",
+    ...(patch.coverImage !== undefined ? { coverImage: patch.coverImage } : {}),
+    ...(patch.instagramHandle !== undefined ? { instagramHandle: patch.instagramHandle } : {}),
   });
 }
 

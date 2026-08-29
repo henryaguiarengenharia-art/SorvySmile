@@ -75,14 +75,19 @@ export const subscriptionIntentSchema = z.object({
 });
 
 export const profilePatchSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  specialty: z.string().trim().max(100).optional(),
+  registrationNumber: z.string().trim().max(40).optional(),
   whatsapp: phoneSchema,
   city: z.string().trim().min(2).max(80),
   state: z.string().trim().toUpperCase().length(2),
   bio: z.string().trim().max(400).optional().default(""),
-  bioLink: z.string().trim().max(250).optional().default(""),
+  bioLink: optionalHttpsUrl.optional().default(""),
   standardMessage: z.string().trim().max(500).optional().default(""),
   templates: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
   profileImage: optionalHttpsUrl.optional().default(""),
+  coverImage: optionalHttpsUrl.optional(),
+  instagramHandle: z.string().trim().max(80).optional(),
 });
 
 export const accountStatusSchema = z.object({
@@ -118,16 +123,19 @@ export const professionalStatusSchema = z.object({
 const optionalProfileFields = {
   name: z.string().trim().min(2).max(120).optional(),
   specialty: z.string().trim().max(100).optional(),
+  registrationNumber: z.string().trim().max(40).optional(),
   whatsapp: phoneSchema.optional(),
   city: z.string().trim().min(2).max(80).optional(),
   state: z.string().trim().toUpperCase().length(2).optional(),
   bio: z.string().trim().max(400).optional(),
-  bioLink: z.string().trim().max(250).optional(),
+  bioLink: optionalHttpsUrl.optional(),
   standardMessage: z.string().trim().max(500).optional(),
   templates: z.array(z.string().trim().min(1).max(500)).max(10).optional(),
   teamTag: z.string().trim().max(80).optional(),
   isOnDuty: z.boolean().optional(),
   profileImage: optionalHttpsUrl.optional(),
+  coverImage: optionalHttpsUrl.optional(),
+  instagramHandle: z.string().trim().max(80).optional(),
 };
 
 export const hqProfessionalPatchSchema = z.object({

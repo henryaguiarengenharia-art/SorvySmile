@@ -177,6 +177,7 @@ export interface DentistRecord {
   status?: ProfessionalStatus;
   createdAt: number;
   specialty?: string;
+  registrationNumber?: string;
   city?: string;
   state?: string;
   publicSlug?: string;
@@ -187,6 +188,8 @@ export interface DentistRecord {
   teamTag?: string;
   isOnDuty?: boolean;
   profileImage?: string;
+  coverImage?: string;
+  instagramHandle?: string;
   trialStartedAt?: number;
   trialEndsAt?: number;
   archivedAt?: number;
@@ -203,6 +206,7 @@ export interface PublicProfessionalProfile {
   name: string;
   whatsapp: string;
   specialty?: string;
+  registrationNumber?: string;
   city?: string;
   state?: string;
   bio?: string;
@@ -210,6 +214,9 @@ export interface PublicProfessionalProfile {
   active: boolean;
   status?: ProfessionalStatus;
   profileImage?: string;
+  coverImage?: string;
+  instagramHandle?: string;
+  bioLink?: string;
   patientAssistant?: PublicPatientAssistant;
 }
 

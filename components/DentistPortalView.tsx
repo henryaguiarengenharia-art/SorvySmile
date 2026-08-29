@@ -3,6 +3,7 @@ import {
   ArrowRight,
   BarChart3,
   CalendarClock,
+  Camera,
   CheckCircle2,
   Clock,
   Copy,
@@ -10,6 +11,7 @@ import {
   ExternalLink,
   FileText,
   Instagram,
+  Image as ImageIcon,
   Link2,
   LoaderCircle,
   MessageCircle,
@@ -42,6 +44,7 @@ import { ProfessionalAssistantSettingsCard } from "./ProfessionalAssistantSettin
 import { getProfessionalAssistantSettings } from "../services/sorvyApi";
 import { defaultProfessionalAssistantSettings } from "../services/professionalAssistantProfile";
 import { BillingSummaryCard } from "./BillingSummaryCard";
+import { ProfessionalAssetKind, uploadProfessionalAsset } from "../services/professionalProfileAssets";
 
 interface DentistPortalViewProps {
   leadRecords: LeadRecord[];
@@ -126,6 +129,9 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   const [whatsapp, setWhatsapp] = useState(
     formatPhone(professional.whatsapp),
   );
+  const [professionalName, setProfessionalName] = useState(professional.name);
+  const [specialty, setSpecialty] = useState(professional.specialty ?? "");
+  const [registrationNumber, setRegistrationNumber] = useState(professional.registrationNumber ?? "");
   const [city, setCity] = useState(professional.city ?? "");
   const [state, setState] = useState(professional.state ?? "");
   const [bio, setBio] = useState(professional.bio ?? "");
@@ -140,6 +146,10 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   const [publicSlug, setPublicSlug] = useState(professional.publicSlug ?? "");
   const [savedPublicSlug, setSavedPublicSlug] = useState(professional.publicSlug ?? "");
   const [profileImage, setProfileImage] = useState(professional.profileImage ?? "");
+  const [coverImage, setCoverImage] = useState(professional.coverImage ?? "");
+  const [instagramHandle, setInstagramHandle] = useState(professional.instagramHandle ?? "");
+  const [bioLink, setBioLink] = useState(professional.bioLink ?? "");
+  const [uploadingAsset, setUploadingAsset] = useState<ProfessionalAssetKind | null>(null);
   const [assistantSettings, setAssistantSettings] = useState<ProfessionalAssistantSettings>(() =>
     defaultProfessionalAssistantSettings(professional.billingAccountId, professional.id),
   );
@@ -368,6 +378,9 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
     setNotice(null);
     try {
       await onUpdateProfessional({
+        name: professionalName,
+        specialty,
+        registrationNumber,
         whatsapp,
         city,
         state,
@@ -381,6 +394,9 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
               .slice(0, 10)
           : [],
         profileImage,
+        coverImage,
+        instagramHandle,
+        bioLink,
       });
       if (onUpdateSlug && publicSlug !== professional.publicSlug) {
         const updatedSlug = await onUpdateSlug(publicSlug);
@@ -394,6 +410,27 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       );
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const uploadAsset = async (kind: ProfessionalAssetKind, file?: File): Promise<void> => {
+    if (!file || readOnly) return;
+    setUploadingAsset(kind);
+    setNotice(null);
+    try {
+      const url = await uploadProfessionalAsset({
+        file,
+        accountId: professional.billingAccountId,
+        professionalId: professional.id,
+        kind,
+      });
+      if (kind === "profile") setProfileImage(url);
+      else setCoverImage(url);
+      setNotice("Imagem preparada. Salve o perfil para publicar a alteração.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Não foi possível enviar a imagem.");
+    } finally {
+      setUploadingAsset(null);
     }
   };
 
@@ -802,7 +839,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       )}
 
       {tab === "profile" && (
-        <section className="mx-auto max-w-3xl space-y-6 rounded-[2rem] border border-slate-100 bg-white p-7 md:p-9">
+        <section className="mx-auto max-w-4xl space-y-6 rounded-[2rem] border border-slate-100 bg-white p-7 md:p-9">
           <div className="flex items-center gap-4">
             <span className="rounded-2xl bg-blue-50 p-3 text-blue-600">
               <User className="h-6 w-6" />
@@ -812,6 +849,25 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
               <p className="text-sm font-medium text-slate-500">
                 Dados exibidos no link e usados no contato com os leads.
               </p>
+            </div>
+          </div>
+          <div className="overflow-hidden rounded-[2rem] border border-slate-100 bg-slate-50">
+            <div className="relative h-44 bg-gradient-to-br from-[#123B5D] to-[#18AFA5] sm:h-52">
+              {coverImage && <img src={coverImage} alt="Prévia da capa" className="h-full w-full object-cover" />}
+              <label className="absolute right-4 top-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white/95 px-3 py-2 text-[10px] font-black uppercase text-slate-800 shadow-lg">
+                <ImageIcon className="h-4 w-4" />{uploadingAsset === "cover" ? "Enviando..." : "Alterar capa"}
+                <input type="file" accept="image/jpeg,image/png,image/webp" disabled={readOnly || Boolean(uploadingAsset)} className="hidden" onChange={(event) => void uploadAsset("cover", event.target.files?.[0])} />
+              </label>
+            </div>
+            <div className="relative px-6 pb-6 pt-14">
+              <div className="absolute -top-12 left-6 h-24 w-24 overflow-hidden rounded-3xl border-4 border-white bg-white shadow-xl">
+                {profileImage ? <img src={profileImage} alt="Prévia do perfil" className="h-full w-full object-cover" /> : <User className="m-7 h-10 w-10 text-slate-300" />}
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase text-slate-700">
+                <Camera className="h-4 w-4" />{uploadingAsset === "profile" ? "Enviando..." : "Alterar foto"}
+                <input type="file" accept="image/jpeg,image/png,image/webp" disabled={readOnly || Boolean(uploadingAsset)} className="hidden" onChange={(event) => void uploadAsset("profile", event.target.files?.[0])} />
+              </label>
+              <p className="mt-3 text-xs font-medium text-slate-500">JPG, PNG ou WebP até 5 MB. A foto é recortada em formato quadrado e a capa em formato horizontal.</p>
             </div>
           </div>
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
@@ -829,12 +885,18 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             </div>
           </div>
           <div className="grid gap-5 md:grid-cols-2">
+            <Field label="Nome público do profissional">
+              <input value={professionalName} disabled={readOnly} onChange={(event) => setProfessionalName(event.target.value)} className="input" />
+            </Field>
+            <Field label="Especialidade principal">
+              <input value={specialty} disabled={readOnly} onChange={(event) => setSpecialty(event.target.value)} className="input" placeholder="Ex.: Ortodontia" />
+            </Field>
+            <Field label="CRO / registro profissional">
+              <input value={registrationNumber} disabled={readOnly} onChange={(event) => setRegistrationNumber(event.target.value)} className="input" placeholder="Ex.: CRO-MG 12345" />
+            </Field>
             <Field label="Endereço público personalizado">
               <input value={publicSlug} disabled={readOnly} onChange={(event) => setPublicSlug(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} className="input" />
               <p className="mt-2 text-xs font-medium text-slate-400">Use letras minúsculas, números e hífens. Este endereço define seu link individual.</p>
-            </Field>
-            <Field label="URL https da foto">
-              <input value={profileImage} disabled={readOnly} onChange={(event) => setProfileImage(event.target.value)} className="input" />
             </Field>
             <Field label="WhatsApp">
               <input
@@ -843,6 +905,9 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                 onChange={(event) => setWhatsapp(formatPhone(event.target.value))}
                 className="input"
               />
+            </Field>
+            <Field label="Instagram">
+              <input value={instagramHandle} disabled={readOnly} onChange={(event) => setInstagramHandle(event.target.value.replace(/^@+/, ""))} className="input" placeholder="seuusuario" />
             </Field>
             <Field label="Cidade">
               <input
@@ -862,6 +927,14 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
                 }
                 className="input"
               />
+            </Field>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <Field label="Texto do link externo">
+              <input value={bioLink ? "Conheça meu trabalho" : ""} disabled className="input" placeholder="Conheça meu trabalho" />
+            </Field>
+            <Field label="Link externo opcional">
+              <input type="url" value={bioLink} disabled={readOnly} onChange={(event) => setBioLink(event.target.value)} className="input" placeholder="https://seusite.com.br" />
             </Field>
           </div>
           <Field label="Apresentação curta">

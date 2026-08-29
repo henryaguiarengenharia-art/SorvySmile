@@ -38,6 +38,19 @@ service firebase.storage {
         && request.resource.contentType.matches('image/(png|webp)');
     }
 
+    match /professional-assets/{accountId}/{professionalId}/{fileName} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if signedIn()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)')
+        && (
+          currentUser().data.role == 'hq'
+          || currentUser().data.professionalId == professionalId
+          || (currentUser().data.role == 'clinic' && currentUser().data.accountId == accountId)
+        );
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

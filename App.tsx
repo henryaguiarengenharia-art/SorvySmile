@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   CreditCard,
   ExternalLink,
+  Instagram,
   LoaderCircle,
   LockKeyhole,
   MessageCircle,
@@ -661,53 +662,61 @@ const LandingView = ({
 }) => (
   <main>
     <section className="mx-auto max-w-6xl px-6 py-12 text-center md:py-16">
-      <div className="mx-auto mb-7 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-700">
+      {!profile && <div className="mx-auto mb-7 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-700">
         <Sparkles className="h-4 w-4" /> Mapeamento visual gratuito · leva poucos segundos
-      </div>
-      <h1 className="mx-auto max-w-4xl text-5xl font-black leading-[0.95] tracking-tighter md:text-7xl">
-        {profile ? <>Uma experiência preparada por <span className="text-blue-600">{profile.name}.</span></> : <>Descubra o potencial do seu <span className="text-blue-600">sorriso em segundos.</span></>}
-      </h1>
-      <p className="mx-auto mt-7 max-w-2xl text-lg font-medium leading-relaxed text-slate-500">
-        {profile ? `Antes de conversar com ${profile.name}, organize o que você está buscando em uma triagem informativa, simples e no seu ritmo.` : "Tenha seu sorriso mapeado e chegue à conversa com o dentista sabendo quais pontos deseja explorar. Sem cadastro. Sem compromisso."}
-      </p>
+      </div>}
+      {!profile && <><h1 className="mx-auto max-w-4xl text-5xl font-black leading-[0.95] tracking-tighter md:text-7xl">Descubra o potencial do seu <span className="text-blue-600">sorriso em segundos.</span></h1><p className="mx-auto mt-7 max-w-2xl text-lg font-medium leading-relaxed text-slate-500">Tenha seu sorriso mapeado e chegue à conversa com o dentista sabendo quais pontos deseja explorar. Sem cadastro. Sem compromisso.</p></>}
       {profile && (
-        <div className="relative mx-auto mt-9 max-w-4xl overflow-hidden rounded-[2.5rem] bg-[#123B5D] p-1 text-left shadow-2xl shadow-slate-900/15">
-          <div className="relative overflow-hidden rounded-[2.25rem] bg-white p-6 sm:p-8">
-            <div className="absolute -right-12 -top-20 h-56 w-56 rounded-full bg-cyan-100/80 blur-3xl" />
-            <p className="relative text-[10px] font-black uppercase tracking-[.22em] text-[#18AFA5]">Sua jornada começa aqui</p>
-            <div className="relative mt-5 flex items-start gap-4">
+        <div className="relative mx-auto max-w-4xl overflow-hidden rounded-[2.5rem] bg-white text-left shadow-2xl shadow-slate-900/15 ring-1 ring-slate-100">
+          <div className="relative h-52 overflow-hidden bg-gradient-to-br from-[#123B5D] via-[#1D5477] to-[#18AFA5] sm:h-64">
+            {profile.coverImage && <img src={profile.coverImage} alt="" className="h-full w-full object-cover opacity-80" />}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0B2036]/95 via-[#123B5D]/25 to-transparent" />
+            <div className="absolute bottom-6 left-32 right-6 sm:left-44">
+              <p className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200">Experiência profissional individual</p>
+              <p className="mt-1 text-2xl font-black leading-tight text-white sm:text-4xl">{profile.name}</p>
+            </div>
+          </div>
+          <div className="relative p-6 pt-16 sm:p-9 sm:pt-20">
+            <div className="absolute -top-12 left-6 sm:-top-16 sm:left-9">
             {profile.profileImage ? (
               <img
                 src={profile.profileImage}
                 alt={`Foto de ${profile.name}`}
-                className="h-16 w-16 shrink-0 rounded-2xl object-cover ring-4 ring-[#EAF7F6]"
+                className="h-24 w-24 rounded-3xl bg-white object-cover shadow-xl ring-4 ring-white sm:h-32 sm:w-32"
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <span className="rounded-2xl bg-blue-50 p-3 text-blue-600">
-                <Smile className="h-6 w-6" />
+              <span className="flex h-24 w-24 items-center justify-center rounded-3xl bg-white text-blue-600 shadow-xl ring-4 ring-white sm:h-32 sm:w-32">
+                <Smile className="h-10 w-10" />
               </span>
             )}
-            <div>
-              <p className="text-xl font-black text-[#183247]">{profile.name}</p>
+            </div>
+            <div className="grid gap-7 md:grid-cols-[1fr_17rem]">
+              <div>
               {(profile.specialty || profile.city) && (
-                <p className="mt-1 text-xs font-bold text-slate-400">
+                <p className="text-xs font-black uppercase tracking-widest text-[#18AFA5]">
                   {[profile.specialty, profile.city, profile.state]
                     .filter(Boolean)
                     .join(" · ")}
                 </p>
               )}
+              {profile.registrationNumber && <p className="mt-3 inline-flex rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black uppercase tracking-wider text-slate-600">{profile.registrationNumber}</p>}
               {profile.bio && (
-                <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
+                <p className="mt-5 max-w-xl text-base font-medium italic leading-relaxed text-slate-600">
                   {profile.bio}
                 </p>
               )}
-            </div>
-            </div>
-            <p className="relative mt-6 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">A experiência organiza suas primeiras informações para tornar a conversa com {profile.name} mais clara e objetiva.</p>
-            <div className="relative mt-6 flex flex-col gap-3 sm:flex-row">
-              <button onClick={onStart} className="flex items-center justify-center gap-2 rounded-2xl bg-[#123B5D] px-6 py-4 text-sm font-black text-white transition hover:bg-[#2F80ED]"><Smile className="h-4 w-4" />Começar agora <ArrowRight className="h-4 w-4" /></button>
-              {profile.whatsapp && <a href={`https://wa.me/${profile.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-6 py-4 text-sm font-black text-[#183247] transition hover:border-[#18AFA5] hover:bg-[#F5F9FC]"><MessageCircle className="h-4 w-4 text-[#18AFA5]" />Falar com {profile.name}</a>}
+              <div className="mt-7 flex flex-wrap gap-3">
+                {profile.instagramHandle && <a href={`https://instagram.com/${profile.instagramHandle.replace(/^@/, "")}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700"><Instagram className="h-4 w-4 text-pink-500" />@{profile.instagramHandle.replace(/^@/, "")}</a>}
+                {profile.bioLink && <a href={profile.bioLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700">Conheça meu trabalho <ExternalLink className="h-4 w-4" /></a>}
+              </div>
+              </div>
+              <aside className="rounded-[2rem] border border-emerald-200 bg-emerald-50 p-6 text-center">
+                <p className="text-lg font-black text-emerald-950">Inicie sua experiência</p>
+                <p className="mt-3 text-xs font-medium leading-relaxed text-emerald-800">Responda algumas perguntas rápidas para organizar o que deseja conversar.</p>
+                <button onClick={onStart} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-xs font-black uppercase text-white shadow-lg transition hover:bg-emerald-700">Começar agora <ArrowRight className="h-4 w-4" /></button>
+                {profile.whatsapp && <a href={`https://wa.me/${profile.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-xs font-black text-emerald-800"><MessageCircle className="h-4 w-4" />Falar com profissional</a>}
+              </aside>
             </div>
           </div>
         </div>
@@ -745,7 +754,7 @@ const LandingView = ({
       </div>
     </section>
 
-    <section className="border-y border-slate-100 bg-white px-6 py-16">
+    {!profile && <section className="border-y border-slate-100 bg-white px-6 py-16">
       <div className="mx-auto max-w-5xl">
         <p className="text-center text-[10px] font-black uppercase tracking-widest text-blue-600">
           Como funciona
@@ -805,7 +814,7 @@ const LandingView = ({
           Triagem informativa. Não substitui consulta com cirurgião-dentista.
         </p>
       </div>
-    </section>
+    </section>}
   </main>
 );
 
