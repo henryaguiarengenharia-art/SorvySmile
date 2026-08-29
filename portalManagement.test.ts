@@ -55,5 +55,8 @@ describe("gestão individual do dentista", () => {
     expect(storageRules).toContain("currentUser().data.professionalId == professionalId");
     expect(storageRules).toContain("professional(professionalId).data.ownerUid == request.auth.uid");
     expect(storageRules).toContain("professional(professionalId).data.accountId == accountId");
+    expect(profileAssets).toContain("uploadBytes(target, input.file");
+    expect(profileAssets).not.toContain("canvas.toBlob");
+    expect(app).toContain("onError={() => setFailed(true)}");
   });
 });

@@ -9,6 +9,15 @@ export function isValidPublicProfessionalName(value?: string | null): boolean {
   return name.length >= 2 && !name.includes("@");
 }
 
+export function publicProfessionalDetail(value?: string | null): string {
+  const detail = String(value ?? "").trim();
+  return detail.includes("@") ? "" : detail;
+}
+
+export function isValidPublicProfessionalDetail(value?: string | null): boolean {
+  return !String(value ?? "").includes("@");
+}
+
 export function normalizeInstagramHandle(value?: string | null): string {
   const raw = String(value ?? "").trim();
   if (!raw) return "";

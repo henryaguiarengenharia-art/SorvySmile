@@ -45,7 +45,7 @@ import { getProfessionalAssistantSettings } from "../services/sorvyApi";
 import { defaultProfessionalAssistantSettings } from "../services/professionalAssistantProfile";
 import { BillingSummaryCard } from "./BillingSummaryCard";
 import { ProfessionalAssetKind, uploadProfessionalAsset } from "../services/professionalProfileAssets";
-import { isValidPublicProfessionalName, normalizeInstagramHandle, normalizePublicHttpsUrl } from "../services/publicProfessionalIdentity";
+import { isValidPublicProfessionalDetail, isValidPublicProfessionalName, normalizeInstagramHandle, normalizePublicHttpsUrl, publicProfessionalDetail } from "../services/publicProfessionalIdentity";
 
 interface DentistPortalViewProps {
   leadRecords: LeadRecord[];
@@ -381,9 +381,10 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
     try {
       const normalizedInstagram = normalizeInstagramHandle(instagramHandle);
       const normalizedBioLink = normalizePublicHttpsUrl(bioLink);
+      const normalizedSpecialty = publicProfessionalDetail(specialty);
       await onUpdateProfessional({
         name: professionalName,
-        specialty,
+        specialty: normalizedSpecialty,
         registrationNumber,
         whatsapp,
         city,
@@ -398,6 +399,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       });
       setInstagramHandle(normalizedInstagram);
       setBioLink(normalizedBioLink);
+      setSpecialty(normalizedSpecialty);
       if (onUpdateSlug && publicSlug !== professional.publicSlug) {
         const updatedSlug = await onUpdateSlug(publicSlug);
         setPublicSlug(updatedSlug);
@@ -429,9 +431,10 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       if (isValidPublicProfessionalName(professionalName)) {
         const normalizedInstagram = normalizeInstagramHandle(instagramHandle);
         const normalizedBioLink = normalizePublicHttpsUrl(bioLink);
+        const normalizedSpecialty = publicProfessionalDetail(specialty);
         await onUpdateProfessional({
           name: professionalName,
-          specialty,
+          specialty: normalizedSpecialty,
           registrationNumber,
           whatsapp,
           city,
@@ -446,6 +449,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
         });
         setInstagramHandle(normalizedInstagram);
         setBioLink(normalizedBioLink);
+        setSpecialty(normalizedSpecialty);
         setNotice("Imagem enviada e publicada no perfil.");
       } else {
         setNotice("Imagem enviada. Informe um nome profissional válido e salve o perfil para publicar a vitrine.");
@@ -914,6 +918,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             </Field>
             <Field label="Especialidade principal">
               <input value={specialty} disabled={readOnly} onChange={(event) => setSpecialty(event.target.value)} className="input" placeholder="Ex.: Ortodontia" />
+              {!isValidPublicProfessionalDetail(specialty) && <p className="mt-2 text-xs font-bold text-amber-700">O e-mail foi removido da vitrine. Informe uma especialidade ou deixe o campo vazio.</p>}
             </Field>
             <Field label="CRO / registro profissional">
               <input value={registrationNumber} disabled={readOnly} onChange={(event) => setRegistrationNumber(event.target.value)} className="input" placeholder="Ex.: CRO-MG 12345" />

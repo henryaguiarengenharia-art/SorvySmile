@@ -4,6 +4,7 @@ import {
   isValidPublicProfessionalName,
   normalizeInstagramHandle,
   normalizePublicHttpsUrl,
+  publicProfessionalDetail,
   publicProfessionalName,
 } from "./publicProfessionalIdentity";
 
@@ -12,6 +13,11 @@ describe("identidade pública profissional", () => {
     expect(publicProfessionalName("000.henry@gmail.com")).toBe("Profissional responsável");
     expect(isValidPublicProfessionalName("000.henry@gmail.com")).toBe(false);
     expect(publicProfessionalName("Dra. Helena Costa")).toBe("Dra. Helena Costa");
+  });
+
+  it("remove e-mail salvo indevidamente como especialidade", () => {
+    expect(publicProfessionalDetail("000.henry@gmail.com")).toBe("");
+    expect(publicProfessionalDetail("Implantodontia")).toBe("Implantodontia");
   });
 
   it("aceita usuário ou URL completa do Instagram", () => {

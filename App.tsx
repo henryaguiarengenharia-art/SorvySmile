@@ -52,7 +52,7 @@ import {
   WorkspaceData,
 } from "./services/sorvyApi";
 import { isFirebaseConfigured } from "./services/firebaseClient";
-import { instagramProfileUrl, normalizeInstagramHandle, publicProfessionalName } from "./services/publicProfessionalIdentity";
+import { instagramProfileUrl, normalizeInstagramHandle, publicProfessionalDetail, publicProfessionalName } from "./services/publicProfessionalIdentity";
 import {
   isPlanPubliclyAvailable,
   paymentUrlFor,
@@ -650,6 +650,15 @@ const App: React.FC = () => {
   );
 };
 
+const PublicProfilePhoto = ({ src, name }: { src?: string; name: string }) => {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  if (!src || failed) {
+    return <span className="flex h-24 w-24 items-center justify-center rounded-3xl bg-white text-blue-600 shadow-xl ring-4 ring-white sm:h-32 sm:w-32"><Smile className="h-10 w-10" /></span>;
+  }
+  return <img src={src} alt={`Foto de ${name}`} onError={() => setFailed(true)} className="h-24 w-24 rounded-3xl bg-white object-cover shadow-xl ring-4 ring-white sm:h-32 sm:w-32" referrerPolicy="no-referrer" />;
+};
+
 const LandingView = ({
   profile,
   loading,
@@ -662,6 +671,7 @@ const LandingView = ({
   onPlans: () => void;
 }) => {
   const professionalName = publicProfessionalName(profile?.name);
+  const specialty = publicProfessionalDetail(profile?.specialty);
   return (
   <main>
     <section className="mx-auto max-w-6xl px-6 py-12 text-center md:py-16">
@@ -672,7 +682,7 @@ const LandingView = ({
       {profile && (
         <div className="relative mx-auto max-w-4xl overflow-hidden rounded-[2.5rem] bg-white text-left shadow-2xl shadow-slate-900/15 ring-1 ring-slate-100">
           <div className="relative h-52 overflow-hidden bg-gradient-to-br from-[#123B5D] via-[#1D5477] to-[#18AFA5] sm:h-64">
-            {profile.coverImage && <img src={profile.coverImage} alt="" className="h-full w-full object-cover opacity-80" />}
+            {profile.coverImage && <img src={profile.coverImage} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} className="h-full w-full object-cover opacity-80" />}
             <div className="absolute inset-0 bg-gradient-to-t from-[#0B2036]/95 via-[#123B5D]/25 to-transparent" />
             <div className="absolute bottom-6 left-32 right-6 sm:left-44">
               <p className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200">Experiência profissional individual</p>
@@ -681,24 +691,13 @@ const LandingView = ({
           </div>
           <div className="relative p-6 pt-16 sm:p-9 sm:pt-20">
             <div className="absolute -top-12 left-6 sm:-top-16 sm:left-9">
-            {profile.profileImage ? (
-              <img
-                src={profile.profileImage}
-                alt={`Foto de ${professionalName}`}
-                className="h-24 w-24 rounded-3xl bg-white object-cover shadow-xl ring-4 ring-white sm:h-32 sm:w-32"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <span className="flex h-24 w-24 items-center justify-center rounded-3xl bg-white text-blue-600 shadow-xl ring-4 ring-white sm:h-32 sm:w-32">
-                <Smile className="h-10 w-10" />
-              </span>
-            )}
+            <PublicProfilePhoto src={profile.profileImage} name={professionalName} />
             </div>
             <div className="grid gap-7 md:grid-cols-[1fr_17rem]">
               <div>
-              {(profile.specialty || profile.city) && (
+              {(specialty || profile.city) && (
                 <p className="text-xs font-black uppercase tracking-widest text-[#18AFA5]">
-                  {[profile.specialty, profile.city, profile.state]
+                  {[specialty, profile.city, profile.state]
                     .filter(Boolean)
                     .join(" · ")}
                 </p>

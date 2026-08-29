@@ -12,6 +12,9 @@ const phoneSchema = z
 const professionalNameSchema = z.string().trim().min(2).max(120)
   .refine((value) => !value.includes("@"), "Informe o nome profissional, não um e-mail.");
 
+const professionalSpecialtySchema = z.string().trim().max(100)
+  .refine((value) => !value.includes("@"), "A especialidade não pode ser um e-mail.");
+
 const optionalHttpsUrl = z.string().trim().max(500).refine((value) => {
   if (!value) return true;
   try { return new URL(value).protocol === "https:"; } catch { return false; }
@@ -66,7 +69,7 @@ export const checkoutSchema = z.object({
   name: professionalNameSchema,
   email: z.string().trim().toLowerCase().email().max(160),
   whatsapp: phoneSchema,
-  specialty: z.string().trim().max(100).optional().default(""),
+  specialty: professionalSpecialtySchema.optional().default(""),
   plan: z.enum(["lite", "pro", "network", "elite"]),
   checkoutMode: z.enum(["paid", "trial"]).default("paid"),
   termsVersion: z.literal(SUBSCRIBER_TERMS_VERSION),
@@ -79,7 +82,7 @@ export const subscriptionIntentSchema = z.object({
 
 export const profilePatchSchema = z.object({
   name: professionalNameSchema.optional(),
-  specialty: z.string().trim().max(100).optional(),
+  specialty: professionalSpecialtySchema.optional(),
   registrationNumber: z.string().trim().max(40).optional(),
   whatsapp: phoneSchema,
   city: z.string().trim().min(2).max(80),
@@ -113,7 +116,7 @@ export const teamMemberSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().toLowerCase().email().max(160),
   whatsapp: phoneSchema,
-  specialty: z.string().trim().max(100).optional().default(""),
+  specialty: professionalSpecialtySchema.optional().default(""),
   teamTag: z.string().trim().max(80).optional().default("Dentista"),
   temporaryPassword: z.string().min(10).max(128),
 });
@@ -125,7 +128,7 @@ export const professionalStatusSchema = z.object({
 
 const optionalProfileFields = {
   name: professionalNameSchema.optional(),
-  specialty: z.string().trim().max(100).optional(),
+  specialty: professionalSpecialtySchema.optional(),
   registrationNumber: z.string().trim().max(40).optional(),
   whatsapp: phoneSchema.optional(),
   city: z.string().trim().min(2).max(80).optional(),
