@@ -45,6 +45,7 @@ import { getProfessionalAssistantSettings } from "../services/sorvyApi";
 import { defaultProfessionalAssistantSettings } from "../services/professionalAssistantProfile";
 import { BillingSummaryCard } from "./BillingSummaryCard";
 import { ProfessionalAssetKind, uploadProfessionalAsset } from "../services/professionalProfileAssets";
+import { isValidPublicProfessionalName, normalizeInstagramHandle, normalizePublicHttpsUrl } from "../services/publicProfessionalIdentity";
 
 interface DentistPortalViewProps {
   leadRecords: LeadRecord[];
@@ -138,9 +139,6 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   const [standardMessage, setStandardMessage] = useState(
     professional.standardMessage
       ?? "Olá [NOME]! Recebi sua triagem visual pela Sorvy Smile. Podemos conversar sobre uma avaliação presencial?",
-  );
-  const [templatesText, setTemplatesText] = useState(
-    (professional.templates ?? []).join("\n"),
   );
   const [savingProfile, setSavingProfile] = useState(false);
   const [publicSlug, setPublicSlug] = useState(professional.publicSlug ?? "");
@@ -370,6 +368,10 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
 
   const saveProfile = async (): Promise<void> => {
     if (readOnly) return;
+    if (!isValidPublicProfessionalName(professionalName)) {
+      setNotice("Informe o nome profissional que deve aparecer na vitrine. E-mails não são aceitos como nome público.");
+      return;
+    }
     if (city.trim().length < 2 || state.trim().length !== 2) {
       setNotice("Informe cidade e UF para salvar o perfil.");
       return;
@@ -377,6 +379,8 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
     setSavingProfile(true);
     setNotice(null);
     try {
+      const normalizedInstagram = normalizeInstagramHandle(instagramHandle);
+      const normalizedBioLink = normalizePublicHttpsUrl(bioLink);
       await onUpdateProfessional({
         name: professionalName,
         specialty,
@@ -386,18 +390,14 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
         state,
         bio,
         standardMessage,
-        templates: fullCrm
-          ? templatesText
-              .split("\n")
-              .map((template) => template.trim())
-              .filter(Boolean)
-              .slice(0, 10)
-          : [],
+        templates: [],
         profileImage,
         coverImage,
-        instagramHandle,
-        bioLink,
+        instagramHandle: normalizedInstagram,
+        bioLink: normalizedBioLink,
       });
+      setInstagramHandle(normalizedInstagram);
+      setBioLink(normalizedBioLink);
       if (onUpdateSlug && publicSlug !== professional.publicSlug) {
         const updatedSlug = await onUpdateSlug(publicSlug);
         setPublicSlug(updatedSlug);
@@ -426,7 +426,30 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       });
       if (kind === "profile") setProfileImage(url);
       else setCoverImage(url);
-      setNotice("Imagem preparada. Salve o perfil para publicar a alteração.");
+      if (isValidPublicProfessionalName(professionalName)) {
+        const normalizedInstagram = normalizeInstagramHandle(instagramHandle);
+        const normalizedBioLink = normalizePublicHttpsUrl(bioLink);
+        await onUpdateProfessional({
+          name: professionalName,
+          specialty,
+          registrationNumber,
+          whatsapp,
+          city,
+          state,
+          bio,
+          bioLink: normalizedBioLink,
+          standardMessage,
+          templates: [],
+          profileImage: kind === "profile" ? url : profileImage,
+          coverImage: kind === "cover" ? url : coverImage,
+          instagramHandle: normalizedInstagram,
+        });
+        setInstagramHandle(normalizedInstagram);
+        setBioLink(normalizedBioLink);
+        setNotice("Imagem enviada e publicada no perfil.");
+      } else {
+        setNotice("Imagem enviada. Informe um nome profissional válido e salve o perfil para publicar a vitrine.");
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Não foi possível enviar a imagem.");
     } finally {
@@ -887,6 +910,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
           <div className="grid gap-5 md:grid-cols-2">
             <Field label="Nome público do profissional">
               <input value={professionalName} disabled={readOnly} onChange={(event) => setProfessionalName(event.target.value)} className="input" />
+              {!isValidPublicProfessionalName(professionalName) && <p className="mt-2 text-xs font-bold text-amber-700">Substitua o e-mail pelo nome que deve aparecer para seus pacientes.</p>}
             </Field>
             <Field label="Especialidade principal">
               <input value={specialty} disabled={readOnly} onChange={(event) => setSpecialty(event.target.value)} className="input" placeholder="Ex.: Ortodontia" />
@@ -960,17 +984,6 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
               Variáveis disponíveis: [NOME], [SCORE] e [STATUS].
             </p>
           </Field>
-          {planConfig.features.whatsappTemplates && (
-            <Field label="Templates adicionais — um por linha">
-              <textarea
-                value={templatesText}
-                disabled={readOnly}
-                onChange={(event) => setTemplatesText(event.target.value)}
-                rows={6}
-                className="input resize-none"
-              />
-            </Field>
-          )}
           {!readOnly && <button
             disabled={savingProfile}
             onClick={() => void saveProfile()}

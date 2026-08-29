@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Bot, ChevronRight, MessageCircle, ShieldCheck, X } from "lucide-react";
 import { PublicPatientAssistant, PublicProfessionalProfile } from "../types";
+import { publicProfessionalName } from "../services/publicProfessionalIdentity";
 
 interface PatientAssistantGuideProps {
   profile: PublicProfessionalProfile;
@@ -32,7 +33,7 @@ const FAQ = [
 
 function publicAssistantFor(profile: PublicProfessionalProfile): PublicPatientAssistant {
   const configured = profile.patientAssistant;
-  const professionalName = profile.name.trim() || "o profissional responsável";
+  const professionalName = publicProfessionalName(profile.name);
   const assistantName = configured?.name?.trim() || "Aury";
   if (configured?.isCustom) {
     return {

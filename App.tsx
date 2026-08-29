@@ -52,6 +52,7 @@ import {
   WorkspaceData,
 } from "./services/sorvyApi";
 import { isFirebaseConfigured } from "./services/firebaseClient";
+import { instagramProfileUrl, normalizeInstagramHandle, publicProfessionalName } from "./services/publicProfessionalIdentity";
 import {
   isPlanPubliclyAvailable,
   paymentUrlFor,
@@ -659,7 +660,9 @@ const LandingView = ({
   loading: boolean;
   onStart: () => void;
   onPlans: () => void;
-}) => (
+}) => {
+  const professionalName = publicProfessionalName(profile?.name);
+  return (
   <main>
     <section className="mx-auto max-w-6xl px-6 py-12 text-center md:py-16">
       {!profile && <div className="mx-auto mb-7 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-700">
@@ -673,7 +676,7 @@ const LandingView = ({
             <div className="absolute inset-0 bg-gradient-to-t from-[#0B2036]/95 via-[#123B5D]/25 to-transparent" />
             <div className="absolute bottom-6 left-32 right-6 sm:left-44">
               <p className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200">Experiência profissional individual</p>
-              <p className="mt-1 text-2xl font-black leading-tight text-white sm:text-4xl">{profile.name}</p>
+              <p className="mt-1 text-2xl font-black leading-tight text-white sm:text-4xl">{professionalName}</p>
             </div>
           </div>
           <div className="relative p-6 pt-16 sm:p-9 sm:pt-20">
@@ -681,7 +684,7 @@ const LandingView = ({
             {profile.profileImage ? (
               <img
                 src={profile.profileImage}
-                alt={`Foto de ${profile.name}`}
+                alt={`Foto de ${professionalName}`}
                 className="h-24 w-24 rounded-3xl bg-white object-cover shadow-xl ring-4 ring-white sm:h-32 sm:w-32"
                 referrerPolicy="no-referrer"
               />
@@ -707,7 +710,7 @@ const LandingView = ({
                 </p>
               )}
               <div className="mt-7 flex flex-wrap gap-3">
-                {profile.instagramHandle && <a href={`https://instagram.com/${profile.instagramHandle.replace(/^@/, "")}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700"><Instagram className="h-4 w-4 text-pink-500" />@{profile.instagramHandle.replace(/^@/, "")}</a>}
+                {instagramProfileUrl(profile.instagramHandle) && <a href={instagramProfileUrl(profile.instagramHandle)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700"><Instagram className="h-4 w-4 text-pink-500" />@{normalizeInstagramHandle(profile.instagramHandle)}</a>}
                 {profile.bioLink && <a href={profile.bioLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700">Conheça meu trabalho <ExternalLink className="h-4 w-4" /></a>}
               </div>
               </div>
@@ -816,7 +819,8 @@ const LandingView = ({
       </div>
     </section>}
   </main>
-);
+  );
+};
 
 const PricingView = ({
   onSelect,

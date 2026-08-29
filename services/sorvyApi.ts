@@ -634,7 +634,7 @@ export async function saveProfessionalProfile(
     bio: patch.bio ?? "",
     bioLink: patch.bioLink ?? "",
     standardMessage: patch.standardMessage ?? "",
-    templates: patch.templates ?? [],
+    ...(patch.templates !== undefined ? { templates: patch.templates } : {}),
     profileImage: patch.profileImage ?? "",
     ...(patch.coverImage !== undefined ? { coverImage: patch.coverImage } : {}),
     ...(patch.instagramHandle !== undefined ? { instagramHandle: patch.instagramHandle } : {}),

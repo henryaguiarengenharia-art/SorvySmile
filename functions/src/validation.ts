@@ -9,6 +9,9 @@ const phoneSchema = z
   .transform((value) => value.replace(/\D/g, ""))
   .refine((value) => value.length >= 10 && value.length <= 15, "WhatsApp inválido.");
 
+const professionalNameSchema = z.string().trim().min(2).max(120)
+  .refine((value) => !value.includes("@"), "Informe o nome profissional, não um e-mail.");
+
 const optionalHttpsUrl = z.string().trim().max(500).refine((value) => {
   if (!value) return true;
   try { return new URL(value).protocol === "https:"; } catch { return false; }
@@ -60,7 +63,7 @@ export const patientConversionActionSchema = z.object({
 });
 
 export const checkoutSchema = z.object({
-  name: z.string().trim().min(2).max(120),
+  name: professionalNameSchema,
   email: z.string().trim().toLowerCase().email().max(160),
   whatsapp: phoneSchema,
   specialty: z.string().trim().max(100).optional().default(""),
@@ -75,7 +78,7 @@ export const subscriptionIntentSchema = z.object({
 });
 
 export const profilePatchSchema = z.object({
-  name: z.string().trim().min(2).max(120).optional(),
+  name: professionalNameSchema.optional(),
   specialty: z.string().trim().max(100).optional(),
   registrationNumber: z.string().trim().max(40).optional(),
   whatsapp: phoneSchema,
@@ -84,7 +87,7 @@ export const profilePatchSchema = z.object({
   bio: z.string().trim().max(400).optional().default(""),
   bioLink: optionalHttpsUrl.optional().default(""),
   standardMessage: z.string().trim().max(500).optional().default(""),
-  templates: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
+  templates: z.array(z.string().trim().min(1).max(500)).max(10).optional(),
   profileImage: optionalHttpsUrl.optional().default(""),
   coverImage: optionalHttpsUrl.optional(),
   instagramHandle: z.string().trim().max(80).optional(),
@@ -121,7 +124,7 @@ export const professionalStatusSchema = z.object({
 });
 
 const optionalProfileFields = {
-  name: z.string().trim().min(2).max(120).optional(),
+  name: professionalNameSchema.optional(),
   specialty: z.string().trim().max(100).optional(),
   registrationNumber: z.string().trim().max(40).optional(),
   whatsapp: phoneSchema.optional(),

@@ -5,6 +5,7 @@ service firebase.storage {
     function signedIn() { return request.auth != null; }
     function currentUser() { return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)); }
     function assignment(assignmentId) { return firestore.get(/databases/(default)/documents/dailyPostAssignments/$(assignmentId)); }
+    function professional(professionalId) { return firestore.get(/databases/(default)/documents/professionals/$(professionalId)); }
 
     match /daily-posts/templates/{templateId}/{allPaths=**} {
       allow read: if signedIn();
@@ -44,9 +45,11 @@ service firebase.storage {
       allow write: if signedIn()
         && request.resource.size < 5 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png|webp)')
+        && professional(professionalId).data.accountId == accountId
         && (
           currentUser().data.role == 'hq'
           || currentUser().data.professionalId == professionalId
+          || professional(professionalId).data.ownerUid == request.auth.uid
           || (currentUser().data.role == 'clinic' && currentUser().data.accountId == accountId)
         );
     }
