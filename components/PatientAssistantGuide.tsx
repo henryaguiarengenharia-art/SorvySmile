@@ -33,6 +33,7 @@ const FAQ = [
 function publicAssistantFor(profile: PublicProfessionalProfile): PublicPatientAssistant {
   const configured = profile.patientAssistant;
   const professionalName = profile.name.trim() || "o profissional responsável";
+  const assistantName = configured?.name?.trim() || "Aury";
   if (configured?.isCustom) {
     return {
       ...configured,
@@ -49,7 +50,7 @@ function publicAssistantFor(profile: PublicProfessionalProfile): PublicPatientAs
   }[tone];
   return {
     id: configured?.id ?? `aury-${profile.professionalId ?? profile.slug}`,
-    name: "Aury",
+    name: assistantName,
     roleName: `Assistente virtual de ${professionalName}`,
     description: configured?.description || `Esta é a experiência de ${professionalName}${profile.specialty ? ` · ${profile.specialty}` : ""}.`,
     greeting: greetingByTone,
@@ -114,9 +115,8 @@ export const PatientAssistantGuide: React.FC<PatientAssistantGuideProps> = ({ pr
           </div>
         </section>
       )}
-      <button onClick={() => setOpen((current) => !current)} className="ml-auto flex items-center gap-3 rounded-full px-5 py-4 text-sm font-black text-white shadow-xl" style={{ backgroundColor: assistant.primaryColor }}>
+      <button aria-label={`Abrir assistente ${assistant.name}`} onClick={() => setOpen((current) => !current)} className="ml-auto flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl" style={{ backgroundColor: assistant.primaryColor }}>
         {assistant.avatarUrl ? <img src={assistant.avatarUrl} alt="" className="h-7 w-7 rounded-full bg-white/15 object-contain" /> : <Bot className="h-5 w-5" />}
-        Tirar uma dúvida com {assistant.name}
       </button>
     </div>
   );

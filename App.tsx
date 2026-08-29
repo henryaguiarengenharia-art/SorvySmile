@@ -8,6 +8,7 @@ import {
   ExternalLink,
   LoaderCircle,
   LockKeyhole,
+  MessageCircle,
   LogOut,
   ShieldCheck,
   Smile,
@@ -659,25 +660,27 @@ const LandingView = ({
   onPlans: () => void;
 }) => (
   <main>
-    <section className="mx-auto max-w-6xl px-6 py-20 text-center">
+    <section className="mx-auto max-w-6xl px-6 py-12 text-center md:py-16">
       <div className="mx-auto mb-7 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-blue-700">
         <Sparkles className="h-4 w-4" /> Mapeamento visual gratuito · leva poucos segundos
       </div>
-      <h1 className="mx-auto max-w-4xl text-5xl font-black leading-[0.95] tracking-tighter md:text-8xl">
-        Descubra o potencial do seu <span className="text-blue-600">sorriso em segundos.</span>
+      <h1 className="mx-auto max-w-4xl text-5xl font-black leading-[0.95] tracking-tighter md:text-7xl">
+        {profile ? <>Uma experiência preparada por <span className="text-blue-600">{profile.name}.</span></> : <>Descubra o potencial do seu <span className="text-blue-600">sorriso em segundos.</span></>}
       </h1>
       <p className="mx-auto mt-7 max-w-2xl text-lg font-medium leading-relaxed text-slate-500">
-        Tenha seu sorriso mapeado e chegue à conversa com o dentista sabendo
-        quais pontos deseja explorar. Sem cadastro. Sem compromisso.
+        {profile ? `Antes de conversar com ${profile.name}, organize o que você está buscando em uma triagem informativa, simples e no seu ritmo.` : "Tenha seu sorriso mapeado e chegue à conversa com o dentista sabendo quais pontos deseja explorar. Sem cadastro. Sem compromisso."}
       </p>
       {profile && (
-        <div className="mx-auto mt-7 max-w-xl rounded-[2rem] border border-blue-100 bg-white p-5 text-left shadow-sm">
-          <div className="flex items-start gap-4">
+        <div className="relative mx-auto mt-9 max-w-4xl overflow-hidden rounded-[2.5rem] bg-[#123B5D] p-1 text-left shadow-2xl shadow-slate-900/15">
+          <div className="relative overflow-hidden rounded-[2.25rem] bg-white p-6 sm:p-8">
+            <div className="absolute -right-12 -top-20 h-56 w-56 rounded-full bg-cyan-100/80 blur-3xl" />
+            <p className="relative text-[10px] font-black uppercase tracking-[.22em] text-[#18AFA5]">Sua jornada começa aqui</p>
+            <div className="relative mt-5 flex items-start gap-4">
             {profile.profileImage ? (
               <img
                 src={profile.profileImage}
                 alt={`Foto de ${profile.name}`}
-                className="h-14 w-14 shrink-0 rounded-2xl object-cover"
+                className="h-16 w-16 shrink-0 rounded-2xl object-cover ring-4 ring-[#EAF7F6]"
                 referrerPolicy="no-referrer"
               />
             ) : (
@@ -686,10 +689,7 @@ const LandingView = ({
               </span>
             )}
             <div>
-              <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">
-                Experiência oferecida por
-              </p>
-              <p className="mt-1 text-lg font-black">{profile.name}</p>
+              <p className="text-xl font-black text-[#183247]">{profile.name}</p>
               {(profile.specialty || profile.city) && (
                 <p className="mt-1 text-xs font-bold text-slate-400">
                   {[profile.specialty, profile.city, profile.state]
@@ -703,10 +703,16 @@ const LandingView = ({
                 </p>
               )}
             </div>
+            </div>
+            <p className="relative mt-6 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">A experiência organiza suas primeiras informações para tornar a conversa com {profile.name} mais clara e objetiva.</p>
+            <div className="relative mt-6 flex flex-col gap-3 sm:flex-row">
+              <button onClick={onStart} className="flex items-center justify-center gap-2 rounded-2xl bg-[#123B5D] px-6 py-4 text-sm font-black text-white transition hover:bg-[#2F80ED]"><Smile className="h-4 w-4" />Começar agora <ArrowRight className="h-4 w-4" /></button>
+              {profile.whatsapp && <a href={`https://wa.me/${profile.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-2xl border border-slate-200 px-6 py-4 text-sm font-black text-[#183247] transition hover:border-[#18AFA5] hover:bg-[#F5F9FC]"><MessageCircle className="h-4 w-4 text-[#18AFA5]" />Falar com {profile.name}</a>}
+            </div>
           </div>
         </div>
       )}
-      <button
+      {!profile && <button
         disabled={loading || !profile}
         onClick={onStart}
         className="mx-auto mt-9 flex items-center gap-3 rounded-3xl bg-slate-900 px-10 py-6 text-base font-black text-white shadow-2xl transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
@@ -716,8 +722,8 @@ const LandingView = ({
         ) : (
           <Smile className="h-5 w-5" />
         )}
-        Mapear meu sorriso agora <ArrowRight className="h-5 w-5" />
-      </button>
+        {profile ? "Começar minha experiência" : "Mapear meu sorriso agora"} <ArrowRight className="h-5 w-5" />
+      </button>}
       {!loading && !profile && (
         <p className="mx-auto mt-3 max-w-md text-xs font-bold text-amber-700">
           A triagem é liberada pelo link individual do dentista ou da clínica.
