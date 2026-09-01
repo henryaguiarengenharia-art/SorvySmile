@@ -133,6 +133,15 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
           accountId: "acc_a",
           toStatus: "active",
         }),
+        setDoc(doc(db, "paymentOrders", "smile-order-a"), {
+          accountId: "acc_a",
+          status: "PENDING",
+          amountCents: 19700,
+        }),
+        setDoc(doc(db, "paymentTransactions", "transaction-a"), {
+          accountId: "acc_a",
+          orderNsu: "smile-order-a",
+        }),
         setDoc(doc(db, "assistantUsage", "user_a_2026-08-17"), {
           uid: "user_a",
           count: 1,
@@ -207,6 +216,14 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
         paymentStatus: "confirmed",
       }),
     );
+    await assertFails(getDoc(doc(hq, "paymentOrders", "smile-order-a")));
+    await assertFails(getDoc(doc(hq, "paymentTransactions", "transaction-a")));
+    await assertFails(
+      setDoc(doc(hq, "paymentOrders", "manual"), {
+        accountId: "acc_a",
+        status: "PAID",
+      }),
+    );
   });
 
   it("permite somente campos de CRM no lead", async () => {
@@ -252,6 +269,34 @@ describe.skipIf(!hasEmulator)("regras do Firestore", () => {
       city: "Recife",
       state: "PE",
       updatedAtMs: 126,
+    }));
+  });
+
+  it("bloqueia a operação paga imediatamente após o vencimento", async () => {
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "accounts", "acc_a"), {
+        status: "active",
+        subscriptionStatus: "active",
+        paymentStatus: "confirmed",
+        renewAtMs: Date.now() - 60_000,
+      });
+    });
+    const professional = environment.authenticatedContext("user_a").firestore();
+    await assertFails(updateDoc(doc(professional, "professionals", "pro_a"), {
+      city: "Recife",
+      state: "PE",
+      updatedAtMs: 127,
+    }));
+
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), "accounts", "acc_a"), {
+        renewAtMs: Date.now() + 86_400_000,
+      });
+    });
+    await assertSucceeds(updateDoc(doc(professional, "professionals", "pro_a"), {
+      city: "Recife",
+      state: "PE",
+      updatedAtMs: 128,
     }));
   });
 

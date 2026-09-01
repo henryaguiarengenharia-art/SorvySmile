@@ -67,7 +67,7 @@ interface DentistPortalViewProps {
   onDailyPostEvent?: (event: 'view' | 'customize' | 'copy_caption' | 'download_feed' | 'download_story' | 'mark_as_used' | 'request_alternative', format?: 'feed' | 'story' | 'carousel' | 'none', variant?: DailyPostVariant) => Promise<void>;
   onUpdateSlug?: (slug: string) => Promise<string>;
   onAskAssistant?: (input: { mode: "management" | "conversion"; question: string; leadId?: string; conversationId?: string }) => Promise<AssistantResponse>;
-  onSubscriptionIntent?: (context: "trial_ready" | "trial_active" | "pending" | "overdue") => void;
+  onStartCheckout?: (context: "trial_ready" | "trial_active" | "pending" | "overdue") => Promise<void>;
 }
 
 type PortalTab = "dashboard" | "leads" | "post" | "profile" | "assistant";
@@ -115,7 +115,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   onDailyPostEvent,
   onUpdateSlug,
   onAskAssistant,
-  onSubscriptionIntent,
+  onStartCheckout,
 }) => {
   const [tab, setTab] = useState<PortalTab>("dashboard");
   const [selectedLead, setSelectedLead] = useState<LeadRecord | null>(null);
@@ -703,7 +703,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
             <PeriodFilter value={metricPeriod} onChange={setMetricPeriod} />
           </div>
 
-          <BillingSummaryCard account={billingAccount} readOnly={readOnly} onSubscriptionIntent={onSubscriptionIntent} />
+          <BillingSummaryCard account={billingAccount} readOnly={readOnly} onStartCheckout={onStartCheckout} />
 
           {fullCrm && (
             <div className="grid gap-5 md:grid-cols-2">

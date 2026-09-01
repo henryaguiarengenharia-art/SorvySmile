@@ -104,7 +104,12 @@ describe("deploy funcional da homologacao", () => {
     expect(functionsSource).toContain("secrets: [GEMINI_API_KEY]");
     expect(geminiSource).toContain("new GoogleGenAI({ apiKey })");
     expect(geminiSource).not.toContain("enterprise: true");
-    expect(script).toContain("VITE_PAYMENT_URL_NETWORK");
+    expect(script).toContain("INFINITEPAY_HANDLE=henry-augusto-pinheiro");
+    expect(script).toContain("PUBLIC_APP_URL=https://sorvysmile-homologacao.web.app");
+    expect(script).toContain("functions:createInfinitePayCheckout");
+    expect(script).toContain("functions:confirmInfinitePayReturn");
+    expect(script).toContain("functions:infinitePayWebhook");
+    expect(script).toContain("functions:expirePaidSubscriptions");
     expect(script).toContain('"VITE_FIREBASE_STORAGE_BUCKET"');
     expect(script).toContain("firebasestorage.app");
     expect(script).toContain("appspot.com");

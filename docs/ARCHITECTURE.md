@@ -10,7 +10,7 @@
 | Callable Functions | sessão, regras de negócio, IA e administração |
 | Secret Manager | chave da API do Gemini |
 | App Check | reduzir chamadas automatizadas e repetição de tokens |
-| InfinitePay/link configurado | pagamento fora da aplicação |
+| InfinitePay Checkout Integrado | checkout, webhook e confirmação servidor a servidor |
 
 ## Isolamento de dados
 
@@ -18,6 +18,8 @@
 |---|---|---|
 | `publicProfiles` | somente perfil ativo por slug | nenhuma |
 | `publicSlugAliases` | consulta pontual para preservar links antigos | nenhuma |
+| `paymentOrders` | nenhuma | nenhuma; somente backend |
+| `paymentTransactions` | nenhuma | nenhuma; somente backend |
 | `dailyPosts` | legado preservado para migração e auditoria | nenhuma |
 | `dailyPostTemplates` | HQ lê todos; assinante lê somente publicados | nenhuma |
 | `professionalContentPreferences` | HQ, profissional e gestor da própria conta | nenhuma |
@@ -96,12 +98,15 @@ persistência e auditoria próprias. Veja `docs/ASSISTENTES_IA.md`.
 
 ## Pagamento
 
-Os links de pagamento são públicos e configurados por ambiente no frontend.
-A criação da conta pendente, o preço solicitado e a versão dos termos são
-registrados no servidor. A HQ confirma o pagamento diretamente na InfinitePay
-e usa uma Callable Function restrita para registrar o próximo vencimento,
-ativar, pausar ou marcar inadimplência. O painel do cliente lê esses dados da
-conta; a InfinitePay é responsável pelos e-mails e mensagens de cobrança.
+O checkout é criado exclusivamente no backend com preço, plano, conta,
+`order_nsu`, URL de retorno e webhook vinculados. O webhook nunca confia apenas
+no payload recebido: ele consulta `payment_check`, confere o valor e bloqueia o
+reuso de `transaction_nsu` antes de ativar conta, limites, perfil público e
+claims. O retorno do navegador executa a mesma confirmação e o painel lê o
+vencimento calculado no servidor. No vencimento, as regras bloqueiam a operação
+imediatamente e uma rotina horária marca conta, usuário, profissional e vitrine
+como atrasados, preservando os dados para reativação. A HQ conserva a alteração
+manual somente como contingência auditada.
 
 ## Pendências para produção
 

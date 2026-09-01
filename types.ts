@@ -8,6 +8,7 @@ export type AppView =
   | "hq-dashboard"
   | "checkout-pix"
   | "checkout-confirm"
+  | "checkout-return"
   | "checkout-done"
   | "login"
   | "privacy"
@@ -94,7 +95,7 @@ export interface BillingAccount {
   seatsUsed?: number;
   paymentProvider?: 'infinitepay' | 'infinitepay_link';
   paymentStatus?: PaymentStatus;
-  billingMode?: 'recurring_link';
+  billingMode?: 'recurring_link' | 'checkout_integrated';
   billingInterval?: 'monthly';
   acquisitionSource?: AcquisitionSource;
   attributionFirstTouch?: Record<string, string>;

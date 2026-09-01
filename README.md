@@ -56,13 +56,12 @@ Paciente:
 Assinante:
 
 1. escolhe o plano e cria a conta;
-2. a solicitação fica pendente no painel HQ;
-3. abre o link recorrente da InfinitePay já usado pela operação;
-4. conclui o primeiro pagamento sem enviar comprovante à Sorvy;
-5. a HQ confirma o pagamento diretamente na InfinitePay, informa o próximo
-   vencimento e ativa o plano e o link profissional;
-6. o painel do cliente exibe status e vencimento; cobranças e lembretes são
-   enviados pela InfinitePay por e-mail e WhatsApp.
+2. o backend cria um checkout vinculado à conta e ao preço oficial do plano;
+3. conclui o pagamento na InfinitePay sem enviar comprovante à Sorvy;
+4. webhook e retorno do navegador reconfirmam a transação na InfinitePay;
+5. plano, limites, perfil público e vencimento são liberados automaticamente;
+6. no vencimento, o acesso é pausado sem perda de dados e um novo pagamento o
+   reativa; a HQ mantém ativação manual somente como contingência auditada.
 
 ## Arquitetura
 

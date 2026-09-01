@@ -43,16 +43,14 @@ modelo validado no Nutri.
 1. entender o benefício para o negócio;
 2. comparar Lite, Pro e Network;
 3. criar conta com aceite versionado;
-4. abrir o link recorrente da InfinitePay;
+4. gerar no backend o checkout da InfinitePay com preço oficial;
 5. concluir o primeiro pagamento sem enviar comprovante à Sorvy;
-6. HQ localizar a conta pendente e confirmar o pagamento na InfinitePay;
-7. HQ registrar o próximo vencimento e ativar plano, usuário e link público;
-8. assinante acompanhar status e vencimento no painel. A InfinitePay envia os
-   lembretes de cobrança por e-mail e WhatsApp.
+6. webhook reconfirmar transação, pedido e valor em `payment_check`;
+7. backend registrar o vencimento e ativar plano, limites, usuário e link;
+8. assinante retornar ao painel já ativo e acompanhar o vencimento.
 
-A ativação é deliberadamente manual nesta primeira fase. Ela reproduz o fluxo
-já validado no Nutri e evita introduzir um novo gateway/webhook antes de haver
-volume que justifique essa complexidade.
+A ativação automática reproduz o fluxo validado no SorvyNutri. A ativação
+manual pela HQ permanece disponível apenas para contingência e gera auditoria.
 
 ## Planos confirmados
 

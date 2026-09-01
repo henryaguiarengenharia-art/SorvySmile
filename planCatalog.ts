@@ -121,15 +121,3 @@ export function planName(tier: PlanTier): string {
 export function isPlanPubliclyAvailable(tier: PlanTier): boolean {
   return PUBLIC_PLAN_TIERS.includes(tier);
 }
-
-export function paymentUrlFor(tier: PlanTier): string {
-  const urls: Record<PlanTier, string> = {
-    lite: import.meta.env.VITE_PAYMENT_URL_LITE ?? "",
-    pro: import.meta.env.VITE_PAYMENT_URL_PRO ?? "",
-    network:
-      import.meta.env.VITE_PAYMENT_URL_NETWORK
-      ?? import.meta.env.VITE_PAYMENT_URL_ELITE
-      ?? "",
-  };
-  return urls[tier].trim();
-}

@@ -34,7 +34,7 @@ npm run deploy:hml
 ```
 
 Esse comando recusa explicitamente `sorvysmile`, exige faturamento ativo,
-valida os links InfinitePay e o secret Gemini, executa testes e auditorias,
+valida o ambiente, a integração InfinitePay e o secret Gemini, executa testes e auditorias,
 configura retenção de sete dias para os artefatos de build e publica as
 Functions em lotes menores. O App Check fica desativado apenas nessa
 homologação enquanto a jornada funcional é validada; produção mantém o padrão
@@ -46,8 +46,8 @@ Copie `.env.example` para `.env.local` e preencha:
 
 - configuração pública do Firebase;
 - chave pública do App Check;
-- links recorrentes atuais da InfinitePay para Lite e Pro;
-- link do Network é opcional enquanto o plano estiver marcado como “Em breve”;
+- os links legados da InfinitePay podem permanecer durante a transição, mas o
+  produto usa o Checkout Integrado criado pelo backend;
 - email público de privacidade;
 - slug padrão opcional. Deixe vazio para manter a raiz como página comercial;
   o cliente piloto continuará em `/p/clinica-saude-integrada-bh`.
@@ -132,9 +132,10 @@ credenciais temporárias diretamente no Shell e não as salve no repositório.
 - criação, pausa e reativação de acesso da equipe;
 - exclusão de lead;
 - cadastro de assinante;
-- links recorrentes Lite e Pro, sem envio de comprovante à Sorvy;
-- confirmação na InfinitePay, registro do vencimento e exibição no painel;
-- ativação, pausa e reativação pela HQ;
+- checkout integrado Lite e Pro, sem envio de comprovante à Sorvy;
+- webhook, reconfirmação do valor, idempotência e retorno ao painel;
+- registro automático do vencimento e ativação do plano e dos limites;
+- ativação, pausa e reativação pela HQ somente como contingência;
 - isolamento entre duas contas de teste;
 - navegação móvel;
 - Política de Privacidade e Termos.

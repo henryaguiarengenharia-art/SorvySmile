@@ -29,6 +29,8 @@ import {
   askBusinessAssistant,
   archiveProfessional,
   changeAccountStatus,
+  confirmInfinitePayReturn,
+  createInfinitePayCheckout,
   createTeamMember,
   deleteLeadRecord,
   getPublicProfile,
@@ -55,7 +57,6 @@ import { isFirebaseConfigured } from "./services/firebaseClient";
 import { instagramProfileUrl, normalizeInstagramHandle, publicProfessionalDetail, publicProfessionalName } from "./services/publicProfessionalIdentity";
 import {
   isPlanPubliclyAvailable,
-  paymentUrlFor,
   PLAN_CONFIGS,
   PLAN_COPY,
 } from "./planCatalog";
@@ -95,6 +96,14 @@ function resolveSlug(): string | null {
 }
 
 function resolveInitialView(): AppView {
+  const paymentParams = new URLSearchParams(window.location.search);
+  if (
+    paymentParams.get("payment_return") === "1"
+    || paymentParams.has("order_nsu")
+    || paymentParams.has("transaction_nsu")
+  ) {
+    return "checkout-return";
+  }
   if (window.location.pathname.startsWith("/planos")) return "pricing";
   if (window.location.pathname.startsWith("/privacidade")) return "privacy";
   if (window.location.pathname.startsWith("/termos-assinante")) {
@@ -211,6 +220,11 @@ const App: React.FC = () => {
     }
     void restoreWorkspaceSession().then(async (user) => {
       if (!user || cancelled) return;
+      if (user.status === "pending") {
+        setWorkspaceUser(user);
+        setView("checkout-confirm");
+        return;
+      }
       setWorkspaceUser(user);
       workspaceUnsubscribe.current?.();
       workspaceUnsubscribe.current = await subscribeWorkspace(
@@ -249,7 +263,32 @@ const App: React.FC = () => {
   };
 
   const handleLogin = async (email: string, password: string) => {
-    await openWorkspace(await loginWorkspace(email, password));
+    const user = await loginWorkspace(email, password);
+    const paymentParams = new URLSearchParams(window.location.search);
+    if (
+      paymentParams.get("payment_return") === "1"
+      || paymentParams.has("order_nsu")
+      || paymentParams.has("transaction_nsu")
+    ) {
+      setWorkspaceUser(user);
+      setView("checkout-return");
+      return;
+    }
+    if (user.status === "pending") {
+      setWorkspaceUser(user);
+      setView("checkout-confirm");
+      return;
+    }
+    await openWorkspace(user);
+  };
+
+  const handleStartCheckout = async (
+    context: Parameters<typeof recordSubscriptionIntent>[0],
+  ): Promise<void> => {
+    setPageError(null);
+    await recordSubscriptionIntent(context);
+    const checkout = await createInfinitePayCheckout();
+    window.location.assign(checkout.checkoutUrl);
   };
 
   const handleLogout = async () => {
@@ -438,16 +477,18 @@ const App: React.FC = () => {
         />
       )}
 
-      {view === "checkout-confirm" && pendingRegistration && (
+      {view === "checkout-confirm" && (pendingRegistration || workspaceUser?.status === "pending") && (
         <PaymentInstructionsView
           registration={pendingRegistration}
-          onSubscriptionIntent={() => void recordSubscriptionIntent("pending").catch((error: Error) => setPageError(error.message))}
-          onFinished={() => setView("checkout-done")}
+          onStartCheckout={() => handleStartCheckout("pending")}
         />
       )}
 
-      {view === "checkout-done" && (
-        <CheckoutReturnView onLogin={() => setView("login")} />
+      {view === "checkout-return" && (
+        <InfinitePayReturnView
+          onActivated={openWorkspace}
+          onLogin={() => setView("login")}
+        />
       )}
 
       {view === "privacy" && (
@@ -467,7 +508,7 @@ const App: React.FC = () => {
         <DashboardShell title="Teste gratuito concluído" onLogout={handleLogout}>
           <TrialExpiredView
             account={currentAccount}
-            onSubscriptionIntent={() => void recordSubscriptionIntent("trial_expired").catch((error: Error) => setPageError(error.message))}
+            onStartCheckout={() => handleStartCheckout("trial_expired")}
           />
         </DashboardShell>
       )}
@@ -504,7 +545,7 @@ const App: React.FC = () => {
               }
               onUpdateSlug={(slug) => updateProfessionalSlug({ slug })}
               onAskAssistant={(input) => askBusinessAssistant(input)}
-              onSubscriptionIntent={(context) => void recordSubscriptionIntent(context).catch((error: Error) => setPageError(error.message))}
+              onStartCheckout={handleStartCheckout}
             />
           </React.Suspense>
         </DashboardShell>
@@ -543,7 +584,7 @@ const App: React.FC = () => {
                   throw error;
                 })
               }
-              onSubscriptionIntent={(context) => void recordSubscriptionIntent(context).catch((error: Error) => setPageError(error.message))}
+              onStartCheckout={handleStartCheckout}
             />
           </React.Suspense>
         </DashboardShell>
@@ -990,7 +1031,7 @@ const CheckoutView = ({
           <p className="mt-2 text-sm font-medium text-slate-500">
             {mode === "trial"
               ? "Cadastre sua conta sem cobrança. Os 7 dias só começam quando seu primeiro lead for capturado."
-              : `R$ ${PLAN_CONFIGS[plan].price}/mês. Depois do cadastro você verá o link do plano recorrente na InfinitePay.`}
+              : `R$ ${PLAN_CONFIGS[plan].price}/mês. Depois do cadastro, o checkout seguro será criado na InfinitePay.`}
           </p>
         </div>
         {[
@@ -1067,15 +1108,29 @@ const CheckoutView = ({
 
 const PaymentInstructionsView = ({
   registration,
-  onFinished,
-  onSubscriptionIntent,
+  onStartCheckout,
 }: {
-  registration: PendingRegistration;
-  onFinished: () => void;
-  onSubscriptionIntent: () => void;
+  registration: PendingRegistration | null;
+  onStartCheckout: () => Promise<void>;
 }) => {
-  const paymentUrl = paymentUrlFor(registration.plan);
-  const [paymentOpened, setPaymentOpened] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const start = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onStartCheckout();
+    } catch (checkoutError) {
+      setError(
+        checkoutError instanceof Error
+          ? checkoutError.message
+          : "Não foi possível abrir o pagamento agora.",
+      );
+      setBusy(false);
+    }
+  };
 
   return (
     <main className="mx-auto max-w-xl px-6 py-12">
@@ -1089,92 +1144,166 @@ const PaymentInstructionsView = ({
           </p>
           <h1 className="mt-2 text-3xl font-black">Concluir pagamento</h1>
           <p className="mt-3 text-sm font-medium leading-relaxed text-slate-500">
-            Contrate o plano {PLAN_COPY[registration.plan].name} no ambiente
-            seguro da InfinitePay. A Sorvy confirmará o primeiro pagamento
-            diretamente no provedor antes de liberar o painel.
+            {registration
+              ? `Contrate o plano ${PLAN_COPY[registration.plan].name} no ambiente seguro da InfinitePay.`
+              : "Seu cadastro está pronto. Continue no ambiente seguro da InfinitePay."}
+            {" "}O pagamento será validado automaticamente antes de liberar o painel.
           </p>
         </div>
 
-        <div className="rounded-2xl bg-slate-50 p-5">
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
-            Mensalidade selecionada
-          </p>
-          <p className="mt-2 text-2xl font-black">
-            R$ {PLAN_CONFIGS[registration.plan].price}/mês
-          </p>
-          <p className="mt-1 break-all text-xs font-bold text-slate-500">
-            Referência: {registration.accountId}
-          </p>
-        </div>
-
-        {paymentUrl ? (
-          <a
-            href={paymentUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => {
-              setPaymentOpened(true);
-              onSubscriptionIntent();
-            }}
-            className="flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 py-5 text-sm font-black uppercase tracking-widest text-white hover:bg-blue-700"
-          >
-            <CreditCard className="h-5 w-5" />
-            Abrir pagamento seguro
-          </a>
-        ) : (
-          <p className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-800">
-            O link deste plano ainda precisa ser confirmado pela Sorvy antes
-            da publicação.
-          </p>
+        {registration && (
+          <div className="rounded-2xl bg-slate-50 p-5">
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">
+              Mensalidade selecionada
+            </p>
+            <p className="mt-2 text-2xl font-black">
+              R$ {PLAN_CONFIGS[registration.plan].price}/mês
+            </p>
+            <p className="mt-1 break-all text-xs font-bold text-slate-500">
+              Referência: {registration.accountId}
+            </p>
+          </div>
         )}
 
+        {error && (
+          <p className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-bold text-red-700">
+            {error}
+          </p>
+        )}
         <button
           type="button"
-          disabled={!paymentOpened}
-          onClick={onFinished}
-          className="w-full rounded-2xl border-2 border-emerald-200 py-4 text-xs font-black uppercase tracking-widest text-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={busy}
+          onClick={() => void start()}
+          className="flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 py-5 text-sm font-black uppercase tracking-widest text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Concluí na InfinitePay
+          {busy ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <CreditCard className="h-5 w-5" />}
+          {busy ? "Preparando checkout..." : "Pagar e liberar automaticamente"}
         </button>
         <p className="text-center text-xs font-medium leading-relaxed text-slate-400">
-          A InfinitePay enviará as cobranças e os lembretes recorrentes por
-          e-mail e WhatsApp. A Sorvy não solicitará comprovante por mensagem.
+          Após a aprovação, você voltará à Sorvy Smile com o plano e os limites
+          liberados. Não será necessário enviar comprovante.
         </p>
       </section>
     </main>
   );
 };
 
-const CheckoutReturnView = ({ onLogin }: { onLogin: () => void }) => (
-  <main className="mx-auto max-w-xl px-6 py-20 text-center">
-    <div className="rounded-[3rem] border border-slate-100 bg-white p-10 shadow-xl">
-      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600">
-        <CheckCircle2 className="h-10 w-10" />
+const InfinitePayReturnView = ({
+  onActivated,
+  onLogin,
+}: {
+  onActivated: (user: WorkspaceUser) => Promise<void>;
+  onLogin: () => void;
+}) => {
+  const [state, setState] = useState<"processing" | "error">("processing");
+  const [message, setMessage] = useState("Confirmando seu pagamento com segurança...");
+
+  useEffect(() => {
+    let cancelled = false;
+    const confirm = async () => {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const orderNsu = params.get("order_nsu") ?? "";
+        const transactionNsu = params.get("transaction_nsu") ?? "";
+        const slug = params.get("slug") ?? params.get("invoice_slug") ?? "";
+        if (!orderNsu || !transactionNsu || !slug) {
+          const existingUser = await restoreWorkspaceSession();
+          if (existingUser?.status === "active") {
+            window.history.replaceState({}, document.title, "/");
+            await onActivated(existingUser);
+            return;
+          }
+          throw new Error(
+            "A InfinitePay não retornou todos os dados da confirmação. Entre novamente para verificar se o webhook já liberou seu acesso.",
+          );
+        }
+
+        await confirmInfinitePayReturn({
+          orderNsu,
+          transactionNsu,
+          slug,
+          receiptUrl: params.get("receipt_url") ?? undefined,
+          captureMethod: params.get("capture_method") ?? undefined,
+        });
+        const user = await restoreWorkspaceSession();
+        if (!user || user.status !== "active") {
+          throw new Error(
+            "O pagamento foi aprovado, mas o painel ainda não atualizou. Tente entrar novamente em alguns segundos.",
+          );
+        }
+        if (cancelled) return;
+        window.history.replaceState({}, document.title, "/");
+        await onActivated(user);
+      } catch (confirmationError) {
+        if (cancelled) return;
+        setMessage(
+          confirmationError instanceof Error
+            ? confirmationError.message
+            : "Não foi possível confirmar o pagamento automaticamente.",
+        );
+        setState("error");
+      }
+    };
+    void confirm();
+    return () => {
+      cancelled = true;
+    };
+  }, [onActivated]);
+
+  return (
+    <main className="mx-auto max-w-xl px-6 py-20 text-center">
+      <div className="rounded-[3rem] border border-slate-100 bg-white p-10 shadow-xl">
+        {state === "processing" ? (
+          <LoaderCircle className="mx-auto h-16 w-16 animate-spin text-blue-600" />
+        ) : (
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-3xl bg-amber-50 text-3xl font-black text-amber-700">!</div>
+        )}
+        <h1 className="mt-7 text-4xl font-black">
+          {state === "processing" ? "Validando pagamento" : "Precisamos revisar a confirmação"}
+        </h1>
+        <p className="mt-4 font-medium leading-relaxed text-slate-500">{message}</p>
+        {state === "error" && (
+          <div className="mt-8 flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="w-full rounded-2xl bg-blue-600 py-5 text-sm font-black uppercase tracking-widest text-white hover:bg-blue-700"
+            >
+              Tentar novamente
+            </button>
+            <button
+              type="button"
+              onClick={onLogin}
+              className="w-full rounded-2xl border-2 border-slate-200 py-4 text-xs font-black uppercase tracking-widest text-slate-700"
+            >
+              Entrar na minha conta
+            </button>
+          </div>
+        )}
       </div>
-      <h1 className="mt-7 text-4xl font-black">Contratação enviada</h1>
-      <p className="mt-4 font-medium leading-relaxed text-slate-500">
-        A Sorvy confirmará o primeiro pagamento diretamente na InfinitePay e
-        ativará sua conta. Depois da ativação, o próximo vencimento ficará
-        visível no seu painel.
-      </p>
-      <button
-        onClick={onLogin}
-        className="mt-8 w-full rounded-2xl bg-slate-900 py-5 text-sm font-black uppercase tracking-widest text-white hover:bg-blue-600"
-      >
-        Acessar meu painel
-      </button>
-    </div>
-  </main>
-);
+    </main>
+  );
+};
 
 const TrialExpiredView = ({
   account,
-  onSubscriptionIntent,
+  onStartCheckout,
 }: {
   account: import("./types").BillingAccount;
-  onSubscriptionIntent: () => void;
+  onStartCheckout: () => Promise<void>;
 }) => {
-  const paymentUrl = paymentUrlFor(account.tier);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const start = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await onStartCheckout();
+    } catch (checkoutError) {
+      setError(checkoutError instanceof Error ? checkoutError.message : "Não foi possível abrir o pagamento.");
+      setBusy(false);
+    }
+  };
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-center">
       <section className="rounded-[3rem] border border-amber-100 bg-white p-10 shadow-xl">
@@ -1192,19 +1321,18 @@ const TrialExpiredView = ({
           <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Plano selecionado</p>
           <p className="mt-2 text-2xl font-black">R$ {PLAN_CONFIGS[account.tier].price}/mês</p>
         </div>
-        {paymentUrl && (
-          <a
-            href={paymentUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={onSubscriptionIntent}
-            className="mt-7 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 py-5 text-sm font-black uppercase tracking-widest text-white hover:bg-blue-700"
-          >
-            Assinar e reativar acesso <ExternalLink className="h-5 w-5" />
-          </a>
-        )}
+        {error && <p className="mt-5 rounded-2xl bg-red-50 p-4 text-sm font-bold text-red-700">{error}</p>}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void start()}
+          className="mt-7 inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 py-5 text-sm font-black uppercase tracking-widest text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {busy ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <CreditCard className="h-5 w-5" />}
+          {busy ? "Preparando checkout..." : "Assinar e reativar acesso"}
+        </button>
         <p className="mt-4 text-xs font-medium leading-relaxed text-slate-400">
-          A cobrança e os lembretes serão processados diretamente pela InfinitePay.
+          O pagamento será confirmado diretamente com a InfinitePay e o acesso será reativado automaticamente.
         </p>
       </section>
     </main>
@@ -1322,12 +1450,13 @@ const LegalView = ({
               preservando os dados para eventual assinatura.
             </LegalSection>
             <LegalSection title="3. Pagamento e ativação">
-              A solicitação cria uma conta pendente. O pagamento ocorre no link
-              recorrente da InfinitePay e a ativação é feita pela Sorvy após a
-              confirmação do primeiro pagamento no provedor. Cobranças e
-              lembretes são enviados pela InfinitePay por e-mail e WhatsApp.
-              Renovação, cancelamento, reembolso e vencimento seguem as
-              condições exibidas pelo provedor de pagamento.
+              A solicitação cria uma conta pendente e um checkout vinculado ao
+              plano escolhido. Após a aprovação, a Sorvy reconfirma pedido,
+              transação e valor diretamente na InfinitePay e libera o acesso
+              automaticamente. Comprovantes e comunicações disponibilizados
+              pelo pagamento são processados pelo provedor. Renovação,
+              cancelamento, reembolso e vencimento seguem as condições
+              exibidas no checkout e nos canais oficiais.
             </LegalSection>
             <LegalSection title="4. Responsabilidades do assinante">
               O assinante deve proteger suas credenciais, manter os dados do

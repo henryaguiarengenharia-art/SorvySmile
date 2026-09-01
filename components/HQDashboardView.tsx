@@ -430,7 +430,7 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
             <div><p className="text-4xl font-black">{stats.monthLeads}</p><p className="mt-1 text-xs font-bold text-slate-300">leads no mês</p></div>
             <div><p className="text-4xl font-black">{leadRecords.length}</p><p className="mt-1 text-xs font-bold text-slate-300">leads gerais</p></div>
           </div>
-          <div className="mt-6 border-t border-white/10 pt-4"><p className="text-2xl font-black">{stats.pending}</p><p className="text-xs font-bold text-slate-400">pagamentos aguardando confirmação na InfinitePay</p></div>
+          <div className="mt-6 border-t border-white/10 pt-4"><p className="text-2xl font-black">{stats.pending}</p><p className="text-xs font-bold text-slate-400">checkouts ainda sem pagamento aprovado</p></div>
         </article>
       </section>
 
@@ -661,8 +661,8 @@ export const HQDashboardView: React.FC<HQDashboardViewProps> = ({
               Confirmar pagamento e ativar
             </h2>
             <p className="mt-2 text-sm font-medium leading-relaxed text-slate-500">
-              Confirme o primeiro pagamento diretamente na InfinitePay antes
-              de liberar o acesso de{" "}
+              Use esta ação somente como contingência após conferir o pagamento
+              diretamente na InfinitePay. O webhook normalmente libera{" "}
               <strong>{selected.accountName || selected.checkoutName}</strong>.
             </p>
             <p className="mt-3 break-all rounded-xl bg-slate-50 p-3 text-xs font-black text-slate-500">

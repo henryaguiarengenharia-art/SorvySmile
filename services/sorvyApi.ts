@@ -153,15 +153,21 @@ function consumedTriageQuota(data?: DocumentData): number {
 
 function mapAccount(id: string, data: DocumentData): BillingAccount {
   const tier = normalizeTier(data.plan ?? data.tier);
+  const renewAt = Number(data.renewAtMs ?? 0);
+  const paidExpired = data.status === "active"
+    && (data.subscriptionStatus === "active" || data.paymentStatus === "confirmed")
+    && renewAt > 0
+    && renewAt <= Date.now();
+  const effectiveStatus = paidExpired ? "overdue" : data.status ?? "pending";
   return {
     id,
     ownerProfessionalId: data.professionalId,
     ownerType: data.ownerType === "clinic" ? "clinic" : "dentist",
     tier,
-    isActive: data.status === "active",
+    isActive: effectiveStatus === "active",
     startAt: Number(data.createdAtMs ?? Date.now()),
-    renewAt: Number(data.renewAtMs ?? 0),
-    status: data.status ?? "pending",
+    renewAt,
+    status: effectiveStatus,
     riskLevel: data.riskLevel ?? "ok",
     accountName: data.accountName ?? "",
     requestedPlan: normalizeTier(data.requestedPlan ?? tier),
@@ -169,7 +175,7 @@ function mapAccount(id: string, data: DocumentData): BillingAccount {
     trialStatus: data.trialStatus ?? "not_started",
     trialStartedAt: data.trialStartedAtMs,
     trialUntil: data.trialEndsAtMs,
-    subscriptionStatus: data.subscriptionStatus,
+    subscriptionStatus: paidExpired ? "overdue" : data.subscriptionStatus,
     archivedAt: data.archivedAtMs,
     archivedBy: data.archivedBy,
     checkoutName: data.checkoutName ?? data.accountName,
@@ -178,7 +184,7 @@ function mapAccount(id: string, data: DocumentData): BillingAccount {
     seatsTotal: Number(data.seatsTotal ?? 1),
     seatsUsed: Number(data.seatsUsed ?? 1),
     paymentProvider: data.paymentProvider,
-    paymentStatus: data.paymentStatus,
+    paymentStatus: paidExpired ? "overdue" : data.paymentStatus,
     billingMode: data.billingMode,
     billingInterval: data.billingInterval,
     acquisitionSource: data.acquisitionSource ?? "bio",
@@ -310,7 +316,12 @@ export async function getPublicProfile(
       resolvedSlug = target;
     }
     const snap = await getDoc(doc(db, "publicProfiles", resolvedSlug));
-    if (!snap.exists() || snap.data().active !== true) return null;
+    const publicRenewAtMs = Number(snap.data()?.renewAtMs ?? 0);
+    if (
+      !snap.exists()
+      || snap.data().active !== true
+      || (publicRenewAtMs > 0 && publicRenewAtMs <= Date.now())
+    ) return null;
     return {
       slug: resolvedSlug,
       accountId: snap.data().accountId,
@@ -475,12 +486,10 @@ export async function loginWorkspace(
   try {
     const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
     const user = await currentWorkspaceUser(credential.user);
-    if (user.role !== "hq" && !["active", "trial_expired"].includes(user.status ?? "")) {
+    if (user.role !== "hq" && !["active", "trial_expired", "pending", "overdue"].includes(user.status ?? "")) {
       await signOut(auth);
       throw new Error(
-        user.status === "pending"
-          ? "Pagamento ainda aguardando confirmação."
-          : "Esta conta está inativa. Fale com o suporte.",
+        "Esta conta está inativa. Fale com o suporte.",
       );
     }
     return user;
@@ -519,7 +528,7 @@ export async function restoreWorkspaceSession(): Promise<WorkspaceUser | null> {
       }
       try {
         const user = await currentWorkspaceUser(firebaseUser);
-        if (user.role !== "hq" && !["active", "trial_expired"].includes(user.status ?? "")) {
+        if (user.role !== "hq" && !["active", "trial_expired", "pending", "overdue"].includes(user.status ?? "")) {
           resolve(null);
           return;
         }
@@ -599,6 +608,60 @@ export async function recordSubscriptionIntent(
   const callable = httpsCallable<{ context: string }, { ok: true }>(functions, "recordSubscriptionIntent");
   try {
     await callable({ context });
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
+export interface InfinitePayCheckoutResult {
+  success: true;
+  reused: boolean;
+  orderNsu: string;
+  checkoutUrl: string;
+  planTier: PlanTier;
+  amountCents: number;
+}
+
+export interface InfinitePayConfirmationResult {
+  success: true;
+  alreadyProcessed: boolean;
+  accountId: string;
+  professionalId: string;
+  planTier: PlanTier;
+  renewAtMs: number;
+}
+
+export async function createInfinitePayCheckout(): Promise<InfinitePayCheckoutResult> {
+  const callable = httpsCallable<
+    { returnOrigin: string },
+    InfinitePayCheckoutResult
+  >(functions, "createInfinitePayCheckout");
+  try {
+    const result = await callable({ returnOrigin: window.location.origin });
+    if (!result.data.checkoutUrl.startsWith("https://")) {
+      throw new Error("A InfinitePay não retornou um checkout válido.");
+    }
+    return result.data;
+  } catch (error) {
+    throw new Error(errorMessage(error));
+  }
+}
+
+export async function confirmInfinitePayReturn(input: {
+  orderNsu: string;
+  transactionNsu: string;
+  slug: string;
+  receiptUrl?: string;
+  captureMethod?: string;
+}): Promise<InfinitePayConfirmationResult> {
+  const callable = httpsCallable<typeof input, InfinitePayConfirmationResult>(
+    functions,
+    "confirmInfinitePayReturn",
+  );
+  try {
+    const result = await callable(input);
+    await auth.currentUser?.getIdToken(true);
+    return result.data;
   } catch (error) {
     throw new Error(errorMessage(error));
   }

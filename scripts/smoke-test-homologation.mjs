@@ -35,23 +35,6 @@ for (const key of [
   if (!env[key]) fail(`Configuracao Firebase ausente: ${key}`);
 }
 
-const paymentUrls = [
-  env.VITE_PAYMENT_URL_LITE,
-  env.VITE_PAYMENT_URL_PRO,
-];
-for (const value of paymentUrls) {
-  const url = new URL(value || "");
-  if (url.protocol !== "https:" || url.hostname !== "invoice.infinitepay.io") {
-    fail("Um link de pagamento da homologacao e invalido.");
-  }
-}
-if (env.VITE_PAYMENT_URL_NETWORK) {
-  const networkUrl = new URL(env.VITE_PAYMENT_URL_NETWORK);
-  if (networkUrl.protocol !== "https:" || networkUrl.hostname !== "invoice.infinitepay.io") {
-    fail("O link opcional do Network e invalido.");
-  }
-}
-
 const imagePath = process.env.HML_SMOKE_IMAGE_PATH?.trim();
 if (!imagePath) {
   fail("Defina HML_SMOKE_IMAGE_PATH com uma foto JPG, PNG ou WebP local.");

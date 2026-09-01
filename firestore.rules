@@ -22,6 +22,15 @@ service cloud.firestore {
       let account = get(/databases/$(database)/documents/accounts/$(accountId));
       return account.data.status == 'active'
         && (
+          !('renewAtMs' in account.data)
+          || account.data.renewAtMs == null
+          || account.data.renewAtMs > request.time.toMillis()
+          || (
+            (!('subscriptionStatus' in account.data) || account.data.subscriptionStatus != 'active')
+            && (!('paymentStatus' in account.data) || account.data.paymentStatus != 'confirmed')
+          )
+        )
+        && (
           !('trialStatus' in account.data)
           || (
             account.data.trialStatus != 'expired'
@@ -171,6 +180,14 @@ service cloud.firestore {
     match /subscriptionHistory/{historyId} {
       allow read: if isHq();
       allow write: if false;
+    }
+
+    match /paymentOrders/{orderId} {
+      allow read, write: if false;
+    }
+
+    match /paymentTransactions/{transactionId} {
+      allow read, write: if false;
     }
 
     match /assistantUsage/{usageId} {

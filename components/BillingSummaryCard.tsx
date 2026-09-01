@@ -1,12 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   AlertTriangle,
   CalendarClock,
   CheckCircle2,
   CreditCard,
-  ExternalLink,
+  LoaderCircle,
 } from "lucide-react";
-import { paymentUrlFor, PLAN_CONFIGS, planName } from "../planCatalog";
+import { PLAN_CONFIGS, planName } from "../planCatalog";
 import { AccountStatus, BillingAccount } from "../types";
 
 const statusCopy: Record<AccountStatus, {
@@ -39,14 +39,16 @@ const statusCopy: Record<AccountStatus, {
 interface BillingSummaryCardProps {
   account: BillingAccount;
   readOnly?: boolean;
-  onSubscriptionIntent?: (context: "trial_ready" | "trial_active" | "pending" | "overdue") => void;
+  onStartCheckout?: (context: "trial_ready" | "trial_active" | "pending" | "overdue") => Promise<void>;
 }
 
 export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
   account,
   readOnly = false,
-  onSubscriptionIntent,
+  onStartCheckout,
 }) => {
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const status = account.status ?? "pending";
   const statusInfo = statusCopy[status];
   const isTrialReady = account.subscriptionStatus === "trial_ready" || account.trialStatus === "ready";
@@ -59,9 +61,8 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
     : isTrial
       ? "Período gratuito ativo"
       : statusInfo.detail;
-  const paymentUrl = paymentUrlFor(account.tier);
   const showPaymentLink = !readOnly
-    && Boolean(paymentUrl)
+    && Boolean(onStartCheckout)
     && (status === "pending" || status === "overdue" || isTrialReady || isTrial);
   const intentContext = isTrialReady
     ? "trial_ready" as const
@@ -123,20 +124,37 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
             ? "Você pode configurar e divulgar seu link com calma. A contagem ainda não começou."
             : isTrial
               ? "Você pode assinar antes do encerramento sem perder seus dados."
-              : "E-mails e mensagens de cobrança são enviados diretamente pela InfinitePay."}
+              : "A aprovação é verificada diretamente na InfinitePay e libera o acesso automaticamente."}
         </p>
         {showPaymentLink && (
-          <a
-            href={paymentUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => onSubscriptionIntent?.(intentContext)}
+          <button
+            type="button"
+            disabled={paymentBusy}
+            onClick={() => {
+              if (!onStartCheckout || paymentBusy) return;
+              setPaymentBusy(true);
+              setPaymentError(null);
+              void onStartCheckout(intentContext).catch((error: unknown) => {
+                setPaymentError(error instanceof Error ? error.message : "Não foi possível abrir o pagamento.");
+                setPaymentBusy(false);
+              });
+            }}
             className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-xs font-black text-white hover:bg-blue-700"
           >
-            {isTrialReady || isTrial ? "Assinar plano" : "Abrir InfinitePay"} <ExternalLink className="h-4 w-4" />
-          </a>
+            {paymentBusy
+              ? "Preparando checkout"
+              : isTrialReady || isTrial
+                ? "Assinar plano"
+                : "Abrir InfinitePay"}
+            {paymentBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+          </button>
         )}
       </div>
+      {paymentError && (
+        <p className="mt-3 rounded-xl bg-red-50 p-3 text-xs font-bold text-red-700">
+          {paymentError}
+        </p>
+      )}
     </article>
   );
 };

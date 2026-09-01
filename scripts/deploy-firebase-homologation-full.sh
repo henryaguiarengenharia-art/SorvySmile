@@ -72,15 +72,11 @@ for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) {
 }
 
 const overrides = {
-  VITE_PAYMENT_URL_LITE: process.env.HML_PAYMENT_URL_LITE,
-  VITE_PAYMENT_URL_PRO: process.env.HML_PAYMENT_URL_PRO,
-  VITE_PAYMENT_URL_NETWORK: process.env.HML_PAYMENT_URL_NETWORK,
   VITE_PRIVACY_CONTACT_EMAIL: process.env.HML_PRIVACY_CONTACT_EMAIL,
 };
 for (const [key, value] of Object.entries(overrides)) {
   if (value && value.trim()) values[key] = value.trim();
 }
-values.VITE_PAYMENT_URL_ELITE = values.VITE_PAYMENT_URL_NETWORK || "";
 
 const firebaseKeys = [
   "VITE_FIREBASE_API_KEY",
@@ -106,23 +102,6 @@ if (!allowedStorageBuckets.has(values.VITE_FIREBASE_STORAGE_BUCKET)) {
   );
 }
 
-for (const key of [
-  "VITE_PAYMENT_URL_LITE",
-  "VITE_PAYMENT_URL_PRO",
-]) {
-  if (!values[key]) throw new Error("Configuracao publica ausente: " + key);
-  const url = new URL(values[key]);
-  if (url.protocol !== "https:" || url.hostname !== "invoice.infinitepay.io") {
-    throw new Error(key + " deve apontar para invoice.infinitepay.io.");
-  }
-}
-if (values.VITE_PAYMENT_URL_NETWORK) {
-  const networkUrl = new URL(values.VITE_PAYMENT_URL_NETWORK);
-  if (networkUrl.protocol !== "https:" || networkUrl.hostname !== "invoice.infinitepay.io") {
-    throw new Error("VITE_PAYMENT_URL_NETWORK deve apontar para invoice.infinitepay.io.");
-  }
-}
-
 if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(values.VITE_PRIVACY_CONTACT_EMAIL || "")) {
   throw new Error("VITE_PRIVACY_CONTACT_EMAIL e obrigatorio e deve ser valido.");
 }
@@ -137,10 +116,6 @@ const order = [
   "VITE_FIREBASE_APPCHECK_SITE_KEY",
   "VITE_DEFAULT_PROFESSIONAL_SLUG",
   "VITE_USE_FIREBASE_EMULATORS",
-  "VITE_PAYMENT_URL_LITE",
-  "VITE_PAYMENT_URL_PRO",
-  "VITE_PAYMENT_URL_NETWORK",
-  "VITE_PAYMENT_URL_ELITE",
   "VITE_PRIVACY_CONTACT_EMAIL",
 ];
 fs.writeFileSync(
@@ -155,6 +130,8 @@ npm --prefix functions ci
 npm run test:all
 npm run build:all
 npm run test:rules
+npm run test:storage-rules
+npm run test:payments
 npm audit --omit=dev
 npm --prefix functions audit --omit=dev
 
@@ -220,6 +197,8 @@ fs.writeFileSync(
   [
     "ENFORCE_APP_CHECK=false",
     "GEMINI_MODEL=gemini-3.6-flash",
+    "INFINITEPAY_HANDLE=henry-augusto-pinheiro",
+    "PUBLIC_APP_URL=https://sorvysmile-homologacao.web.app",
     "",
   ].join("\n"),
 );
@@ -256,13 +235,13 @@ done
 
 printf 'Publicando o primeiro lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:recordSubscriptionIntent,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:updateProfessionalSlug,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember,functions:manageDailyPost,functions:getDailyPostAssignment,functions:recordDailyPostEvent,functions:getAssistantWorkspace,functions:resolveAssistantAction,functions:recordAssistantFeedback,functions:recordAssistantClientEvent \
+  --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:recordSubscriptionIntent,functions:createInfinitePayCheckout,functions:confirmInfinitePayReturn,functions:infinitePayWebhook,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:updateProfessionalSlug,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember,functions:manageDailyPost,functions:getDailyPostAssignment,functions:recordDailyPostEvent,functions:getAssistantWorkspace,functions:resolveAssistantAction,functions:recordAssistantFeedback,functions:recordAssistantClientEvent \
   --project "$PROJECT_ID" \
   --non-interactive
 
 printf 'Publicando o segundo lote das demais Functions...\n'
 npx --no-install firebase deploy \
-  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:getAssistantAdminSettings,functions:getAssistantAdminOverview,functions:updateAssistantSettings,functions:updateCustomAssistantProfile,functions:getProfessionalAssistantSettings,functions:updateProfessionalAssistantSettings,functions:publishScheduledDailyPosts,functions:assignDailyPostsHourly,functions:expireProfessionalTrials,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
+  --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:getAssistantAdminSettings,functions:getAssistantAdminOverview,functions:updateAssistantSettings,functions:updateCustomAssistantProfile,functions:getProfessionalAssistantSettings,functions:updateProfessionalAssistantSettings,functions:publishScheduledDailyPosts,functions:assignDailyPostsHourly,functions:expireProfessionalTrials,functions:expirePaidSubscriptions,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
   --project "$PROJECT_ID" \
   --non-interactive
 
@@ -278,6 +257,19 @@ for service_name in \
   updatecustomassistantprofile \
   getprofessionalassistantsettings \
   updateprofessionalassistantsettings; do
+  gcloud run services add-iam-policy-binding "$service_name" \
+    --region southamerica-east1 \
+    --project "$PROJECT_ID" \
+    --member=allUsers \
+    --role=roles/run.invoker \
+    --quiet >/dev/null
+done
+
+printf 'Garantindo acesso HTTP ao checkout e webhook da InfinitePay...\n'
+for service_name in \
+  createinfinitepaycheckout \
+  confirminfinitepayreturn \
+  infinitepaywebhook; do
   gcloud run services add-iam-policy-binding "$service_name" \
     --region southamerica-east1 \
     --project "$PROJECT_ID" \

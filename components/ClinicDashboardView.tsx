@@ -52,7 +52,7 @@ interface ClinicDashboardViewProps {
   onUpdateLead: (leadId: string, patch: Partial<LeadRecord>) => Promise<void>;
   managerProfessional?: DentistRecord;
   onUpdateClinicProfile: (patch: Partial<DentistRecord>) => Promise<void>;
-  onSubscriptionIntent?: (context: "trial_ready" | "trial_active" | "pending" | "overdue") => void;
+  onStartCheckout?: (context: "trial_ready" | "trial_active" | "pending" | "overdue") => Promise<void>;
   dailyPost?: DailyPostAssignment | null;
   dailyPostHistory?: DailyPostAssignment[];
   onDailyPostEvent?: (event: 'view' | 'customize' | 'copy_caption' | 'download_feed' | 'download_story' | 'mark_as_used' | 'request_alternative', format?: 'feed' | 'story' | 'carousel' | 'none', variant?: DailyPostVariant) => Promise<void>;
@@ -100,7 +100,7 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
   onUpdateLead,
   managerProfessional,
   onUpdateClinicProfile,
-  onSubscriptionIntent,
+  onStartCheckout,
   dailyPost,
   dailyPostHistory,
   onDailyPostEvent,
@@ -296,7 +296,7 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
 
       {tab === "overview" && (
         <>
-          <BillingSummaryCard account={account} readOnly={readOnly} onSubscriptionIntent={onSubscriptionIntent} />
+          <BillingSummaryCard account={account} readOnly={readOnly} onStartCheckout={onStartCheckout} />
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Métricas da operação</p>

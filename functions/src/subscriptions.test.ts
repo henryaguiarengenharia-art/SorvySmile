@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   nextBillingDueAt,
+  paidSubscriptionExpired,
   pendingSubscriptionFields,
   trialSubscriptionFields,
 } from "./subscriptions.js";
@@ -28,7 +29,7 @@ describe("solicitação de assinatura pela InfinitePay", () => {
       isActive: false,
       paymentProvider: "infinitepay",
       paymentStatus: "awaiting_first_payment",
-      billingMode: "recurring_link",
+      billingMode: "checkout_integrated",
       billingInterval: "monthly",
       checkoutEmail: "contato@exemplo.com",
       termsAcceptedAtMs: 1_785_000_000_000,
@@ -68,6 +69,23 @@ describe("solicitação de assinatura pela InfinitePay", () => {
     const cycle = 30 * 24 * 60 * 60 * 1000;
     expect(nextBillingDueAt(5_000, undefined, 1_000)).toBe(5_000 + cycle);
     expect(nextBillingDueAt(500, undefined, 1_000)).toBe(1_000 + cycle);
+  });
+
+  it("encerra o acesso pago no vencimento sem quebrar contas legadas", () => {
+    expect(paidSubscriptionExpired({
+      subscriptionStatus: "active",
+      paymentStatus: "confirmed",
+      renewAtMs: 999,
+    }, 1_000)).toBe(true);
+    expect(paidSubscriptionExpired({
+      subscriptionStatus: "active",
+      paymentStatus: "confirmed",
+      renewAtMs: 1_001,
+    }, 1_000)).toBe(false);
+    expect(paidSubscriptionExpired({
+      subscriptionStatus: "active",
+      paymentStatus: "confirmed",
+    }, 1_000)).toBe(false);
   });
 
   it("converte Elite legado para Network preservando a conta", () => {

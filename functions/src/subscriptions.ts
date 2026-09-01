@@ -21,6 +21,23 @@ interface PendingSubscriptionInput {
 
 export type CheckoutMode = "paid" | "trial";
 
+export function paidSubscriptionExpired(
+  record: {
+    subscriptionStatus?: unknown;
+    paymentStatus?: unknown;
+    renewAtMs?: unknown;
+  },
+  now = Date.now(),
+): boolean {
+  const renewAtMs = Number(record.renewAtMs ?? 0);
+  const isPaidSubscription = record.subscriptionStatus === "active"
+    || record.paymentStatus === "confirmed";
+  return isPaidSubscription
+    && Number.isFinite(renewAtMs)
+    && renewAtMs > 0
+    && renewAtMs <= now;
+}
+
 function subscriptionPlanFields(input: PendingSubscriptionInput, now: number) {
   const plan = normalizePlan(input.plan);
   return {
@@ -34,7 +51,7 @@ function subscriptionPlanFields(input: PendingSubscriptionInput, now: number) {
     seatsUsed: 1,
     extraSeatPrice: PLANS[plan].extraSeatPrice,
     paymentProvider: "infinitepay" as const,
-    billingMode: "recurring_link" as const,
+    billingMode: "checkout_integrated" as const,
     billingInterval: "monthly" as const,
     checkoutName: input.name,
     checkoutEmail: input.email,
