@@ -139,6 +139,30 @@ describe("deploy funcional da homologacao", () => {
     expect(script).toContain('"${FIREBASE[@]}" hosting:channel:deploy');
   });
 
+  it("limita cada lote a dez Functions e preserva o erro em log", () => {
+    const script = readFileSync(fullDeployScriptPath, "utf8");
+
+    expect(script).toContain("MAX_FUNCTIONS_PER_BATCH=10");
+    expect(script).toContain("deploy_function_batches");
+    expect(script).toContain("DEPLOY_INTERROMPIDO etapa=");
+    expect(script).toContain(".deploy-logs");
+    expect(script).not.toContain(
+      "functions:startTriage,functions:captureLead,functions:recordPatientConversionAction",
+    );
+  });
+
+  it("oferece deploy incremental exato para o candidato c83fbe3", () => {
+    const script = readFileSync(fullDeployScriptPath, "utf8");
+
+    expect(script).toContain(
+      'LAUNCH_CANDIDATE_COMMIT="c83fbe349a5ee3f6c6361c4d34eece4c942538c7"',
+    );
+    expect(script).toContain('--launch-candidate');
+    expect(script).toMatch(
+      /deploy_function_batches launch-candidate\s+\\\n\s+captureLead\s+\\\n\s+startProfessionalTrial\s+\\\n\s+createTeamMember/,
+    );
+  });
+
   it("protege e valida o reparo isolado da IA antes do deploy", () => {
     const result = spawnSync("bash", [geminiRepairScriptPath, "--verify-only"], {
       encoding: "utf8",
