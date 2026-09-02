@@ -9,6 +9,15 @@ const seedScriptPath = "scripts/seed-firebase-homologation.sh";
 const smokeScriptPath = "scripts/smoke-test-homologation.mjs";
 const geminiRepairScriptPath = "scripts/repair-gemini-homologation.sh";
 
+function expectFunctionInDeployPlan(
+  script: string,
+  functionName: string,
+): void {
+  expect(script).toMatch(
+    new RegExp(`^\\s+${functionName}(?:\\s+\\\\)?$`, "m"),
+  );
+}
+
 describe("protecoes da homologacao Firebase", () => {
   it("recusa explicitamente o projeto de producao", () => {
     const result = spawnSync("bash", [scriptPath, "--verify-only"], {
@@ -106,18 +115,17 @@ describe("deploy funcional da homologacao", () => {
     expect(geminiSource).not.toContain("enterprise: true");
     expect(script).toContain("INFINITEPAY_HANDLE=henry-augusto-pinheiro");
     expect(script).toContain("PUBLIC_APP_URL=https://sorvysmile-homologacao.web.app");
-    expect(script).toContain("functions:createInfinitePayCheckout");
-    expect(script).toContain("functions:confirmInfinitePayReturn");
-    expect(script).toContain("functions:infinitePayWebhook");
-    expect(script).toContain("functions:expirePaidSubscriptions");
+    expectFunctionInDeployPlan(script, "createInfinitePayCheckout");
+    expectFunctionInDeployPlan(script, "confirmInfinitePayReturn");
+    expectFunctionInDeployPlan(script, "infinitePayWebhook");
+    expectFunctionInDeployPlan(script, "expirePaidSubscriptions");
     expect(script).toContain('"VITE_FIREBASE_STORAGE_BUCKET"');
     expect(script).toContain("firebasestorage.app");
     expect(script).toContain("appspot.com");
     expect(script).toContain("O bucket do Storage nao pertence a homologacao");
-    expect(script).toContain(
-      "functions:validateSmilePhoto,functions:analyzeSmilePhoto",
-    );
-    expect(script).toContain("functions:recordPatientConversionAction");
+    expectFunctionInDeployPlan(script, "validateSmilePhoto");
+    expectFunctionInDeployPlan(script, "analyzeSmilePhoto");
+    expectFunctionInDeployPlan(script, "recordPatientConversionAction");
     expect(script).toContain("functions:artifacts:setpolicy");
     expect(script).toContain("--days 7");
     expect(script).not.toContain(
