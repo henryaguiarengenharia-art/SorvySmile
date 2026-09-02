@@ -178,6 +178,10 @@ describe("deploy funcional da homologacao", () => {
     expect(incrementalBlock).toContain("npm run test:all");
     expect(incrementalBlock).toContain("npm --prefix functions run build");
     expect(incrementalBlock).toContain("npm run check:performance");
+    expect(script.indexOf("write_functions_environment"))
+      .toBeLessThan(script.indexOf("deploy_function_batches launch-candidate"));
+    expect(script).toContain("INFINITEPAY_HANDLE=henry-augusto-pinheiro");
+    expect(script).toContain("PUBLIC_APP_URL=https://sorvysmile-homologacao.web.app");
     expect(incrementalBlock).not.toContain("npm run test:rules");
     expect(incrementalBlock).not.toContain("npm run test:storage-rules");
     expect(incrementalBlock).not.toContain("npm run test:payments");

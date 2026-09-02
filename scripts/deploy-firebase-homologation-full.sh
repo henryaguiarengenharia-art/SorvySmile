@@ -87,7 +87,7 @@ trap cleanup EXIT
 
 printf 'Log persistente: %s\n' "$DEPLOY_LOG_FILE"
 
-for command_name in gcloud git node npm npx tee; do
+for command_name in gcloud git grep node npm npx tee; do
   command -v "$command_name" >/dev/null \
     || fail "O comando $command_name nao esta disponivel."
 done
@@ -142,6 +142,28 @@ deploy_function_batches() {
       --only "$only_selector" \
       --project "$PROJECT_ID" \
       --non-interactive
+  done
+}
+
+write_functions_environment() {
+  CURRENT_STAGE="functions-environment"
+  node - "$FUNCTIONS_ENV_FILE" <<'NODE'
+const fs = require("node:fs");
+fs.writeFileSync(
+  process.argv[2],
+  [
+    "ENFORCE_APP_CHECK=false",
+    "GEMINI_MODEL=gemini-3.6-flash",
+    "INFINITEPAY_HANDLE=henry-augusto-pinheiro",
+    "PUBLIC_APP_URL=https://sorvysmile-homologacao.web.app",
+    "",
+  ].join("\n"),
+);
+NODE
+
+  for required_variable in INFINITEPAY_HANDLE PUBLIC_APP_URL; do
+    grep -q "^${required_variable}=." "$FUNCTIONS_ENV_FILE" \
+      || fail "A configuracao ${required_variable} nao foi gravada para as Functions."
   done
 }
 
@@ -291,6 +313,7 @@ printf 'Instalando dependencias reproduziveis...\n'
 CURRENT_STAGE="dependencies"
 npm ci
 npm --prefix functions ci
+write_functions_environment
 
 if [[ "$DEPLOY_MODE" == "launch-candidate" ]]; then
   printf 'Validando somente o codigo alterado pelo candidato de lancamento...\n'
@@ -387,20 +410,6 @@ gcloud secrets add-iam-policy-binding GEMINI_API_KEY \
   --member "serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" \
   --role roles/secretmanager.secretAccessor \
   --quiet >/dev/null
-
-node - "$FUNCTIONS_ENV_FILE" <<'NODE'
-const fs = require("node:fs");
-fs.writeFileSync(
-  process.argv[2],
-  [
-    "ENFORCE_APP_CHECK=false",
-    "GEMINI_MODEL=gemini-3.6-flash",
-    "INFINITEPAY_HANDLE=henry-augusto-pinheiro",
-    "PUBLIC_APP_URL=https://sorvysmile-homologacao.web.app",
-    "",
-  ].join("\n"),
-);
-NODE
 
 printf 'Configurando limpeza segura dos artefatos de Functions...\n'
 CURRENT_STAGE="artifact-policy"
