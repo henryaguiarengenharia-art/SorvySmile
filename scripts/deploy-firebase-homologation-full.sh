@@ -286,6 +286,7 @@ printf 'Configurando limpeza segura dos artefatos de Functions...\n'
   --location southamerica-east1 \
   --days 7 \
   --project "$PROJECT_ID" \
+  --non-interactive \
   --force
 
 printf 'Publicando regras e indices somente em %s...\n' "$PROJECT_ID"
