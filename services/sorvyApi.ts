@@ -39,7 +39,6 @@ import {
   LeadRecord,
   PhotoValidation,
   PlanTier,
-  PublicProfessionalProfile,
   SubscriptionHistoryEvent,
   SmileScores,
   WorkspaceUser,
@@ -298,73 +297,6 @@ export function observeAuth(
   callback: (user: User | null) => void,
 ): Unsubscribe {
   return onAuthStateChanged(auth, callback);
-}
-
-export async function getPublicProfile(
-  slug: string,
-): Promise<PublicProfessionalProfile | null> {
-  assertConfigured();
-  try {
-    let resolvedSlug = slug;
-    const visited = new Set<string>();
-    for (let depth = 0; depth < 10; depth += 1) {
-      if (visited.has(resolvedSlug)) break;
-      visited.add(resolvedSlug);
-      const alias = await getDoc(doc(db, "publicSlugAliases", resolvedSlug));
-      const target = String(alias.data()?.targetSlug ?? "");
-      if (!alias.exists() || !target || target === resolvedSlug) break;
-      resolvedSlug = target;
-    }
-    const snap = await getDoc(doc(db, "publicProfiles", resolvedSlug));
-    const publicRenewAtMs = Number(snap.data()?.renewAtMs ?? 0);
-    if (
-      !snap.exists()
-      || snap.data().active !== true
-      || (publicRenewAtMs > 0 && publicRenewAtMs <= Date.now())
-    ) return null;
-    return {
-      slug: resolvedSlug,
-      accountId: snap.data().accountId,
-      professionalId: snap.data().professionalId ?? null,
-      ownerType: snap.data().ownerType === "clinic" ? "clinic" : "dentist",
-      name: snap.data().name ?? "",
-      whatsapp: snap.data().whatsapp ?? "",
-      specialty: snap.data().specialty ?? "",
-      registrationNumber: snap.data().registrationNumber ?? "",
-      city: snap.data().city ?? "",
-      state: snap.data().state ?? "",
-      bio: snap.data().bio ?? "",
-      plan: normalizeTier(snap.data().plan),
-      active: true,
-      status: snap.data().status ?? "active",
-      profileImage: snap.data().profileImage ?? "",
-      coverImage: snap.data().coverImage ?? "",
-      instagramHandle: snap.data().instagramHandle ?? "",
-      bioLink: snap.data().bioLink ?? "",
-      patientAssistant: snap.data().patientAssistant
-        ? {
-            id: String(snap.data().patientAssistant.id ?? "aury-patient-guide"),
-            name: String(snap.data().patientAssistant.name ?? "Aury"),
-            roleName: String(snap.data().patientAssistant.roleName ?? "Guia virtual"),
-            description: String(snap.data().patientAssistant.description ?? ""),
-            greeting: String(snap.data().patientAssistant.greeting ?? ""),
-            avatarUrl: String(snap.data().patientAssistant.avatarUrl ?? ""),
-            fullImageUrl: String(snap.data().patientAssistant.fullImageUrl ?? ""),
-            primaryColor: String(snap.data().patientAssistant.primaryColor ?? "#18AFA5"),
-            secondaryColor: String(snap.data().patientAssistant.secondaryColor ?? "#DDF4F6"),
-            ctaText: String(snap.data().patientAssistant.ctaText ?? "Falar com a clínica"),
-            ctaLink: String(snap.data().patientAssistant.ctaLink ?? ""),
-            isCustom: snap.data().patientAssistant.isCustom === true,
-            tone: snap.data().patientAssistant.tone,
-            serviceContext: String(snap.data().patientAssistant.serviceContext ?? ""),
-          }
-        : undefined,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (message.includes("permission-denied")) return null;
-    throw error;
-  }
 }
 
 async function ensureAuth(): Promise<User> {

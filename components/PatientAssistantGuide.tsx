@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Bot, ChevronRight, MessageCircle, ShieldCheck, X } from "lucide-react";
 import { PublicPatientAssistant, PublicProfessionalProfile } from "../types";
 import { publicProfessionalName } from "../services/publicProfessionalIdentity";
+import { whatsappUrl } from "../services/whatsapp";
 
 interface PatientAssistantGuideProps {
   profile: PublicProfessionalProfile;
@@ -77,7 +78,7 @@ export const PatientAssistantGuide: React.FC<PatientAssistantGuideProps> = ({ pr
   // The public assistant never routes a patient through a global or custom
   // link. The destination is always the professional identified by this slug.
   const contactLink = profile.whatsapp
-    ? `https://wa.me/${profile.whatsapp.replace(/\D/g, "")}`
+    ? whatsappUrl(profile.whatsapp)
     : "";
   const serviceContext = assistant.serviceContext?.trim() ?? "";
   const faq = serviceContext

@@ -86,7 +86,7 @@ persistência e auditoria próprias. Veja `docs/ASSISTENTES_IA.md`.
 
 ## Consentimentos e retenção
 
-- versão atual de consentimento: `2026-07`;
+- versão atual de consentimento: `2026-08`;
 - uso da imagem, contato e privacidade têm autorizações separadas; maioridade,
   titularidade e processamento ficam reunidos no aceite específico da imagem;
 - data, versão e responsável pelo link ficam registrados;

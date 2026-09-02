@@ -13,6 +13,7 @@
     "test:payments": "FIREBASE_EMULATORS_PATH=/tmp/sorvysmile-firebase-emulators XDG_CACHE_HOME=/tmp/sorvysmile-xdg-cache XDG_CONFIG_HOME=/tmp/sorvysmile-xdg-config FIREBASE_CLI_DISABLE_UPDATE_CHECK=true firebase emulators:exec --project demo-sorvy-smile --only firestore \"npm --prefix functions test -- infinitePay.integration.test.ts\"",
     "build:all": "npm run build && npm --prefix functions run build",
     "test:all": "npm test && npm --prefix functions test",
+    "check:performance": "node scripts/check-performance-budget.mjs",
     "setup:hml": "./scripts/setup-firebase-homologation.sh",
     "deploy:hml": "./scripts/deploy-firebase-homologation-full.sh",
     "repair:gemini:hml": "./scripts/repair-gemini-homologation.sh",

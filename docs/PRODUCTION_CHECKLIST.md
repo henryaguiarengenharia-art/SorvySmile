@@ -16,6 +16,8 @@ deploy e sem alterar dados.
 - limpeza automática de usuários anônimos está habilitada;
 - App Check com reCAPTCHA Enterprise está registrado para o domínio oficial;
 - Blaze, APIs necessárias e política de limpeza de artefatos estão ativos.
+- o carregamento inicial permanece abaixo de 160 kB gzip e nenhum chunk de
+  JavaScript ultrapassa 500 kB (`npm run check:performance`).
 
 ## 2. Pagamento automático
 

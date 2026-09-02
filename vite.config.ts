@@ -14,9 +14,15 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes("node_modules/firebase")) return "firebase";
-          if (id.includes("node_modules/react")) return "react";
-          if (id.includes("node_modules/lucide-react")) return "icons";
+          const moduleId = id.replace(/\\/g, "/");
+          if (moduleId.includes("/node_modules/@firebase/firestore/") || moduleId.includes("/node_modules/firebase/firestore/")) return "firebase-firestore";
+          if (moduleId.includes("/node_modules/@firebase/app-check") || moduleId.includes("/node_modules/firebase/app-check/")) return "firebase-app-check";
+          if (moduleId.includes("/node_modules/@firebase/auth/") || moduleId.includes("/node_modules/firebase/auth/")) return "firebase-auth";
+          if (moduleId.includes("/node_modules/@firebase/functions/") || moduleId.includes("/node_modules/firebase/functions/")) return "firebase-functions";
+          if (moduleId.includes("/node_modules/@firebase/storage/") || moduleId.includes("/node_modules/firebase/storage/")) return "firebase-storage";
+          if (moduleId.includes("/node_modules/@firebase/") || moduleId.includes("/node_modules/firebase/")) return "firebase-core";
+          if (moduleId.includes("/node_modules/react")) return "react";
+          if (moduleId.includes("/node_modules/lucide-react")) return "icons";
           return undefined;
         },
       },

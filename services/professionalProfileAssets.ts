@@ -1,5 +1,5 @@
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-import { storage } from "./firebaseClient";
+import { storage } from "./firebaseStorageClient";
 
 export type ProfessionalAssetKind = "profile" | "cover";
 

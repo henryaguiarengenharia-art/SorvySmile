@@ -46,6 +46,7 @@ import { defaultProfessionalAssistantSettings } from "../services/professionalAs
 import { BillingSummaryCard } from "./BillingSummaryCard";
 import { ProfessionalAssetKind, uploadProfessionalAsset } from "../services/professionalProfileAssets";
 import { isValidPublicProfessionalDetail, isValidPublicProfessionalName, normalizeInstagramHandle, normalizePublicHttpsUrl, publicProfessionalDetail } from "../services/publicProfessionalIdentity";
+import { whatsappUrl } from "../services/whatsapp";
 
 interface DentistPortalViewProps {
   leadRecords: LeadRecord[];
@@ -301,9 +302,13 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       .replaceAll("[NOME]", lead.lead.name)
       .replaceAll("[SCORE]", String(lead.scores?.harmonyIndex ?? ""))
       .replaceAll("[STATUS]", lead.scores?.status ?? "");
-    const digits = lead.lead.whatsapp.replace(/\D/g, "");
+    const url = whatsappUrl(lead.lead.whatsapp, message);
+    if (!url) {
+      setNotice("Este lead não possui um WhatsApp válido.");
+      return;
+    }
     window.open(
-      `https://wa.me/${digits}?text=${encodeURIComponent(message)}`,
+      url,
       "_blank",
       "noopener,noreferrer",
     );

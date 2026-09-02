@@ -30,6 +30,7 @@ import { PeriodFilter } from "./PeriodFilter";
 import { PLAN_CONFIGS } from "../planCatalog";
 import { filterLeadsByPeriod, MetricPeriod } from "../services/metrics";
 import { BillingSummaryCard } from "./BillingSummaryCard";
+import { whatsappUrl } from "../services/whatsapp";
 
 interface TeamMemberInput {
   name: string;
@@ -229,12 +230,13 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
 
   const openWhatsApp = (lead: LeadRecord) => {
     if (readOnly) return;
-    const number = digits(lead.lead.whatsapp);
-    if (!number) return;
+    const url = whatsappUrl(
+      lead.lead.whatsapp,
+      `Olá, ${lead.lead.name}! Recebemos sua triagem informativa pela Sorvy Smile. Como podemos ajudar com sua avaliação?`,
+    );
+    if (!url) return;
     window.open(
-      `https://wa.me/${number}?text=${encodeURIComponent(
-        `Olá, ${lead.lead.name}! Recebemos sua triagem informativa pela Sorvy Smile. Como podemos ajudar com sua avaliação?`,
-      )}`,
+      url,
       "_blank",
       "noopener,noreferrer",
     );

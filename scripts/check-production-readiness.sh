@@ -71,6 +71,7 @@ node scripts/check-production-readiness.mjs \
 git diff --check
 npm run test:all
 npm run build:all
+npm run check:performance
 npm run test:rules
 npm run test:storage-rules
 npm run test:payments

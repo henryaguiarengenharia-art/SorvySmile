@@ -1006,6 +1006,7 @@ export const captureLead = onCall(
         transaction.set(db.doc(`publicProfiles/${account.slug}`), {
           active: true,
           status: "trial",
+          trialEndsAtMs: trial.trialEndsAtMs,
           updatedAtMs: now,
         }, { merge: true });
         addAdminAudit(transaction, {
@@ -1613,7 +1614,12 @@ export const startProfessionalTrial = onCall(
     }
     if (professional.ownerUid) batch.set(db.doc(`users/${professional.ownerUid}`), { status: "active", lifecycleStatus: "trial", updatedAtMs: now }, { merge: true });
     const slug = String(professional.publicSlug ?? account.slug ?? "");
-    if (slug) batch.set(db.doc(`publicProfiles/${slug}`), { active: true, status: "trial", updatedAtMs: now }, { merge: true });
+    if (slug) batch.set(db.doc(`publicProfiles/${slug}`), {
+      active: true,
+      status: "trial",
+      trialEndsAtMs: trial.trialEndsAtMs,
+      updatedAtMs: now,
+    }, { merge: true });
     addAdminAudit(batch, { actorUid: uid, action: "professional_trial_started", accountId: input.accountId, professionalId: input.professionalId, details: { trialEndsAtMs: trial.trialEndsAtMs }, now });
     addSubscriptionHistory(batch, { actorUid: uid, accountId: input.accountId, professionalId: input.professionalId, fromStatus: account.status, toStatus: "trial", reason: "trial de 7 dias", now });
     await batch.commit();
@@ -3451,6 +3457,7 @@ export const createTeamMember = onCall(
       plan: "network",
       active: true,
       status: "trial",
+      trialEndsAtMs: trial.trialEndsAtMs,
       createdAtMs: now,
       updatedAtMs: now,
     });

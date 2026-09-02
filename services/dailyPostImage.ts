@@ -6,7 +6,7 @@ import {
   fitMeasuredText,
   resolveDailyPostRenderContent,
 } from "./dailyPostLayout";
-import { storage } from "./firebaseClient";
+import { storage } from "./firebaseStorageClient";
 import { createStoredZip } from "./storedZip";
 
 const FONT_STACK = '"Inter", "Aptos", "Segoe UI", Arial, sans-serif';
@@ -592,6 +592,7 @@ export async function uploadDailyPostImage(
   );
   await uploadBytes(target, blob, {
     contentType: "image/webp",
+    cacheControl: "private,max-age=31536000,immutable",
     customMetadata: { assignmentId: assignment.id },
   });
   return getDownloadURL(target);

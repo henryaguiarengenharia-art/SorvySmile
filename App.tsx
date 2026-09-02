@@ -15,7 +15,6 @@ import {
   Smile,
   Sparkles,
 } from "lucide-react";
-import { PatientJourney } from "./components/PatientJourney";
 import { PatientAssistantGuide } from "./components/PatientAssistantGuide";
 import {
   AppView,
@@ -33,7 +32,6 @@ import {
   createInfinitePayCheckout,
   createTeamMember,
   deleteLeadRecord,
-  getPublicProfile,
   getDailyPostAssignment,
   loginWorkspace,
   logoutWorkspace,
@@ -51,10 +49,12 @@ import {
   subscribeWorkspace,
   updateLeadCrm,
   updateProfessionalSlug,
-  WorkspaceData,
-} from "./services/sorvyApi";
-import { isFirebaseConfigured } from "./services/firebaseClient";
-import { instagramProfileUrl, normalizeInstagramHandle, publicProfessionalDetail, publicProfessionalName } from "./services/publicProfessionalIdentity";
+} from "./services/lazySorvyApi";
+import type { WorkspaceData } from "./services/lazySorvyApi";
+import { isFirebaseConfigured } from "./services/firebaseApp";
+import { publicLandingPresentation } from "./services/publicRoute";
+import { whatsappUrl } from "./services/whatsapp";
+import { instagramProfileUrl, normalizeInstagramHandle, normalizePublicHttpsUrl, publicProfessionalDetail, publicProfessionalName } from "./services/publicProfessionalIdentity";
 import {
   isPlanPubliclyAvailable,
   PLAN_CONFIGS,
@@ -64,6 +64,11 @@ import {
 const DentistPortalView = React.lazy(() =>
   import("./components/DentistPortalView").then((module) => ({
     default: module.DentistPortalView,
+  })),
+);
+const PatientJourney = React.lazy(() =>
+  import("./components/PatientJourney").then((module) => ({
+    default: module.PatientJourney,
   })),
 );
 const HQDashboardView = React.lazy(() =>
@@ -177,7 +182,8 @@ const App: React.FC = () => {
       );
       return;
     }
-    getPublicProfile(slug)
+    import("./services/publicProfileApi")
+      .then(({ getPublicProfile }) => getPublicProfile(slug))
       .then((result) => {
         if (cancelled) return;
         setProfile(result);
@@ -185,8 +191,12 @@ const App: React.FC = () => {
           result ? null : "Este link profissional ainda não está ativo.",
         );
       })
-      .catch((error: Error) => {
-        if (!cancelled) setProfileError(error.message);
+      .catch(() => {
+        if (!cancelled) {
+          setProfileError(
+            "Não foi possível carregar este perfil agora. Tente novamente em alguns instantes.",
+          );
+        }
       })
       .finally(() => {
         if (!cancelled) setProfileLoading(false);
@@ -242,10 +252,10 @@ const App: React.FC = () => {
   }, [slug]);
 
   const openWhatsApp = (number: string, message: string) => {
-    const digits = number.replace(/\D/g, "");
-    if (!digits) return;
+    const url = whatsappUrl(number, message);
+    if (!url) return;
     window.open(
-      `https://wa.me/${digits}?text=${encodeURIComponent(message)}`,
+      url,
       "_blank",
       "noopener,noreferrer",
     );
@@ -381,15 +391,28 @@ const App: React.FC = () => {
     "admin-dashboard",
     "hq-dashboard",
   ].includes(view);
+  const isProfessionalLanding = view === "landing" && Boolean(slug);
+  const landingPresentation = publicLandingPresentation(
+    slug,
+    profileLoading,
+    Boolean(profile),
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {showPublicNav && (
         <nav className="sticky top-0 z-50 h-16 border-b border-slate-100 bg-white/95 px-5 backdrop-blur-md">
           <div className="mx-auto flex h-full max-w-6xl items-center justify-between">
-            <button
-              onClick={() => setView("landing")}
+            <a
+              href="/"
+              onClick={(event) => {
+                if (!isProfessionalLanding) {
+                  event.preventDefault();
+                  setView("landing");
+                }
+              }}
               className="flex items-center gap-2"
+              aria-label={isProfessionalLanding ? "Ir para o início da Sorvy Smile" : "Sorvy Smile"}
             >
               <span className="rounded-xl bg-blue-600 p-2 text-white">
                 <Smile className="h-5 w-5" />
@@ -397,8 +420,8 @@ const App: React.FC = () => {
               <span className="hidden text-lg font-black uppercase tracking-tight sm:inline">
                 Sorvy Smile
               </span>
-            </button>
-            <div className="flex items-center gap-1">
+            </a>
+            {!isProfessionalLanding && <div className="flex items-center gap-1">
               <button
                 onClick={() => setView("landing")}
                 className="hidden rounded-xl px-3 py-2 text-xs font-bold text-slate-500 hover:text-blue-600 sm:block"
@@ -418,12 +441,17 @@ const App: React.FC = () => {
                 <span className="sm:hidden">Entrar</span>
                 <span className="hidden sm:inline">Acesso Pro</span>
               </button>
-            </div>
+            </div>}
+            {isProfessionalLanding && (
+              <span className="max-w-[60%] truncate text-right text-[10px] font-black uppercase tracking-widest text-slate-400">
+                {profile ? `Experiência de ${publicProfessionalName(profile.name)}` : "Experiência profissional"}
+              </span>
+            )}
           </div>
         </nav>
       )}
 
-      {profileError && view === "landing" && (
+      {profileError && view === "landing" && !slug && (
         <div className="mx-auto mt-4 max-w-3xl rounded-2xl border border-amber-200 bg-amber-50 px-5 py-3 text-center text-sm font-bold text-amber-800">
           {profileError}
         </div>
@@ -437,18 +465,25 @@ const App: React.FC = () => {
 
       {view === "landing" && (
         <>
-          <LandingView
-            profile={profile}
-            loading={profileLoading}
-            onStart={() => profile && setView("patient")}
-            onPlans={() => setView("pricing")}
-          />
+          {landingPresentation === "professional-loading" ? (
+            <PublicProfileLoadingView />
+          ) : landingPresentation === "professional-unavailable" ? (
+            <PublicProfileUnavailableView message={profileError} />
+          ) : (
+            <LandingView
+              profile={profile}
+              onStart={() => profile && setView("patient")}
+              onPlans={() => setView("pricing")}
+            />
+          )}
           {profile && <PatientAssistantGuide profile={profile} stage="journey" />}
         </>
       )}
 
       {view === "patient" && profile && (
-        <PatientJourney profile={profile} onExit={() => setView("landing")} />
+        <React.Suspense fallback={<PatientJourneyLoading />}>
+          <PatientJourney profile={profile} onExit={() => setView("landing")} />
+        </React.Suspense>
       )}
 
       {view === "pricing" && (
@@ -697,17 +732,64 @@ const PublicProfilePhoto = ({ src, name }: { src?: string; name: string }) => {
   if (!src || failed) {
     return <span className="flex h-24 w-24 items-center justify-center rounded-3xl bg-white text-blue-600 shadow-xl ring-4 ring-white sm:h-32 sm:w-32"><Smile className="h-10 w-10" /></span>;
   }
-  return <img src={src} alt={`Foto de ${name}`} onError={() => setFailed(true)} className="h-24 w-24 rounded-3xl bg-white object-cover shadow-xl ring-4 ring-white sm:h-32 sm:w-32" referrerPolicy="no-referrer" />;
+  return <img src={src} alt={`Foto de ${name}`} width="128" height="128" loading="eager" decoding="async" fetchPriority="high" onError={() => setFailed(true)} className="h-24 w-24 rounded-3xl bg-white object-cover shadow-xl ring-4 ring-white sm:h-32 sm:w-32" referrerPolicy="no-referrer" />;
 };
+
+const PublicProfileLoadingView = () => (
+  <main className="mx-auto max-w-6xl px-6 py-12 md:py-16" role="status" aria-live="polite">
+    <div className="mx-auto max-w-4xl overflow-hidden rounded-[2.5rem] bg-white shadow-2xl shadow-slate-900/10 ring-1 ring-slate-100">
+      <div className="h-52 animate-pulse bg-gradient-to-br from-[#123B5D] via-[#1D5477] to-[#18AFA5] sm:h-64" />
+      <div className="relative grid gap-8 p-6 pt-20 sm:p-9 sm:pt-24 md:grid-cols-[1fr_17rem]">
+        <div className="absolute -top-12 left-6 h-24 w-24 animate-pulse rounded-3xl bg-slate-100 ring-4 ring-white sm:-top-16 sm:left-9 sm:h-32 sm:w-32" />
+        <div className="space-y-4">
+          <div className="h-3 w-48 animate-pulse rounded-full bg-slate-100" />
+          <div className="h-4 w-full max-w-lg animate-pulse rounded-full bg-slate-100" />
+          <div className="h-4 w-3/4 animate-pulse rounded-full bg-slate-100" />
+        </div>
+        <div className="h-44 animate-pulse rounded-[2rem] bg-emerald-50" />
+      </div>
+    </div>
+    <p className="mt-6 text-center text-xs font-bold text-slate-400">Carregando a experiência do profissional…</p>
+  </main>
+);
+
+const PublicProfileUnavailableView = ({ message }: { message?: string | null }) => (
+  <main className="mx-auto flex min-h-[65vh] max-w-2xl items-center px-6 py-16 text-center">
+    <section className="w-full rounded-[2.5rem] border border-slate-100 bg-white p-9 shadow-xl">
+      <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+        <Smile className="h-7 w-7" />
+      </span>
+      <h1 className="mt-6 text-3xl font-black tracking-tight">Este perfil não está disponível.</h1>
+      <p className="mx-auto mt-3 max-w-md text-sm font-medium leading-relaxed text-slate-500">
+        {message || "Confira o endereço recebido ou solicite ao profissional um novo link."}
+      </p>
+      <div className="mt-7 flex flex-wrap justify-center gap-3">
+        <button type="button" onClick={() => window.location.reload()} className="rounded-2xl bg-slate-900 px-6 py-3 text-xs font-black text-white hover:bg-blue-600">
+          Tentar novamente
+        </button>
+        <a href="/" className="rounded-2xl border border-slate-200 px-6 py-3 text-xs font-black text-slate-700 hover:border-blue-300 hover:text-blue-700">
+          Ir para Sorvy Smile
+        </a>
+      </div>
+    </section>
+  </main>
+);
+
+const PatientJourneyLoading = () => (
+  <main className="flex min-h-[70vh] items-center justify-center px-6" role="status" aria-live="polite">
+    <div className="text-center">
+      <LoaderCircle className="mx-auto h-10 w-10 animate-spin text-blue-600" />
+      <p className="mt-4 text-sm font-bold text-slate-500">Preparando sua experiência segura…</p>
+    </div>
+  </main>
+);
 
 const LandingView = ({
   profile,
-  loading,
   onStart,
   onPlans,
 }: {
   profile: PublicProfessionalProfile | null;
-  loading: boolean;
   onStart: () => void;
   onPlans: () => void;
 }) => {
@@ -723,7 +805,7 @@ const LandingView = ({
       {profile && (
         <div className="relative mx-auto max-w-4xl overflow-hidden rounded-[2.5rem] bg-white text-left shadow-2xl shadow-slate-900/15 ring-1 ring-slate-100">
           <div className="relative h-52 overflow-hidden bg-gradient-to-br from-[#123B5D] via-[#1D5477] to-[#18AFA5] sm:h-64">
-            {profile.coverImage && <img src={profile.coverImage} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} className="h-full w-full object-cover opacity-80" />}
+            {profile.coverImage && <img src={profile.coverImage} alt="" width="1024" height="256" loading="eager" decoding="async" fetchPriority="high" onError={(event) => { event.currentTarget.style.display = "none"; }} className="h-full w-full object-cover opacity-80" />}
             <div className="absolute inset-0 bg-gradient-to-t from-[#0B2036]/95 via-[#123B5D]/25 to-transparent" />
             <div className="absolute bottom-6 left-32 right-6 sm:left-44">
               <p className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-200">Experiência profissional individual</p>
@@ -751,32 +833,28 @@ const LandingView = ({
               )}
               <div className="mt-7 flex flex-wrap gap-3">
                 {instagramProfileUrl(profile.instagramHandle) && <a href={instagramProfileUrl(profile.instagramHandle)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700"><Instagram className="h-4 w-4 text-pink-500" />@{normalizeInstagramHandle(profile.instagramHandle)}</a>}
-                {profile.bioLink && <a href={profile.bioLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700">Conheça meu trabalho <ExternalLink className="h-4 w-4" /></a>}
+                {profile.bioLink && <a href={normalizePublicHttpsUrl(profile.bioLink)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700">Conheça meu trabalho <ExternalLink className="h-4 w-4" /></a>}
               </div>
               </div>
               <aside className="rounded-[2rem] border border-emerald-200 bg-emerald-50 p-6 text-center">
                 <p className="text-lg font-black text-emerald-950">Inicie sua experiência</p>
                 <p className="mt-3 text-xs font-medium leading-relaxed text-emerald-800">Responda algumas perguntas rápidas para organizar o que deseja conversar.</p>
                 <button onClick={onStart} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-xs font-black uppercase text-white shadow-lg transition hover:bg-emerald-700">Começar agora <ArrowRight className="h-4 w-4" /></button>
-                {profile.whatsapp && <a href={`https://wa.me/${profile.whatsapp.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-xs font-black text-emerald-800"><MessageCircle className="h-4 w-4" />Falar com profissional</a>}
+                {profile.whatsapp && <a href={whatsappUrl(profile.whatsapp)} target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-xs font-black text-emerald-800"><MessageCircle className="h-4 w-4" />Falar com profissional</a>}
               </aside>
             </div>
           </div>
         </div>
       )}
       {!profile && <button
-        disabled={loading || !profile}
+        disabled={!profile}
         onClick={onStart}
         className="mx-auto mt-9 flex items-center gap-3 rounded-3xl bg-slate-900 px-10 py-6 text-base font-black text-white shadow-2xl transition hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        {loading ? (
-          <LoaderCircle className="h-5 w-5 animate-spin" />
-        ) : (
-          <Smile className="h-5 w-5" />
-        )}
+        <Smile className="h-5 w-5" />
         {profile ? "Começar minha experiência" : "Mapear meu sorriso agora"} <ArrowRight className="h-5 w-5" />
       </button>}
-      {!loading && !profile && (
+      {!profile && (
         <p className="mx-auto mt-3 max-w-md text-xs font-bold text-amber-700">
           A triagem é liberada pelo link individual do dentista ou da clínica.
         </p>
