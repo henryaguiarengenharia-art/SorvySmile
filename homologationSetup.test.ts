@@ -161,6 +161,18 @@ describe("deploy funcional da homologacao", () => {
     expect(script).toMatch(
       /deploy_function_batches launch-candidate\s+\\\n\s+captureLead\s+\\\n\s+startProfessionalTrial\s+\\\n\s+createTeamMember/,
     );
+    const incrementalBlock = script.slice(
+      script.indexOf('if [[ "$DEPLOY_MODE" == "launch-candidate" ]]', 5000),
+      script.indexOf(
+        "Validando codigo, regras e dependencias do provisionamento completo",
+      ),
+    );
+    expect(incrementalBlock).toContain("npm run test:all");
+    expect(incrementalBlock).toContain("npm --prefix functions run build");
+    expect(incrementalBlock).toContain("npm run check:performance");
+    expect(incrementalBlock).not.toContain("npm run test:rules");
+    expect(incrementalBlock).not.toContain("npm run test:storage-rules");
+    expect(incrementalBlock).not.toContain("npm run test:payments");
   });
 
   it("protege e valida o reparo isolado da IA antes do deploy", () => {

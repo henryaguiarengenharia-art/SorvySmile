@@ -287,19 +287,17 @@ fs.writeFileSync(
 );
 NODE
 
-printf 'Validando codigo, regras e dependencias...\n'
-CURRENT_STAGE="validation"
+printf 'Instalando dependencias reproduziveis...\n'
+CURRENT_STAGE="dependencies"
 npm ci
 npm --prefix functions ci
-npm run test:all
-npm run build:all
-npm run test:rules
-npm run test:storage-rules
-npm run test:payments
-npm audit --omit=dev
-npm --prefix functions audit --omit=dev
 
 if [[ "$DEPLOY_MODE" == "launch-candidate" ]]; then
+  printf 'Validando somente o codigo alterado pelo candidato de lancamento...\n'
+  CURRENT_STAGE="launch-candidate-validation"
+  npm run test:all
+  npm --prefix functions run build
+
   printf 'Escopo incremental comprovado: somente as 3 Functions alteradas desde 3f047ad e o frontend.\n'
   deploy_function_batches launch-candidate \
     captureLead \
@@ -308,6 +306,7 @@ if [[ "$DEPLOY_MODE" == "launch-candidate" ]]; then
 
   CURRENT_STAGE="frontend-build"
   npm run build -- --mode homologation
+  npm run check:performance
   CURRENT_STAGE="hosting-preview"
   "${FIREBASE[@]}" hosting:channel:deploy "$PREVIEW_CHANNEL_ID" \
     --expires 30d \
@@ -321,6 +320,16 @@ if [[ "$DEPLOY_MODE" == "launch-candidate" ]]; then
   printf 'O projeto protegido %s nao foi alterado.\n' "$PRODUCTION_PROJECT_ID"
   exit 0
 fi
+
+printf 'Validando codigo, regras e dependencias do provisionamento completo...\n'
+CURRENT_STAGE="validation"
+npm run test:all
+npm run build:all
+npm run test:rules
+npm run test:storage-rules
+npm run test:payments
+npm audit --omit=dev
+npm --prefix functions audit --omit=dev
 
 printf 'Habilitando APIs do backend somente na homologacao...\n'
 CURRENT_STAGE="enable-apis"
