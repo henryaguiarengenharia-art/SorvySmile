@@ -126,6 +126,19 @@ describe("deploy funcional da homologacao", () => {
     expect(script).toContain("hosting:channel:deploy");
   });
 
+  it("fixa a mesma conta Google no gcloud e em todas as chamadas Firebase", () => {
+    const script = readFileSync(fullDeployScriptPath, "utf8");
+
+    expect(script).toContain(
+      'EXPECTED_FIREBASE_ACCOUNT="000.henry@gmail.com"',
+    );
+    expect(script).toContain("gcloud auth list");
+    expect(script).toContain('"${FIREBASE_BASE[@]}" login:list');
+    expect(script).toContain('--account "$EXPECTED_FIREBASE_ACCOUNT"');
+    expect(script).toContain('"${FIREBASE[@]}" deploy');
+    expect(script).toContain('"${FIREBASE[@]}" hosting:channel:deploy');
+  });
+
   it("protege e valida o reparo isolado da IA antes do deploy", () => {
     const result = spawnSync("bash", [geminiRepairScriptPath, "--verify-only"], {
       encoding: "utf8",

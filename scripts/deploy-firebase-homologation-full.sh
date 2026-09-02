@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 readonly EXPECTED_PROJECT_ID="sorvysmile-homologacao"
 readonly PRODUCTION_PROJECT_ID="sorvysmile"
+readonly EXPECTED_FIREBASE_ACCOUNT="000.henry@gmail.com"
 readonly ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 readonly FRONTEND_ENV_FILE="$ROOT_DIR/.env.homologation"
 readonly FUNCTIONS_ENV_FILE="$ROOT_DIR/functions/.env.sorvysmile-homologacao"
@@ -38,6 +39,13 @@ for command_name in gcloud node npm npx; do
 done
 
 cd "$ROOT_DIR"
+ACTIVE_ACCOUNT="$(
+  gcloud auth list --filter=status:ACTIVE --format='value(account)' \
+    | head -n 1
+)"
+[[ "$ACTIVE_ACCOUNT" == "$EXPECTED_FIREBASE_ACCOUNT" ]] \
+  || fail "O Cloud Shell esta autenticado como ${ACTIVE_ACCOUNT:-nenhuma conta}. Abra-o com $EXPECTED_FIREBASE_ACCOUNT."
+
 ACTIVE_PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
 [[ "$ACTIVE_PROJECT" == "$PROJECT_ID" ]] \
   || fail "O projeto ativo do gcloud nao e sorvysmile-homologacao."
@@ -48,6 +56,75 @@ RESOLVED_PROJECT_ID="$(
 )"
 [[ "$RESOLVED_PROJECT_ID" == "$EXPECTED_PROJECT_ID" ]] \
   || fail "A conta Google ativa nao possui acesso a homologacao."
+
+readonly FIREBASE_BASE=(npx --no-install firebase)
+readonly FIREBASE=(
+  npx --no-install firebase
+  --account "$EXPECTED_FIREBASE_ACCOUNT"
+)
+
+FIREBASE_ACCOUNTS_JSON="$(mktemp)"
+FIREBASE_PROJECTS_JSON="$(mktemp)"
+cleanup() {
+  rm -f -- "$FIREBASE_ACCOUNTS_JSON" "$FIREBASE_PROJECTS_JSON"
+}
+trap cleanup EXIT
+
+if ! "${FIREBASE_BASE[@]}" login:list \
+  --json \
+  --non-interactive > "$FIREBASE_ACCOUNTS_JSON"; then
+  fail "Nao foi possivel consultar as contas autorizadas na Firebase CLI."
+fi
+
+node - "$FIREBASE_ACCOUNTS_JSON" "$EXPECTED_FIREBASE_ACCOUNT" <<'NODE'
+const fs = require("node:fs");
+const [file, expectedEmail] = process.argv.slice(2);
+const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+const emails = new Set();
+
+const visit = (value) => {
+  if (Array.isArray(value)) return value.forEach(visit);
+  if (!value || typeof value !== "object") return;
+  if (typeof value.email === "string") emails.add(value.email.toLowerCase());
+  Object.values(value).forEach(visit);
+};
+
+visit(payload);
+if (!emails.has(expectedEmail.toLowerCase())) {
+  process.stderr.write(
+    `ERRO: ${expectedEmail} nao esta autorizada na Firebase CLI.\n` +
+    `Execute uma unica vez: npx firebase login:add --no-localhost\n`,
+  );
+  process.exit(1);
+}
+NODE
+
+"${FIREBASE[@]}" projects:list \
+  --json \
+  --non-interactive > "$FIREBASE_PROJECTS_JSON" \
+  || fail "A Firebase CLI nao conseguiu usar $EXPECTED_FIREBASE_ACCOUNT."
+
+node - "$FIREBASE_PROJECTS_JSON" "$EXPECTED_PROJECT_ID" <<'NODE'
+const fs = require("node:fs");
+const [file, expectedProject] = process.argv.slice(2);
+const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+const projectIds = new Set();
+
+const visit = (value) => {
+  if (Array.isArray(value)) return value.forEach(visit);
+  if (!value || typeof value !== "object") return;
+  if (typeof value.projectId === "string") projectIds.add(value.projectId);
+  Object.values(value).forEach(visit);
+};
+
+visit(payload);
+if (!projectIds.has(expectedProject)) {
+  process.stderr.write(
+    `ERRO: a conta Firebase ativa nao possui acesso a ${expectedProject}.\n`,
+  );
+  process.exit(1);
+}
+NODE
 
 BILLING_ENABLED="$(
   gcloud billing projects describe "$PROJECT_ID" \
@@ -205,20 +282,20 @@ fs.writeFileSync(
 NODE
 
 printf 'Configurando limpeza segura dos artefatos de Functions...\n'
-npx --no-install firebase functions:artifacts:setpolicy \
+"${FIREBASE[@]}" functions:artifacts:setpolicy \
   --location southamerica-east1 \
   --days 7 \
   --project "$PROJECT_ID" \
   --force
 
 printf 'Publicando regras e indices somente em %s...\n' "$PROJECT_ID"
-npx --no-install firebase deploy \
+"${FIREBASE[@]}" deploy \
   --only firestore:rules,firestore:indexes,storage \
   --project "$PROJECT_ID" \
   --non-interactive
 
 printf 'Publicando as Functions de IA primeiro...\n'
-npx --no-install firebase deploy \
+"${FIREBASE[@]}" deploy \
   --only functions:validateSmilePhoto,functions:analyzeSmilePhoto,functions:askBusinessAssistant \
   --project "$PROJECT_ID" \
   --non-interactive
@@ -234,13 +311,13 @@ for service_name in validatesmilephoto analyzesmilephoto askbusinessassistant; d
 done
 
 printf 'Publicando o primeiro lote das demais Functions...\n'
-npx --no-install firebase deploy \
+"${FIREBASE[@]}" deploy \
   --only functions:startTriage,functions:captureLead,functions:recordPatientConversionAction,functions:createPendingSubscription,functions:recordSubscriptionIntent,functions:createInfinitePayCheckout,functions:confirmInfinitePayReturn,functions:infinitePayWebhook,functions:updateProfessionalProfile,functions:updateProfessionalByHq,functions:updateProfessionalSlug,functions:startProfessionalTrial,functions:archiveProfessional,functions:restoreProfessional,functions:setAccountStatus,functions:createTeamMember,functions:manageDailyPost,functions:getDailyPostAssignment,functions:recordDailyPostEvent,functions:getAssistantWorkspace,functions:resolveAssistantAction,functions:recordAssistantFeedback,functions:recordAssistantClientEvent \
   --project "$PROJECT_ID" \
   --non-interactive
 
 printf 'Publicando o segundo lote das demais Functions...\n'
-npx --no-install firebase deploy \
+"${FIREBASE[@]}" deploy \
   --only functions:setTeamMemberStatus,functions:assignLead,functions:deleteLead,functions:getAssistantAdminSettings,functions:getAssistantAdminOverview,functions:updateAssistantSettings,functions:updateCustomAssistantProfile,functions:getProfessionalAssistantSettings,functions:updateProfessionalAssistantSettings,functions:publishScheduledDailyPosts,functions:assignDailyPostsHourly,functions:expireProfessionalTrials,functions:expirePaidSubscriptions,functions:cleanupExpiredTriageSessions,functions:cleanupExpiredLeads,functions:cleanupStaleUsageReservations \
   --project "$PROJECT_ID" \
   --non-interactive
@@ -292,7 +369,7 @@ node functions/lib/seedAssistantDefinitions.js
 
 printf 'Compilando e publicando o frontend funcional da homologacao...\n'
 npm run build -- --mode homologation
-npx --no-install firebase hosting:channel:deploy "$PREVIEW_CHANNEL_ID" \
+"${FIREBASE[@]}" hosting:channel:deploy "$PREVIEW_CHANNEL_ID" \
   --expires 30d \
   --project "$PROJECT_ID" \
   --non-interactive
