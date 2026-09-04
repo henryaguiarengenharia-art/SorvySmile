@@ -173,7 +173,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
   );
 
   useEffect(() => {
-    if (!planConfig.features.assistantPreview) {
+    if (readOnly || !planConfig.features.assistantPreview) {
       setAssistantSettingsLoading(false);
       return;
     }
@@ -188,7 +188,7 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       .catch((error: Error) => { if (!cancelled) setAssistantSettingsError(error.message); })
       .finally(() => { if (!cancelled) setAssistantSettingsLoading(false); });
     return () => { cancelled = true; };
-  }, [planConfig.features.assistantPreview, professional.billingAccountId, professional.id]);
+  }, [readOnly, planConfig.features.assistantPreview, professional.billingAccountId, professional.id]);
 
   useEffect(() => {
     const nextSlug = professional.publicSlug ?? "";
@@ -520,7 +520,17 @@ export const DentistPortalView: React.FC<DentistPortalViewProps> = ({
       {readOnly && (
         <div className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-bold text-blue-900">
           <Eye className="h-5 w-5 shrink-0" />
-          Visualização administrativa da HQ. Você está vendo o painel deste profissional em modo somente leitura.
+          {billingAccount.status === "overdue"
+            || (
+              Number(billingAccount.renewAt ?? 0) > 0
+              && Number(billingAccount.renewAt ?? 0) <= Date.now()
+              && (
+                billingAccount.paymentStatus === "confirmed"
+                || billingAccount.subscriptionStatus === "active"
+              )
+            )
+            ? "Pagamento vencido. O painel permanece disponível para consulta e regularização, mas as ações operacionais estão pausadas."
+            : "Visualização administrativa da HQ. Você está vendo o painel deste profissional em modo somente leitura."}
         </div>
       )}
 

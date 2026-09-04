@@ -155,7 +155,21 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const target = workspaceUser?.role === "hq" ? hqPreviewProfessionalId ?? undefined : workspaceUser?.professionalId;
-    if (!workspaceUser || (workspaceUser.role === "hq" && !target)) {
+    const account = workspaceUser?.accountId
+      ? workspace?.accounts[workspaceUser.accountId]
+      : undefined;
+    const paidExpired = Boolean(
+      account
+      && Number(account.renewAt ?? 0) > 0
+      && Number(account.renewAt ?? 0) <= lifecycleNow
+      && (
+        account.paymentStatus === "confirmed"
+        || account.subscriptionStatus === "active"
+      )
+    );
+    const operationallyLocked = workspaceUser?.role !== "hq"
+      && (account?.status === "overdue" || paidExpired);
+    if (!workspaceUser || operationallyLocked || (workspaceUser.role === "hq" && !target)) {
       setDailyPostAssignment(null);
       setDailyPostHistory([]);
       return;
@@ -165,7 +179,7 @@ const App: React.FC = () => {
       if (!cancelled) { setDailyPostAssignment(assignment); setDailyPostHistory(history); }
     }).catch((error: Error) => { if (!cancelled) setPageError(error.message); });
     return () => { cancelled = true; };
-  }, [workspaceUser, hqPreviewProfessionalId]);
+  }, [workspaceUser, workspace?.accounts, hqPreviewProfessionalId, lifecycleNow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -319,6 +333,20 @@ const App: React.FC = () => {
   const currentAccount = workspaceUser?.accountId
     ? workspace?.accounts[workspaceUser.accountId]
     : undefined;
+  const currentOperationalReadOnly = Boolean(
+    currentAccount
+    && (
+      currentAccount.status === "overdue"
+      || (
+        Number(currentAccount.renewAt ?? 0) > 0
+        && Number(currentAccount.renewAt ?? 0) <= lifecycleNow
+        && (
+          currentAccount.paymentStatus === "confirmed"
+          || currentAccount.subscriptionStatus === "active"
+        )
+      )
+    )
+  );
   const currentTrialExpired = Boolean(
     currentAccount
     && (
@@ -557,6 +585,7 @@ const App: React.FC = () => {
               billingAccount={currentAccount}
               planConfig={PLAN_CONFIGS[currentAccount.tier]}
               currentUsage={currentUsage}
+              readOnly={currentOperationalReadOnly}
               dailyPost={dailyPostAssignment}
               dailyPostHistory={dailyPostHistory}
               onDailyPostEvent={handleDailyPostEvent}
@@ -597,6 +626,7 @@ const App: React.FC = () => {
               professionals={workspace.professionals}
               account={currentAccount}
               currentUsage={currentUsage}
+              readOnly={currentOperationalReadOnly}
               currentProfessionalId={workspaceUser?.professionalId}
               managerProfessional={currentProfessional}
               onAssignLead={assignLead}

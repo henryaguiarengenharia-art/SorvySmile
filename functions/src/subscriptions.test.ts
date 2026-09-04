@@ -83,6 +83,10 @@ describe("solicitação de assinatura pela InfinitePay", () => {
       renewAtMs: 1_001,
     }, 1_000)).toBe(false);
     expect(paidSubscriptionExpired({
+      paymentStatus: "confirmed",
+      renewAtMs: 999,
+    }, 1_000)).toBe(true);
+    expect(paidSubscriptionExpired({
       subscriptionStatus: "active",
       paymentStatus: "confirmed",
     }, 1_000)).toBe(false);

@@ -284,7 +284,17 @@ export const ClinicDashboardView: React.FC<ClinicDashboardViewProps> = ({
       {readOnly && (
         <div className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-bold text-blue-900">
           <Eye className="h-5 w-5 shrink-0" />
-          Visualização administrativa da HQ. Você está vendo a gestão desta clínica em modo somente leitura.
+          {account.status === "overdue"
+            || (
+              Number(account.renewAt ?? 0) > 0
+              && Number(account.renewAt ?? 0) <= Date.now()
+              && (
+                account.paymentStatus === "confirmed"
+                || account.subscriptionStatus === "active"
+              )
+            )
+            ? "Pagamento vencido. A gestão permanece disponível para consulta e regularização, mas as ações operacionais estão pausadas."
+            : "Visualização administrativa da HQ. Você está vendo a gestão desta clínica em modo somente leitura."}
         </div>
       )}
 

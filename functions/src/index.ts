@@ -521,11 +521,23 @@ export const startTriage = onCall(
       professionalId?: string | null;
       ownerType?: "dentist" | "clinic";
     };
-    const accountSnap = await db.doc(`accounts/${profile.accountId}`).get();
+    const usageMonth = monthKey();
+    const [accountSnap, usageSnap] = await Promise.all([
+      db.doc(`accounts/${profile.accountId}`).get(),
+      db.doc(`usage/${profile.accountId}_${usageMonth}`).get(),
+    ]);
     if (!accountSnap.exists || !hasActiveAccountAccess(accountSnap.data())) {
       throw new HttpsError(
         "failed-precondition",
         "A assinatura deste link está inativa.",
+      );
+    }
+    const plan = normalizePlan(accountSnap.data()?.plan);
+    const triageUsage = triageUsageFromData(usageSnap.data());
+    if (!canStartAnotherTriage(triageUsage, PLANS[plan].monthlyLeadLimit)) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "O limite mensal de triagens deste plano foi atingido.",
       );
     }
 
@@ -922,13 +934,7 @@ export const captureLead = onCall(
         throw new HttpsError("not-found", "Conta não encontrada.");
       }
       const account = accountSnap.data() as AccountRecord;
-      const currentTrialStatus = trialStatusAt({
-        trialStatus: account.trialStatus,
-        trialStartedAtMs: account.trialStartedAtMs,
-        trialEndsAtMs: account.trialEndsAtMs,
-        trialUntil: account.trialUntil,
-      }, now);
-      if (account.status !== "active" || currentTrialStatus === "expired") {
+      if (!hasActiveAccountAccess(account, now)) {
         throw new HttpsError("failed-precondition", "O acesso deste profissional está inativo.");
       }
       const scores = session.scores as Record<string, unknown>;
@@ -1677,7 +1683,7 @@ export const restoreProfessional = onCall(
     const now = Date.now();
     const previous = String(professional.statusBeforeArchive ?? "active");
     const trialStatus = trialStatusAt({ ...professional, status: previous as ProfessionalRecord["status"] }, now);
-    const canAccess = account.status === "active" && previous !== "inactive" && trialStatus !== "expired";
+    const canAccess = hasActiveAccountAccess(account, now) && previous !== "inactive" && trialStatus !== "expired";
     const status = canAccess ? (previous === "trial" ? "trial" : previous === "subscriber" ? "subscriber" : "active") : "inactive";
     const batch = db.batch();
     batch.set(db.doc(`professionals/${input.professionalId}`), { status, isActive: canAccess, archivedAtMs: null, archivedBy: null, updatedAtMs: now }, { merge: true });
@@ -1910,6 +1916,9 @@ export const updateProfessionalSlug = onCall(
     if (!isHqUser && user.professionalId !== professionalId) {
       throw new HttpsError("permission-denied", "Você não pode alterar este endereço.");
     }
+    if (!isHqUser && !hasActiveAccountAccess(accountSnap.data())) {
+      throw new HttpsError("failed-precondition", "Regularize a assinatura para alterar o link público.");
+    }
     const currentSlug = String(professionalSnap.data()?.publicSlug ?? accountSnap.data()?.slug ?? "");
     if (currentSlug === input.slug) return { ok: true, slug: input.slug };
     const now = Date.now();
@@ -1985,6 +1994,13 @@ async function resolveDailyPostProfessional(uid: string, requestedProfessionalId
     || (user.role === "professional" && user.professionalId === professionalId)
     || (user.role === "clinic" && user.accountId === professional.accountId);
   if (!allowed) throw new HttpsError("permission-denied", "Você não pode acessar o Post do Dia deste profissional.");
+  if (user.role !== "hq") {
+    const accountId = String(professional.accountId ?? "");
+    const accountSnap = accountId ? await db.doc(`accounts/${accountId}`).get() : null;
+    if (!accountSnap?.exists || !hasActiveAccountAccess(accountSnap.data()) || professional.isActive !== true) {
+      throw new HttpsError("failed-precondition", "Regularize a assinatura para usar o Post do Dia.");
+    }
+  }
   return { professionalId, professional };
 }
 
@@ -2326,9 +2342,10 @@ async function resolveAssistantAccess(uid: string, requestedAccountId?: string):
   const trialMarked = account.subscriptionStatus === "trial" || account.trialStatus === "active";
   const trialActive = trialMarked && trialEndsAt > now;
   const trialExpired = account.trialStatus === "expired" || (trialMarked && trialEndsAt <= now);
+  const accountActive = hasActiveAccountAccess(account, now);
   const entitlement = assistantEntitlement({
     plan,
-    accountActive: account.status === "active" && !trialExpired,
+    accountActive,
     trialActive,
     trialExpired,
     settings,
@@ -2391,7 +2408,7 @@ async function reserveAssistantInteraction(access: ResolvedAssistantAccess, mode
     const usage = usageSnap.data() ?? {};
     const current = assistantEntitlement({
       plan: access.plan,
-      accountActive: access.account.status === "active",
+      accountActive: hasActiveAccountAccess(access.account),
       trialActive: access.trialActive,
       trialExpired: access.trialExpired,
       settings,
@@ -3048,7 +3065,7 @@ async function requireProfessionalAssistantTarget(
   if (!planHasProfessionalAssistants(normalizePlan(account.data()?.plan))) {
     throw new HttpsError("failed-precondition", "A assistente personalizada está disponível nos planos Pro e Network.");
   }
-  if (ownsProfile && (account.data()?.status !== "active" || professional.data()?.isActive !== true)) {
+  if (ownsProfile && (!hasActiveAccountAccess(account.data()) || professional.data()?.isActive !== true)) {
     throw new HttpsError("failed-precondition", "A conta e o perfil profissional precisam estar ativos.");
   }
 }
@@ -3663,6 +3680,17 @@ export const deleteLead = onCall(
         "Você não pode excluir este lead.",
       );
     }
+    if (user.role !== "hq") {
+      const accountSnap = accountId
+        ? await db.doc(`accounts/${accountId}`).get()
+        : null;
+      if (!accountSnap?.exists || !hasActiveAccountAccess(accountSnap.data())) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Regularize a assinatura para alterar os leads.",
+        );
+      }
+    }
     await leadSnap.ref.delete();
     return { ok: true };
   },
@@ -3807,7 +3835,7 @@ export const expirePaidSubscriptions = onSchedule(
     const now = Date.now();
     const snapshot = await db
       .collection("accounts")
-      .where("subscriptionStatus", "==", "active")
+      .where("status", "==", "active")
       .where("renewAtMs", "<", now)
       .limit(500)
       .get();

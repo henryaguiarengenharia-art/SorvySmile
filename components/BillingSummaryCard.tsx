@@ -26,7 +26,7 @@ const statusCopy: Record<AccountStatus, {
   },
   overdue: {
     label: "Pagamento em atraso",
-    detail: "Regularize para evitar a pausa do acesso",
+    detail: "Acesso operacional pausado até a regularização",
     className: "bg-amber-50 text-amber-800",
   },
   paused: {
@@ -49,10 +49,19 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
 }) => {
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
-  const status = account.status ?? "pending";
-  const statusInfo = statusCopy[status];
   const isTrialReady = account.subscriptionStatus === "trial_ready" || account.trialStatus === "ready";
   const isTrial = account.subscriptionStatus === "trial" || account.trialStatus === "active";
+  const paidExpired = Boolean(
+    !isTrial
+    && Number(account.renewAt ?? 0) > 0
+    && Number(account.renewAt ?? 0) <= Date.now()
+    && (
+      account.paymentStatus === "confirmed"
+      || account.subscriptionStatus === "active"
+    )
+  );
+  const status: AccountStatus = paidExpired ? "overdue" : account.status ?? "pending";
+  const statusInfo = statusCopy[status];
   const dueAt = isTrial ? account.trialUntil ?? 0 : account.renewAt;
   const dueLabel = isTrialReady ? "Início da contagem" : isTrial ? "Fim do teste" : "Próximo vencimento";
   const lifecycleLabel = isTrialReady ? "Teste preparado" : isTrial ? "Teste em andamento" : statusInfo.label;
@@ -61,8 +70,8 @@ export const BillingSummaryCard: React.FC<BillingSummaryCardProps> = ({
     : isTrial
       ? "Período gratuito ativo"
       : statusInfo.detail;
-  const showPaymentLink = !readOnly
-    && Boolean(onStartCheckout)
+  const showPaymentLink = Boolean(onStartCheckout)
+    && (!readOnly || status === "overdue")
     && (status === "pending" || status === "overdue" || isTrialReady || isTrial);
   const intentContext = isTrialReady
     ? "trial_ready" as const
