@@ -1,15 +1,10 @@
 import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { ASSISTANT_DEFINITIONS, ASSISTANT_KNOWLEDGE } from "./assistantDefinitions.js";
+import { requireSeedProject } from "./seedProject.js";
 
-if (getApps().length === 0) initializeApp();
-
-const projectId = process.env.TARGET_FIREBASE_PROJECT_ID
-  ?? process.env.GOOGLE_CLOUD_PROJECT
-  ?? process.env.GCLOUD_PROJECT;
-if (projectId !== "sorvysmile-homologacao") {
-  throw new Error("Defina explicitamente o projeto de homologação antes de executar o seed das assistentes.");
-}
+const projectId = requireSeedProject();
+if (getApps().length === 0) initializeApp({ projectId });
 
 const db = getFirestore();
 const batch = db.batch();
