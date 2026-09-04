@@ -868,7 +868,7 @@ const LandingView = ({
               </div>
               <aside className="rounded-[2rem] border border-emerald-200 bg-emerald-50 p-6 text-center">
                 <p className="text-lg font-black text-emerald-950">Inicie sua experiência</p>
-                <p className="mt-3 text-xs font-medium leading-relaxed text-emerald-800">Responda algumas perguntas rápidas para organizar o que deseja conversar.</p>
+                <p className="mt-3 text-xs font-medium leading-relaxed text-emerald-800">Veja os primeiros destaques do seu sorriso em poucos minutos — e chegue à conversa com mais clareza.</p>
                 <button onClick={onStart} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-5 py-4 text-xs font-black uppercase text-white shadow-lg transition hover:bg-emerald-700">Começar agora <ArrowRight className="h-4 w-4" /></button>
                 {profile.whatsapp && <a href={whatsappUrl(profile.whatsapp)} target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-5 py-3 text-xs font-black text-emerald-800"><MessageCircle className="h-4 w-4" />Falar com profissional</a>}
               </aside>
@@ -911,7 +911,7 @@ const LandingView = ({
           Como funciona
         </p>
         <h2 className="mt-3 text-center text-4xl font-black tracking-tight">
-          Simples, rápido e informativo.
+          Veja seu sorriso. Entenda o que observar. Saiba o próximo passo.
         </h2>
         <div className="mt-9 grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
