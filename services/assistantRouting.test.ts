@@ -27,7 +27,25 @@ describe("roteamento operacional da Sofia", () => {
 
     expect(result?.headline).toBe("Prioridades de hoje");
     expect(result?.answer).toContain("Ana Beatriz");
+    expect(result?.answer).toContain("prioridade ALTA");
+    expect(result?.answer).toContain("Motivo: pediu contato e ainda não recebeu o primeiro atendimento");
+    expect(result?.answer).not.toMatch(/\bscore\s+\d+/i);
     expect(result?.actionKeys).toContain("open-lead");
+  });
+
+  it("mantém o score numérico apenas como cálculo interno e expõe prioridade semântica", () => {
+    const result = routeAssistantQuestion({
+      question: "O que faço com Ana Beatriz?",
+      leads: [lead({ contactRequestedAtMs: Date.now() - 3_600_000 })],
+      role: "professional",
+      now: Date.now(),
+    });
+
+    expect(result?.headline).toBe("Ana Beatriz");
+    expect(result?.answer).toContain("Prioridade operacional: ALTA");
+    expect(result?.answer).toContain("Próxima ação: fazer o primeiro contato");
+    expect(result?.answer).not.toMatch(/\bscore\b/i);
+    expect(result?.answer).not.toMatch(/Prioridade operacional:\s*\d+/i);
   });
 
   it("entrega atalhos de funil, post e mensagem", () => {
