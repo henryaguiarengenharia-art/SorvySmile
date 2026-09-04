@@ -47,6 +47,8 @@ const STATUS_LABELS: Record<LeadRecord["status"], string> = {
   lost: "NÃO CONVERTIDO",
 };
 
+type LeadPriorityLevel = "ALTA" | "MÉDIA" | "BAIXA";
+
 function normalize(value: string): string {
   return value
     .normalize("NFD")
@@ -67,6 +69,42 @@ export function leadPriorityScore(lead: LeadRecord, now = Date.now()): number {
   const noContactWeight = lead.firstContactAt ? 0 : 24;
   const ageWeight = Math.min(16, Math.floor(ageHours(lead, now) / 12) * 2);
   return Math.min(99, statusWeight + requestWeight + noContactWeight + ageWeight);
+}
+
+function leadPriorityLevel(lead: LeadRecord, now: number): LeadPriorityLevel {
+  const score = leadPriorityScore(lead, now);
+  if (score >= 60) return "ALTA";
+  if (score >= 30) return "MÉDIA";
+  return "BAIXA";
+}
+
+function leadPriorityReason(lead: LeadRecord, now: number): string {
+  const requestedContact = Boolean(lead.contactRequestedAtMs);
+  const hasFirstContact = Boolean(lead.firstContactAt);
+  const stalledForDay = ageHours(lead, now) >= 24;
+
+  if (requestedContact && !hasFirstContact) {
+    return "pediu contato e ainda não recebeu o primeiro atendimento";
+  }
+  if (requestedContact) {
+    return "pediu contato e precisa de continuidade";
+  }
+  if (!hasFirstContact && stalledForDay) {
+    return "ainda não recebeu o primeiro contato e está sem avanço há mais de 24h";
+  }
+  if (!hasFirstContact) {
+    return "ainda não recebeu o primeiro contato";
+  }
+  if (stalledForDay) {
+    return "está sem avanço há mais de 24h";
+  }
+  if (lead.status === "scheduled") {
+    return "já está agendado e precisa de confirmação do próximo passo";
+  }
+  if (lead.status === "in_chat") {
+    return "já está em conversa e precisa de acompanhamento";
+  }
+  return "é um lead aberto que precisa de acompanhamento";
 }
 
 function nextAction(lead: LeadRecord): string {
@@ -98,11 +136,11 @@ function prioritiesReply(leads: LeadRecord[], now: number): DeterministicAssista
     };
   }
   const lines = priorityLeads.map((lead) => (
-    `${displayName(lead)} — ${STATUS_LABELS[lead.status]} — score ${leadPriorityScore(lead, now)}.\nPróxima ação: ${nextAction(lead)}.`
+    `${displayName(lead)} — ${STATUS_LABELS[lead.status]} — prioridade ${leadPriorityLevel(lead, now)}.\nMotivo: ${leadPriorityReason(lead, now)}.\nPróxima ação: ${nextAction(lead)}.`
   ));
   return {
     headline: "Prioridades de hoje",
-    answer: `${lines.join("\n\n")}\n\nComece pelo primeiro lead: ele combina maior urgência operacional e maior tempo sem avanço.`,
+    answer: `${lines.join("\n\n")}\n\nComece pelo primeiro lead: ele reúne os sinais operacionais de maior prioridade neste momento.`,
     leadId: priorityLeads[0].id,
     actionKeys: ["open-lead", "open-leads"],
     shortcut: "priorities",
@@ -217,7 +255,7 @@ function directLeadReply(question: string, leads: LeadRecord[], now: number): De
   if (!lead) return null;
   return {
     headline: displayName(lead),
-    answer: `Status atual: ${STATUS_LABELS[lead.status]}.\nPróxima ação: ${nextAction(lead)}.\nPrioridade operacional: ${leadPriorityScore(lead, now)}.`,
+    answer: `Status atual: ${STATUS_LABELS[lead.status]}.\nPrioridade operacional: ${leadPriorityLevel(lead, now)}.\nMotivo: ${leadPriorityReason(lead, now)}.\nPróxima ação: ${nextAction(lead)}.`,
     leadId: lead.id,
     actionKeys: ["open-lead"],
   };
