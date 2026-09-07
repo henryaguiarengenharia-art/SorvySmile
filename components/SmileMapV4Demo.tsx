@@ -15,7 +15,6 @@ import {
   ScanLine,
   ShieldCheck,
   Smile,
-  Sparkles,
   Sun,
   Target,
 } from "lucide-react";
