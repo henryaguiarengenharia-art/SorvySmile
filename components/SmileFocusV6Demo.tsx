@@ -308,6 +308,7 @@ const IdentityStage = ({ onBack, onContinue }: { onBack: () => void; onContinue:
 
 const FocusStage = ({ leadName, onBack, onContinue }: { leadName: string; onBack: () => void; onContinue: () => void }) => {
   const [selectedId, setSelectedId] = useState<FocusId>("alignment");
+  const [expandedMobileId, setExpandedMobileId] = useState<FocusId | null>(null);
   const selected = useMemo(() => AREAS.find((area) => area.id === selectedId) ?? AREAS[0], [selectedId]);
   const timeReference = TIME_REFERENCES[selected.id];
   const SelectedIcon = selected.icon;
@@ -360,33 +361,84 @@ const FocusStage = ({ leadName, onBack, onContinue }: { leadName: string; onBack
                 O resultado geral não encerra a leitura. Ele cria referência. Quando os quatro índices são comparados, o alinhamento continua sendo o ponto que mais se distancia do conjunto.
               </p>
               <div className="mt-6 space-y-3">
-                {AREAS.map((area) => (
-                  <button
-                    key={area.id}
-                    type="button"
-                    onClick={() => setSelectedId(area.id)}
-                    className={`w-full rounded-2xl border p-4 text-left transition ${selectedId === area.id ? "border-blue-300 bg-white/10 shadow-lg shadow-blue-950/30" : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.075]"}`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-black">{area.label}</p>
-                        <p className="mt-1 text-[10px] font-medium leading-relaxed text-white/45">{area.summary}</p>
-                      </div>
-                      <span className="text-xl font-black">{area.score}</span>
+                {AREAS.map((area) => {
+                  const isExpandedOnMobile = expandedMobileId === area.id;
+                  const AreaIcon = area.icon;
+                  const mobileTimeReference = TIME_REFERENCES[area.id];
+
+                  return (
+                    <div key={area.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedId(area.id);
+                          setExpandedMobileId(area.id);
+                        }}
+                        aria-expanded={isExpandedOnMobile}
+                        className={`w-full rounded-2xl border p-4 text-left transition ${selectedId === area.id ? "border-blue-300 bg-white/10 shadow-lg shadow-blue-950/30" : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.075]"}`}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-xs font-black">{area.label}</p>
+                            <p className="mt-1 text-[10px] font-medium leading-relaxed text-white/45">{area.summary}</p>
+                          </div>
+                          <span className="text-xl font-black">{area.score}</span>
+                        </div>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"><div className={`h-full rounded-full ${selectedId === area.id ? "bg-blue-400" : "bg-white/35"}`} style={{ width: `${area.score}%` }} /></div>
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <span className="text-[8px] font-black uppercase tracking-[0.14em] text-white/35">índice visual</span>
+                          <span className={`text-[9px] font-black ${selectedId === area.id ? "text-blue-200" : "text-white/50"}`}>{isExpandedOnMobile ? "Detalhes abertos ↓" : "Entender este sinal ↓"}</span>
+                        </div>
+                      </button>
+
+                      {isExpandedOnMobile && (
+                        <div className="mt-3 rounded-[1.75rem] border border-blue-100 bg-white p-5 text-slate-950 shadow-xl lg:hidden">
+                          <div className="flex items-start gap-3">
+                            <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${area.soft} ${area.accent}`}><AreaIcon className="h-5 w-5" /></span>
+                            <div>
+                              <p className="text-[8px] font-black uppercase tracking-[0.16em] text-blue-600">Aprofundando · {area.label}</p>
+                              <h3 className="mt-1 text-xl font-black leading-tight">{area.headline}</h3>
+                            </div>
+                          </div>
+
+                          <p className="mt-4 text-xs font-medium leading-relaxed text-slate-500">{area.summary}</p>
+
+                          <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                            <p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">O que vale conversar</p>
+                            <p className="mt-2 text-sm font-black leading-relaxed text-slate-700">{area.action}</p>
+                          </div>
+
+                          <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                            <p className="text-[8px] font-black uppercase tracking-[0.16em] text-blue-600">Pergunta para levar</p>
+                            <p className="mt-2 text-sm font-black leading-relaxed text-slate-800">“{area.question}”</p>
+                          </div>
+
+                          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                            <div className="flex items-center gap-3">
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-white"><Clock3 className="h-5 w-5" /></span>
+                              <div>
+                                <p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">Tempo relacionado a este sinal</p>
+                                <p className="mt-1 text-xs font-black text-slate-700">{mobileTimeReference.eyebrow}</p>
+                              </div>
+                            </div>
+                            <p className="mt-4 text-3xl font-black tracking-tight">{mobileTimeReference.range}</p>
+                            <p className="mt-2 text-sm font-black leading-tight text-slate-800">{mobileTimeReference.headline}</p>
+                            <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500">{mobileTimeReference.body}</p>
+                            <p className="mt-3 text-[9px] font-medium leading-relaxed text-slate-400">{mobileTimeReference.source}</p>
+                          </div>
+
+                          <p className="mt-4 text-[10px] font-black leading-relaxed text-blue-700">Agora toque em outro sinal para comparar sem perder o contexto.</p>
+                        </div>
+                      )}
                     </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"><div className={`h-full rounded-full ${selectedId === area.id ? "bg-blue-400" : "bg-white/35"}`} style={{ width: `${area.score}%` }} /></div>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <span className="text-[8px] font-black uppercase tracking-[0.14em] text-white/35">índice visual</span>
-                      <span className={`text-[9px] font-black ${selectedId === area.id ? "text-blue-200" : "text-white/50"}`}>Entender este sinal →</span>
-                    </div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
         </section>
 
-        <section className="mx-auto mt-6 grid max-w-5xl gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+        <section className="mx-auto mt-6 hidden max-w-5xl gap-5 lg:grid lg:grid-cols-[0.95fr_1.05fr]">
           <article className="rounded-[2.5rem] border border-slate-200 bg-white p-7 shadow-sm sm:p-8">
             <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${selected.soft} ${selected.accent}`}><SelectedIcon className="h-6 w-6" /></div>
             <p className="mt-5 text-[9px] font-black uppercase tracking-[0.18em] text-blue-600">Aprofundando · {selected.label}</p>
