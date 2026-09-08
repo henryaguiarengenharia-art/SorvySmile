@@ -10,7 +10,11 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-const isSmileMapV4Demo = window.location.pathname === "/demo/smile-map-v4";
+const normalizedPath = window.location.pathname.replace(/\/+$/, "") || "/";
+const demoParam = new URLSearchParams(window.location.search).get("demo");
+const isSmileMapV4Demo =
+  normalizedPath === "/demo/smile-map-v4"
+  || demoParam === "smile-map-v4";
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
