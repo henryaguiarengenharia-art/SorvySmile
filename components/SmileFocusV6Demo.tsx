@@ -34,6 +34,14 @@ interface FocusArea {
   soft: string;
 }
 
+interface TimeReference {
+  eyebrow: string;
+  range: string;
+  headline: string;
+  body: string;
+  source: string;
+}
+
 const AREAS: FocusArea[] = [
   {
     id: "alignment",
@@ -89,7 +97,41 @@ const AREAS: FocusArea[] = [
   },
 ];
 
-const JOURNEY = [["Sorriso", Smile], ["Primeiro sinal", Sparkles], ["Em foco", Eye], ["Ação", MessageCircle]] as const;
+const TIME_REFERENCES: Record<FocusId, TimeReference> = {
+  alignment: {
+    eyebrow: "Se houver indicação ortodôntica",
+    range: "~6–30 meses",
+    headline: "Mudanças de alinhamento costumam exigir horizonte de meses.",
+    body: "A duração depende de complexidade, técnica, resposta individual e objetivo. A avaliação define se esse caminho é necessário no seu caso.",
+    source: "Referência geral de duração: NHS · não é estimativa individual.",
+  },
+  brightness: {
+    eyebrow: "Se o objetivo for melhorar a tonalidade",
+    range: "~2–6 semanas",
+    headline: "Algumas mudanças de cor podem acontecer em semanas.",
+    body: "Clareamento supervisionado pode ter horizontes mais curtos que mudanças de alinhamento. O dentista define indicação, técnica e segurança.",
+    source: "Referência geral de clareamento domiciliar supervisionado: NHS · não é estimativa individual.",
+  },
+  harmony: {
+    eyebrow: "Se o objetivo for preservar e manter",
+    range: "A partir de 1 consulta",
+    headline: "Prevenção pode começar de forma simples.",
+    body: "Uma avaliação pode organizar revisão, higiene profissional e manutenção quando indicadas, além de definir se existe algo que precisa de acompanhamento.",
+    source: "O tempo depende do que for indicado após avaliação profissional.",
+  },
+  proportion: {
+    eyebrow: "Se houver uma oportunidade estética",
+    range: "Horizonte variável",
+    headline: "Proporção não aponta para um único caminho.",
+    body: "O tempo muda conforme o objetivo e o tipo de abordagem considerada. Primeiro é preciso entender se existe algo que realmente valha modificar.",
+    source: "Não há estimativa individual sem avaliação e definição de objetivo.",
+  },
+};
+
+const OVERALL_SCORE = Math.round(AREAS.reduce((total, area) => total + area.score, 0) / AREAS.length);
+const ALIGNMENT_GAP = OVERALL_SCORE - AREAS[0].score;
+
+const JOURNEY = [["Sorriso", Smile], ["Primeiro sinal", Sparkles], ["Resultado completo", Eye], ["Ação", MessageCircle]] as const;
 
 const JourneyRail = ({ current }: { current: number }) => (
   <div className="mx-auto grid w-full max-w-3xl grid-cols-4 gap-2">
@@ -247,16 +289,16 @@ const IdentityStage = ({ onBack, onContinue }: { onBack: () => void; onContinue:
       <div className="mt-6 grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <section className="rounded-[2.5rem] bg-slate-950 p-7 text-white sm:p-8">
           <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-300">O que você libera</p>
-          <h1 className="mt-2 text-3xl font-black">Comparação completa + horizonte de mudança.</h1>
-          <div className="mt-6 space-y-3">{["4 índices visuais comparados", "Prioridade clara para conversar", "Tempo de referência: rápido, semanas ou meses", "Contexto enviado para a clínica"].map((item) => <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3"><Check className="h-4 w-4 text-emerald-300" /><p className="text-xs font-bold text-white/75">{item}</p></div>)}</div>
+          <h1 className="mt-2 text-3xl font-black">Seu resultado completo + horizonte de mudança.</h1>
+          <div className="mt-6 space-y-3">{["Índice Visual Geral", "4 sinais comparados", "Prioridade clara para conversar", "Tempo correlacionado ao sinal", "Contexto enviado para a clínica"].map((item) => <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 p-3"><Check className="h-4 w-4 text-emerald-300" /><p className="text-xs font-bold text-white/75">{item}</p></div>)}</div>
         </section>
         <form onSubmit={submit} className="rounded-[2.5rem] border border-slate-200 bg-white p-7 shadow-xl sm:p-8">
-          <div className="flex items-start gap-4"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><User className="h-6 w-6" /></span><div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-600">Troca transparente</p><h2 className="mt-1 text-2xl font-black">Seu mapa de ação está pronto.</h2></div></div>
+          <div className="flex items-start gap-4"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><User className="h-6 w-6" /></span><div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-600">Troca transparente</p><h2 className="mt-1 text-2xl font-black">Seu resultado completo está pronto.</h2></div></div>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Seu nome" className="mt-7 w-full rounded-2xl border-2 border-slate-100 bg-slate-50 p-4 text-sm font-bold outline-none focus:border-blue-500" />
           <input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="WhatsApp com DDD" inputMode="numeric" className="mt-3 w-full rounded-2xl border-2 border-slate-100 bg-slate-50 p-4 text-sm font-bold outline-none focus:border-blue-500" />
           <label className="mt-4 flex gap-3 rounded-2xl border border-blue-100 bg-blue-50 p-4"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-5 w-5" /><span className="text-[11px] font-bold leading-relaxed text-slate-600">Autorizo o compartilhamento do meu nome, WhatsApp e contexto da triagem com a Clínica Saúde Integrada BH.</span></label>
           {error && <p className="mt-4 rounded-2xl bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
-          <button type="submit" className="mt-6 flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 px-6 py-4 text-[10px] font-black uppercase tracking-[0.16em] text-white">Liberar análise completa <ArrowRight className="h-4 w-4" /></button>
+          <button type="submit" className="mt-6 flex w-full items-center justify-center gap-3 rounded-2xl bg-blue-600 px-6 py-4 text-[10px] font-black uppercase tracking-[0.16em] text-white">Liberar resultado completo <ArrowRight className="h-4 w-4" /></button>
           <p className="mt-3 text-center text-[9px] text-slate-400">Demo: nada digitado aqui é enviado ou armazenado.</p>
         </form>
       </div>
@@ -267,27 +309,134 @@ const IdentityStage = ({ onBack, onContinue }: { onBack: () => void; onContinue:
 const FocusStage = ({ leadName, onBack, onContinue }: { leadName: string; onBack: () => void; onContinue: () => void }) => {
   const [selectedId, setSelectedId] = useState<FocusId>("alignment");
   const selected = useMemo(() => AREAS.find((area) => area.id === selectedId) ?? AREAS[0], [selectedId]);
+  const timeReference = TIME_REFERENCES[selected.id];
   const SelectedIcon = selected.icon;
+
   return (
-    <main className="px-5 pb-16 pt-8 sm:pt-12"><div className="mx-auto max-w-6xl"><JourneyRail current={2} />
-      <button type="button" onClick={onBack} className="mt-8 inline-flex items-center gap-2 text-xs font-black text-slate-500"><ChevronLeft className="h-4 w-4" /> Voltar</button>
-      <div className="mx-auto mt-6 max-w-3xl text-center"><p className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">Seu sorriso em foco</p><h1 className="mt-3 text-4xl font-black sm:text-6xl">{leadName || "Agora"}, números ajudam a comparar. A ação vem da leitura do conjunto.</h1><p className="mx-auto mt-5 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">Os índices são visuais e comparativos — não diagnósticos. Eles mostram onde existe mais contraste e onde vale levar a conversa adiante.</p></div>
+    <main className="px-5 pb-16 pt-8 sm:pt-12">
+      <div className="mx-auto max-w-6xl">
+        <JourneyRail current={2} />
+        <button type="button" onClick={onBack} className="mt-8 inline-flex items-center gap-2 text-xs font-black text-slate-500"><ChevronLeft className="h-4 w-4" /> Voltar</button>
 
-      <section className="mx-auto mt-9 max-w-5xl rounded-[2.75rem] bg-slate-950 p-6 text-white shadow-2xl sm:p-8">
-        <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-          <div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-300">Comparação visual</p><h2 className="mt-2 text-3xl font-black">O alinhamento fica abaixo dos outros sinais.</h2><p className="mt-3 text-sm font-medium leading-relaxed text-white/55">Isso cria prioridade. Não porque 71 seja um diagnóstico, mas porque ele se distancia do melhor índice da leitura.</p></div>
-          <div className="space-y-4">{AREAS.map((area) => <button key={area.id} type="button" onClick={() => setSelectedId(area.id)} className={`w-full rounded-2xl border p-4 text-left transition ${selectedId === area.id ? "border-blue-300 bg-white/10" : "border-white/10 bg-white/5"}`}><div className="flex items-center justify-between gap-4"><span className="text-xs font-black">{area.label}</span><span className="text-lg font-black">{area.score}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"><div className={`h-full rounded-full ${selectedId === area.id ? "bg-blue-400" : "bg-white/35"}`} style={{ width: `${area.score}%` }} /></div></button>)}</div>
+        <div className="mx-auto mt-6 max-w-3xl text-center">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">Seu resultado completo</p>
+          <h1 className="mt-3 text-4xl font-black sm:text-6xl">{leadName || "Agora"}, veja o que os quatro sinais dizem quando aparecem juntos.</h1>
+          <p className="mx-auto mt-5 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
+            O índice geral resume a leitura. A comparação mostra onde existe mais contraste — e onde vale aprofundar primeiro.
+          </p>
         </div>
-      </section>
 
-      <section className="mx-auto mt-6 grid max-w-5xl gap-5 lg:grid-cols-[0.95fr_1.05fr]">
-        <article className="rounded-[2.5rem] border border-slate-200 bg-white p-7 shadow-sm sm:p-8"><div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${selected.soft} ${selected.accent}`}><SelectedIcon className="h-6 w-6" /></div><p className="mt-5 text-[9px] font-black uppercase tracking-[0.18em] text-blue-600">{selected.label}</p><h2 className="mt-2 text-2xl font-black">{selected.headline}</h2><p className="mt-3 text-xs font-medium leading-relaxed text-slate-500">{selected.summary}</p><div className="mt-5 rounded-2xl bg-slate-50 p-4"><p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">Ação sugerida para conversar</p><p className="mt-2 text-sm font-black text-slate-700">{selected.action}</p></div></article>
+        <section className="mx-auto mt-9 max-w-5xl overflow-hidden rounded-[2.75rem] bg-slate-950 p-6 text-white shadow-2xl sm:p-8">
+          <div className="grid gap-8 lg:grid-cols-[0.82fr_1.18fr] lg:items-center">
+            <div className="relative overflow-hidden rounded-[2.25rem] border border-white/10 bg-white/[0.045] p-6 sm:p-7">
+              <div className="pointer-events-none absolute -right-16 -top-16 h-52 w-52 rounded-full bg-blue-500/20 blur-3xl" />
+              <div className="relative">
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-300">Índice Visual Geral</p>
+                <div className="mt-5 flex items-end gap-2">
+                  <p className="text-7xl font-black tracking-tight">{OVERALL_SCORE}</p>
+                  <p className="pb-2 text-xl font-black text-white/25">/100</p>
+                </div>
+                <p className="mt-4 text-sm font-bold leading-relaxed text-white/70">Uma visão do conjunto antes de entrar nos detalhes.</p>
+                <div className="mt-6 h-3 overflow-hidden rounded-full bg-white/10"><div className="h-full rounded-full bg-blue-400" style={{ width: `${OVERALL_SCORE}%` }} /></div>
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-[8px] font-black uppercase tracking-wider text-white/30">Maior índice</p>
+                    <p className="mt-2 text-2xl font-black">82</p>
+                    <p className="mt-1 text-[9px] font-bold text-white/45">Cor & brilho</p>
+                  </div>
+                  <div className="rounded-2xl border border-violet-300/20 bg-violet-300/10 p-4">
+                    <p className="text-[8px] font-black uppercase tracking-wider text-violet-200">Principal contraste</p>
+                    <p className="mt-2 text-2xl font-black">71</p>
+                    <p className="mt-1 text-[9px] font-bold text-white/45">Alinhamento</p>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-        <article className="rounded-[2.5rem] border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-white p-7 sm:p-8"><div className="flex items-center gap-3"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white"><Clock3 className="h-6 w-6" /></span><div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-600">Tempo para perceber mudança</p><h2 className="mt-1 text-2xl font-black">Nem toda melhoria exige o mesmo horizonte.</h2></div></div><div className="mt-6 grid gap-3 sm:grid-cols-3"><div className="rounded-2xl border border-white bg-white p-4 shadow-sm"><p className="text-[8px] font-black uppercase tracking-wider text-emerald-600">Rápido</p><p className="mt-2 text-sm font-black">1 consulta</p><p className="mt-1 text-[10px] font-medium text-slate-400">Ex.: limpeza/manutenção, quando indicada.</p></div><div className="rounded-2xl border border-white bg-white p-4 shadow-sm"><p className="text-[8px] font-black uppercase tracking-wider text-amber-600">Semanas</p><p className="mt-2 text-sm font-black">~2–6 semanas</p><p className="mt-1 text-[10px] font-medium text-slate-400">Ex.: clareamento domiciliar supervisionado.</p></div><div className="rounded-2xl border border-white bg-white p-4 shadow-sm"><p className="text-[8px] font-black uppercase tracking-wider text-violet-600">Meses</p><p className="mt-2 text-sm font-black">~6–30 meses</p><p className="mt-1 text-[10px] font-medium text-slate-400">Ex.: tratamento ortodôntico, conforme complexidade.</p></div></div><p className="mt-4 text-[9px] font-medium leading-relaxed text-slate-400">Referências gerais de duração, não estimativa individual. Clareamento: NHS. Ortodontia: NHS. Limpeza/manutenção depende da indicação clínica.</p></article>
-      </section>
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-300">O que a média revela</p>
+              <h2 className="mt-2 text-3xl font-black">O alinhamento está {ALIGNMENT_GAP} pontos abaixo da sua média geral.</h2>
+              <p className="mt-3 text-sm font-medium leading-relaxed text-white/55">
+                O resultado geral não encerra a leitura. Ele cria referência. Quando os quatro índices são comparados, o alinhamento continua sendo o ponto que mais se distancia do conjunto.
+              </p>
+              <div className="mt-6 space-y-3">
+                {AREAS.map((area) => (
+                  <button
+                    key={area.id}
+                    type="button"
+                    onClick={() => setSelectedId(area.id)}
+                    className={`w-full rounded-2xl border p-4 text-left transition ${selectedId === area.id ? "border-blue-300 bg-white/10 shadow-lg shadow-blue-950/30" : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/[0.075]"}`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-black">{area.label}</p>
+                        <p className="mt-1 text-[10px] font-medium leading-relaxed text-white/45">{area.summary}</p>
+                      </div>
+                      <span className="text-xl font-black">{area.score}</span>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10"><div className={`h-full rounded-full ${selectedId === area.id ? "bg-blue-400" : "bg-white/35"}`} style={{ width: `${area.score}%` }} /></div>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="text-[8px] font-black uppercase tracking-[0.14em] text-white/35">índice visual</span>
+                      <span className={`text-[9px] font-black ${selectedId === area.id ? "text-blue-200" : "text-white/50"}`}>Entender este sinal →</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
 
-      <section className="mx-auto mt-6 max-w-5xl rounded-[2.5rem] border border-amber-200 bg-amber-50 p-6 sm:p-8"><div className="grid gap-6 sm:grid-cols-[1fr_auto]"><div><p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-700">Por que agir mesmo sem dor?</p><h2 className="mt-2 text-2xl font-black">Dor não é um bom marcador para decidir quando cuidar.</h2><p className="mt-2 max-w-2xl text-xs font-medium leading-relaxed text-slate-600">Cárie em estágio inicial normalmente não causa sintomas. Doença gengival também pode se tornar séria antes de a pessoa perceber. Revisão profissional existe justamente para identificar o que uma foto e a ausência de dor não conseguem confirmar.</p><p className="mt-3 text-[9px] font-black uppercase tracking-wider text-amber-700/60">Evidência educacional: NIDCR + CDC</p></div><button type="button" onClick={onContinue} className="inline-flex items-center justify-center gap-3 rounded-2xl bg-slate-950 px-6 py-4 text-[10px] font-black uppercase tracking-[0.16em] text-white">Quero avaliar isso agora <ArrowRight className="h-4 w-4" /></button></div></section>
-    </div></main>
+        <section className="mx-auto mt-6 grid max-w-5xl gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+          <article className="rounded-[2.5rem] border border-slate-200 bg-white p-7 shadow-sm sm:p-8">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${selected.soft} ${selected.accent}`}><SelectedIcon className="h-6 w-6" /></div>
+            <p className="mt-5 text-[9px] font-black uppercase tracking-[0.18em] text-blue-600">Aprofundando · {selected.label}</p>
+            <h2 className="mt-2 text-2xl font-black">{selected.headline}</h2>
+            <p className="mt-3 text-xs font-medium leading-relaxed text-slate-500">{selected.summary}</p>
+            <div className="mt-5 rounded-2xl bg-slate-50 p-4">
+              <p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">O que vale conversar</p>
+              <p className="mt-2 text-sm font-black text-slate-700">{selected.action}</p>
+            </div>
+            <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4">
+              <p className="text-[8px] font-black uppercase tracking-[0.16em] text-blue-600">Pergunta para levar</p>
+              <p className="mt-2 text-sm font-black leading-relaxed text-slate-800">“{selected.question}”</p>
+            </div>
+          </article>
+
+          <article className="rounded-[2.5rem] border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-white p-7 sm:p-8">
+            <div className="flex items-center gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white"><Clock3 className="h-6 w-6" /></span>
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[0.18em] text-blue-600">Tempo relacionado a este sinal</p>
+                <h2 className="mt-1 text-2xl font-black">{timeReference.eyebrow}</h2>
+              </div>
+            </div>
+            <div className="mt-6 rounded-[2rem] border border-white bg-white p-6 shadow-sm">
+              <p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">Horizonte de referência</p>
+              <p className="mt-2 text-4xl font-black tracking-tight text-slate-950">{timeReference.range}</p>
+              <h3 className="mt-4 text-lg font-black leading-tight text-slate-800">{timeReference.headline}</h3>
+              <p className="mt-3 text-xs font-medium leading-relaxed text-slate-500">{timeReference.body}</p>
+            </div>
+            <p className="mt-4 text-[9px] font-medium leading-relaxed text-slate-400">{timeReference.source}</p>
+            <p className="mt-5 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-xs font-black leading-relaxed text-blue-800">
+              O tempo muda quando o sinal muda. Selecione outro resultado acima para comparar possibilidades.
+            </p>
+          </article>
+        </section>
+
+        <section className="mx-auto mt-6 max-w-5xl rounded-[2.5rem] border border-amber-200 bg-amber-50 p-6 sm:p-8">
+          <div className="grid gap-6 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <p className="text-[9px] font-black uppercase tracking-[0.18em] text-amber-700">Por que agir mesmo sem dor?</p>
+              <h2 className="mt-2 text-2xl font-black">Dor não é um bom marcador para decidir quando cuidar.</h2>
+              <p className="mt-2 max-w-2xl text-xs font-medium leading-relaxed text-slate-600">Cárie em estágio inicial normalmente não causa sintomas. Doença gengival também pode se tornar séria antes de a pessoa perceber. Revisão profissional existe justamente para identificar o que uma foto e a ausência de dor não conseguem confirmar.</p>
+              <p className="mt-3 text-[9px] font-black uppercase tracking-wider text-amber-700/60">Evidência educacional: NIDCR + CDC</p>
+              <p className="mt-5 max-w-2xl text-sm font-black leading-relaxed text-slate-800">Você já sabe o que mais chamou atenção e quanto alguns caminhos podem levar. O próximo passo é descobrir o que realmente faz sentido para você.</p>
+            </div>
+            <button type="button" onClick={onContinue} className="inline-flex items-center justify-center gap-3 rounded-2xl bg-slate-950 px-6 py-4 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-blue-700">Quero avaliar isso agora <ArrowRight className="h-4 w-4" /></button>
+          </div>
+        </section>
+      </div>
+    </main>
   );
 };
 
