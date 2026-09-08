@@ -11,8 +11,8 @@ const cameraSource = readFileSync(
   "utf8",
 );
 const functionsSource = readFileSync("functions/src/index.ts", "utf8");
-const presentationSource = readFileSync(
-  new URL("./services/smilePresentation.ts", import.meta.url),
+const v6PresentationSource = readFileSync(
+  new URL("./services/smileV6Presentation.ts", import.meta.url),
   "utf8",
 );
 
@@ -21,8 +21,6 @@ describe("paridade do produto Sorvy Smile", () => {
     expect(appSource).toContain("Descubra o potencial do seu");
     expect(appSource).toContain("Mapear meu sorriso agora");
     expect(appSource).toContain("Foto guiada");
-    expect(appSource).toContain("Primeira descoberta");
-    expect(appSource).toContain("Mapa do Sorriso");
   });
 
   it("mantém câmera e consentimento na confirmação da foto", () => {
@@ -41,24 +39,31 @@ describe("paridade do produto Sorvy Smile", () => {
 
   it("não exibe o código interno bruto quando a Function de IA falha", () => {
     const apiSource = readFileSync("services/sorvyApi.ts", "utf8");
-
     expect(apiSource).toContain('maybeMessage === "internal"');
     expect(apiSource).toContain("O serviço de análise da foto está indisponível");
   });
 
-  it("mantém preview antes da captura do contato", () => {
-    expect(journeySource.indexOf('setStage("preview")')).toBeLessThan(
+  it("mantém Primeiro Sinal antes da captura do contato", () => {
+    expect(journeySource.indexOf('setStage("signal")')).toBeLessThan(
       journeySource.indexOf('setStage("contact")'),
     );
-    expect(journeySource).toContain("Sem dados pessoais");
-    expect(journeySource).toContain("Principal achado visual");
-    expect(journeySource).toContain("Harmonia do sorriso");
-    expect(journeySource).toContain("Refletividade");
-    expect(journeySource).toContain("Classificação VITA");
-    expect(journeySource).toContain("Classificação VITA estimada");
-    expect(journeySource).toContain("vitaToneDescription");
-    expect(journeySource).toContain("Brilho geral");
+    expect(journeySource).toContain("Primeiro sinal");
+    expect(journeySource).toContain("primeiro sinal encontrado");
+    expect(journeySource).toContain("A leitura ainda não acabou");
+    expect(journeySource).toContain("Ver meu resultado completo");
     expect(journeySource).toContain("WhatsApp com DDD");
+  });
+
+  it("mantém resultado completo com dados reais e aprofundamento", () => {
+    expect(journeySource).toContain("Seu resultado completo");
+    expect(journeySource).toContain("Índice Visual Geral");
+    expect(journeySource).toContain("Principal contraste");
+    expect(journeySource).toContain("Entender este sinal ↓");
+    expect(journeySource).toContain("Tempo relacionado a este sinal");
+    expect(v6PresentationSource).toContain('id: "alignment"');
+    expect(v6PresentationSource).toContain('id: "brightness"');
+    expect(v6PresentationSource).toContain('id: "harmony"');
+    expect(v6PresentationSource).toContain('id: "balance"');
   });
 
   it("mantém a tela de processamento dentro da altura visível", () => {
@@ -68,7 +73,7 @@ describe("paridade do produto Sorvy Smile", () => {
   });
 
   it("mantém as duas CTAs finais e registra a escolha do paciente", () => {
-    expect(journeySource).toContain("Quero avaliar como melhorar meu sorriso");
+    expect(journeySource).toContain("Quero avaliar isso agora");
     expect(journeySource).toContain("Prefiro que ${profile.name} fale comigo");
     expect(journeySource).toContain("recordPatientConversionAction");
     expect(functionsSource).toContain("contactRequestedAtMs");
@@ -79,14 +84,9 @@ describe("paridade do produto Sorvy Smile", () => {
     expect(appSource).toContain(
       "Triagem informativa. Não substitui consulta com cirurgião-dentista.",
     );
-    expect(journeySource).toContain("Não é diagnóstico");
-    expect(journeySource).toContain("confirma diagnóstico nem define tratamento");
-    expect(presentationSource).toContain("Alterações visuais importantes");
-    expect(journeySource).toContain("Especialidade indicada");
-    expect(journeySource).toContain("Foco do cuidado");
-    expect(journeySource).toContain("Conteúdo gerado por IA");
-    expect(journeySource).toContain("sujeito a pequenas variações");
-    expect(journeySource).toContain("bg-rose-50");
+    expect(journeySource).toContain("Não é diagnóstico e não substitui consulta");
+    expect(journeySource).toContain("não significa que uma doença foi identificada na foto");
+    expect(journeySource).toContain("Diagnóstico, indicação clínica e tratamento permanecem com o dentista");
   });
 
   it("reutiliza temporariamente a mesma imagem sem armazenar a foto", () => {
