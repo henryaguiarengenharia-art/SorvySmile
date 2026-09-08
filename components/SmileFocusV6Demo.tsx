@@ -131,48 +131,96 @@ const SignalStage = ({ onContinue }: { onContinue: () => void }) => (
   <main className="px-5 pb-16 pt-8 sm:pt-12">
     <div className="mx-auto max-w-5xl">
       <JourneyRail current={1} />
+
       <div className="mx-auto mt-10 max-w-3xl text-center">
-        <div className="inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-emerald-700"><CheckCircle2 className="h-4 w-4" /> leitura concluída</div>
+        <div className="inline-flex items-center gap-2 rounded-full border border-violet-100 bg-violet-50 px-4 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-violet-700">
+          <CheckCircle2 className="h-4 w-4" /> primeiro sinal encontrado
+        </div>
         <p className="mt-6 text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">Primeiro sinal</p>
         <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-6xl">Seu alinhamento foi o ponto que mais chamou atenção.</h1>
-        <p className="mx-auto mt-5 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 sm:text-base">Isso não fecha um diagnóstico. Mas já cria uma pergunta concreta que vale levar para uma avaliação.</p>
+        <p className="mx-auto mt-5 max-w-2xl text-sm font-medium leading-relaxed text-slate-500 sm:text-base">
+          Entre os sinais visuais analisados, este foi o contraste mais evidente. <span className="font-black text-slate-800">E ele não apareceu sozinho.</span>
+        </p>
       </div>
 
       <section className="mx-auto mt-10 grid max-w-4xl gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-        <article className="rounded-[2.75rem] bg-slate-950 p-7 text-white shadow-2xl shadow-blue-200/40 sm:p-9">
-          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">Sinal principal</p>
-          <div className="mt-6 flex items-end justify-between gap-4">
-            <div>
-              <p className="text-5xl font-black">71<span className="text-xl text-white/30">/100</span></p>
-              <p className="mt-2 text-xs font-black uppercase tracking-wider text-white/45">índice visual de alinhamento</p>
+        <article className="relative overflow-hidden rounded-[2.75rem] bg-slate-950 p-7 text-white shadow-2xl shadow-blue-200/40 sm:p-9">
+          <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-violet-600/20 blur-3xl" />
+          <div className="relative">
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-violet-300">Sinal principal</p>
+            <div className="mt-6 flex items-end justify-between gap-4">
+              <div>
+                <p className="text-5xl font-black">71<span className="text-xl text-white/30">/100</span></p>
+                <p className="mt-2 text-xs font-black uppercase tracking-wider text-white/45">índice visual de alinhamento</p>
+              </div>
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 text-violet-700"><AlignCenter className="h-7 w-7" /></span>
             </div>
-            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100 text-violet-700"><AlignCenter className="h-7 w-7" /></span>
+            <div className="mt-7 h-3 overflow-hidden rounded-full bg-white/10"><div className="h-full w-[71%] rounded-full bg-violet-400" /></div>
+            <h2 className="mt-7 text-3xl font-black leading-tight">Há algo para entender melhor antes de concluir que está tudo bem.</h2>
+            <p className="mt-4 text-sm font-medium leading-relaxed text-white/60">A leitura encontrou diferenças visuais de posicionamento que se destacaram no conjunto.</p>
           </div>
-          <div className="mt-7 h-3 overflow-hidden rounded-full bg-white/10"><div className="h-full w-[71%] rounded-full bg-violet-400" /></div>
-          <h2 className="mt-7 text-3xl font-black leading-tight">Há algo para entender melhor antes de concluir que está tudo bem.</h2>
-          <p className="mt-4 text-sm font-medium leading-relaxed text-white/60">A leitura encontrou diferenças visuais de posicionamento. A causa e a relevância clínica só podem ser definidas presencialmente.</p>
         </article>
 
-        <article className="rounded-[2.75rem] border border-slate-200 bg-white p-7 shadow-xl shadow-slate-200/40 sm:p-9">
+        <article className="rounded-[2.75rem] border border-amber-200 bg-white p-7 shadow-xl shadow-amber-100/50 sm:p-9">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-700"><ShieldCheck className="h-6 w-6" /></div>
-          <p className="mt-6 text-[9px] font-black uppercase tracking-[0.2em] text-amber-700">Curiosidade baseada em evidência</p>
-          <h2 className="mt-2 text-2xl font-black">Você não precisa estar com dor para existir algo a avaliar.</h2>
-          <p className="mt-3 text-xs font-medium leading-relaxed text-slate-500">Cárie inicial normalmente não apresenta sintomas, e doença gengival pode se tornar séria antes de a pessoa perceber sinais claros. Por isso revisão e prevenção continuam relevantes mesmo sem dor.</p>
-          <p className="mt-4 text-[9px] font-black uppercase tracking-wider text-slate-300">Fontes educacionais: NIDCR + CDC</p>
-          <div className="mt-6 rounded-2xl bg-slate-50 p-4">
-            <p className="text-[8px] font-black uppercase tracking-[0.16em] text-slate-400">Ainda não mostramos</p>
-            <p className="mt-2 text-sm font-black text-slate-800">Como brilho, harmonia e proporção se comparam ao seu principal sinal — e o que isso pode significar em tempo de evolução.</p>
-          </div>
+          <p className="mt-6 text-[9px] font-black uppercase tracking-[0.2em] text-amber-700">Um fato que muita gente ignora</p>
+          <h2 className="mt-2 text-2xl font-black">Você não precisa estar com dor para existir algo que merece avaliação.</h2>
+          <p className="mt-3 text-xs font-medium leading-relaxed text-slate-500">Na saúde bucal, alterações podem começar sem dor ou sinais óbvios. Por isso, ausência de sintomas não significa que tudo possa ser confirmado apenas pela aparência.</p>
+          <p className="mt-4 text-[9px] font-black uppercase tracking-wider text-slate-300">Baseado em informações educacionais do NIDCR e CDC</p>
         </article>
+      </section>
+
+      <section className="mx-auto mt-6 max-w-4xl overflow-hidden rounded-[2.75rem] border border-slate-800 bg-slate-950 p-6 text-white shadow-2xl shadow-blue-100/50 sm:p-8">
+        <div className="grid gap-7 lg:grid-cols-[0.82fr_1.18fr] lg:items-center">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-blue-200">
+              <Sparkles className="h-4 w-4" /> 1 de 4 sinais liberado
+            </div>
+            <h2 className="mt-5 text-3xl font-black leading-tight">Você viu o primeiro. Ainda faltam três.</h2>
+            <p className="mt-3 text-sm font-medium leading-relaxed text-white/55">
+              A leitura encontrou outros 3 pontos que ainda não foram revelados. Quando comparados entre si, eles mudam a forma de entender o conjunto.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              {["3 sinais restantes", "comparação", "prioridade", "horizonte de tempo"].map((item) => (
+                <span key={item} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-[8px] font-black uppercase tracking-wider text-white/45">{item}</span>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            {([
+              ["Cor & brilho", Sun, "bg-amber-300/20 text-amber-200"],
+              ["Harmonia", Target, "bg-blue-300/20 text-blue-200"],
+              ["Proporção", Eye, "bg-emerald-300/20 text-emerald-200"],
+            ] as const).map(([label, Icon, tone], index) => (
+              <div key={label} className={`relative overflow-hidden rounded-[1.6rem] border border-white/10 bg-white/[0.045] p-4 ${index === 1 ? "translate-y-3" : ""}`}>
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-slate-950/5 to-slate-950/50" />
+                <div className="relative select-none blur-[2.5px]">
+                  <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tone}`}><Icon className="h-5 w-5" /></span>
+                  <div className="mt-5 h-2 w-12 rounded-full bg-white/25" />
+                  <div className="mt-3 h-5 w-16 rounded-lg bg-white/15" />
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"><div className="h-full w-[62%] rounded-full bg-white/30" /></div>
+                </div>
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent px-4 pb-4 pt-8">
+                  <p className="text-[8px] font-black uppercase tracking-[0.16em] text-white/35">sinal {index + 2}</p>
+                  <p className="mt-1 text-[10px] font-black text-white/20 blur-[2px]">{label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="mx-auto mt-6 max-w-4xl rounded-[2.5rem] border border-blue-100 bg-gradient-to-r from-white via-blue-50 to-white p-6 sm:p-8">
         <div className="grid items-center gap-6 sm:grid-cols-[1fr_auto]">
           <div>
-            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-600">Próxima revelação</p>
-            <h2 className="mt-2 text-2xl font-black">Veja seu sorriso em foco — com comparação, prioridade e horizonte de mudança.</h2>
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-600">A leitura ainda não acabou</p>
+            <h2 className="mt-2 text-2xl font-black">Agora falta entender como este sinal se compara aos outros três — e o que merece prioridade.</h2>
+            <p className="mt-2 text-xs font-medium leading-relaxed text-slate-500">Vamos aprofundar mais: os próximos sinais completam a comparação e mostram onde vale colocar sua atenção primeiro.</p>
           </div>
-          <button type="button" onClick={onContinue} className="inline-flex items-center justify-center gap-3 rounded-2xl bg-slate-950 px-6 py-4 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-xl hover:bg-blue-700">Ver meu sorriso em foco <ArrowRight className="h-4 w-4" /></button>
+          <button type="button" onClick={onContinue} className="inline-flex items-center justify-center gap-3 rounded-2xl bg-slate-950 px-6 py-4 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-xl transition hover:-translate-y-0.5 hover:bg-blue-700">
+            Ver os 3 sinais que faltam <ArrowRight className="h-4 w-4" />
+          </button>
         </div>
       </section>
     </div>
