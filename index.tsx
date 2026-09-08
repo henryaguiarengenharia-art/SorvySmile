@@ -12,8 +12,13 @@ if (!rootElement) {
 
 const normalizedPath = window.location.pathname.replace(/\/+$/, "") || "/";
 const demoParam = new URLSearchParams(window.location.search).get("demo");
+const hostname = window.location.hostname.toLowerCase();
+const isSmileMapPreviewHost =
+  hostname.includes("--smile-map-v4-review-")
+  || hostname.includes("--smile-map-v4-");
 const isSmileMapV4Demo =
-  normalizedPath === "/demo/smile-map-v4"
+  isSmileMapPreviewHost
+  || normalizedPath === "/demo/smile-map-v4"
   || demoParam === "smile-map-v4";
 
 const root = ReactDOM.createRoot(rootElement);
