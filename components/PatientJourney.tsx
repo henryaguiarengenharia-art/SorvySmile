@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   Clock3,
   ExternalLink,
-  Eye,
   ImageOff,
   ImagePlus,
   LoaderCircle,
@@ -369,10 +368,13 @@ const ValidationStep = ({
 );
 
 const AnalyzingStep = () => (
-  <main className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center">
-    <div className="relative flex h-28 w-28 items-center justify-center"><div className="absolute inset-0 animate-spin rounded-full border-8 border-blue-50 border-t-blue-600" /><Sparkles className="h-9 w-9 text-blue-600" /></div>
-    <h1 className="mt-8 text-4xl font-black">Preparando sua leitura</h1>
-    <p className="mt-4 max-w-md text-sm font-medium leading-relaxed text-slate-500">Estamos comparando os sinais visuais do seu sorriso para mostrar primeiro o que mais se destaca.</p>
+  <main className="flex h-[calc(100dvh-4rem)] min-h-0 flex-col items-center justify-center overflow-hidden px-4 py-4 text-center sm:px-6 sm:py-6">
+    <div className="relative flex h-24 w-24 shrink-0 items-center justify-center sm:h-32 sm:w-32 lg:h-36 lg:w-36">
+      <div className="absolute inset-0 animate-spin rounded-full border-[6px] border-blue-50 border-t-blue-600 sm:border-8" />
+      <Sparkles className="h-8 w-8 text-blue-600 sm:h-10 sm:w-10" />
+    </div>
+    <h1 className="mt-6 text-3xl font-black sm:mt-8 sm:text-4xl">Preparando sua leitura</h1>
+    <p className="mt-3 max-w-md text-xs font-medium leading-relaxed text-slate-500 sm:mt-4 sm:text-sm">Estamos comparando os sinais visuais do seu sorriso para mostrar primeiro o que mais se destaca.</p>
   </main>
 );
 
